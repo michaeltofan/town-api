@@ -69,6 +69,34 @@ describe('PostgreSQL foundation integration', () => {
     expect(tables.rows).toEqual([]);
   });
 
+  it('is safe when schema town already exists before Drizzle applies the migration', async () => {
+    await adminPool.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
+    await adminPool.query('DROP SCHEMA IF EXISTS town CASCADE');
+    await adminPool.query('CREATE SCHEMA town');
+
+    const db = drizzle(adminPool);
+    await expect(migrate(db, { migrationsFolder })).resolves.toBeUndefined();
+
+    const schema = await adminPool.query<{ exists: boolean }>(
+      `SELECT EXISTS (
+        SELECT 1 FROM information_schema.schemata WHERE schema_name = 'town'
+      ) AS exists`,
+    );
+    expect(schema.rows[0]?.exists).toBe(true);
+
+    const tables = await adminPool.query<{ table_name: string }>(
+      `SELECT table_name
+       FROM information_schema.tables
+       WHERE table_schema = 'town'`,
+    );
+    expect(tables.rows).toEqual([]);
+
+    const history = await adminPool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
+    );
+    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(1);
+  });
+
   it('db:check succeeds against committed migrations', () => {
     execFileSync('npx', ['drizzle-kit', 'check'], {
       env: {

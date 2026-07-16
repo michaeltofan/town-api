@@ -75,6 +75,12 @@ async function main(): Promise<void> {
     await migrate(db, { migrationsFolder });
     await assertTownSchemaOnly(pool);
 
+    // Migration must remain safe when schema town already exists before Drizzle applies.
+    await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
+    await pool.query('CREATE SCHEMA IF NOT EXISTS town');
+    await migrate(db, { migrationsFolder });
+    await assertTownSchemaOnly(pool);
+
     process.stdout.write('db:migrate:test passed\n');
   } finally {
     await pool.end();

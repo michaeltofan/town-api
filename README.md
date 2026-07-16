@@ -70,7 +70,7 @@ npm run dev
 Migration V1 creates only:
 
 ```sql
-CREATE SCHEMA "town";
+CREATE SCHEMA IF NOT EXISTS "town";
 ```
 
 No product tables are created.
