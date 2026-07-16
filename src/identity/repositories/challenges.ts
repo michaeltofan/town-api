@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import {
   emailChallenges,
@@ -49,6 +49,7 @@ export async function createEmailChallenge(
       secretHash,
       expiresAt: input.expiresAt,
       consumedAt: null,
+      revokedAt: null,
       attemptCount: 0,
       createdAt: input.createdAt,
     })
@@ -58,6 +59,40 @@ export async function createEmailChallenge(
     throw new Error('Failed to create email challenge');
   }
   return row;
+}
+
+/**
+ * Invalidate previous unconsumed, unrevoked, unexpired verify_email challenges
+ * for the same account/email setup. Does not delete history.
+ */
+export async function revokeActiveEmailChallengesForSetup(
+  db: Db,
+  input: {
+    accountId: string;
+    emailNormalized: string;
+    purpose: EmailChallengePurpose;
+    now: string;
+    excludeChallengeId?: string;
+  },
+): Promise<number> {
+  const conditions = [
+    eq(emailChallenges.accountId, input.accountId),
+    eq(emailChallenges.emailNormalized, input.emailNormalized),
+    eq(emailChallenges.purpose, input.purpose),
+    isNull(emailChallenges.consumedAt),
+    isNull(emailChallenges.revokedAt),
+    gt(emailChallenges.expiresAt, input.now),
+  ];
+  if (input.excludeChallengeId !== undefined) {
+    conditions.push(sql`${emailChallenges.id} <> ${input.excludeChallengeId}`);
+  }
+
+  const updated = await db
+    .update(emailChallenges)
+    .set({ revokedAt: input.now })
+    .where(and(...conditions))
+    .returning({ id: emailChallenges.id });
+  return updated.length;
 }
 
 export async function consumeEmailChallenge(
@@ -76,18 +111,87 @@ export async function consumeEmailChallenge(
   if (challenge.consumedAt !== null) {
     throw new IdentityInvariantError('CHALLENGE_ALREADY_CONSUMED', 'Challenge already consumed');
   }
+  if (challenge.revokedAt !== null) {
+    throw new IdentityInvariantError('CHALLENGE_REVOKED', 'Challenge has been revoked');
+  }
   assertNotExpired(challenge.expiresAt, input.now, 'CHALLENGE_EXPIRED');
 
   const updated = await db
     .update(emailChallenges)
     .set({ consumedAt: input.now })
-    .where(eq(emailChallenges.id, input.challengeId))
+    .where(
+      and(
+        eq(emailChallenges.id, input.challengeId),
+        isNull(emailChallenges.consumedAt),
+        isNull(emailChallenges.revokedAt),
+        gt(emailChallenges.expiresAt, input.now),
+      ),
+    )
     .returning();
   const row = updated[0];
   if (!row) {
-    throw new Error('Failed to consume email challenge');
+    throw new IdentityInvariantError('CHALLENGE_ALREADY_CONSUMED', 'Challenge already consumed');
   }
   return row;
+}
+
+export async function incrementEmailChallengeAttemptCount(
+  db: Db,
+  input: { challengeId: string },
+): Promise<EmailChallengeRow> {
+  const updated = await db
+    .update(emailChallenges)
+    .set({
+      attemptCount: sql`${emailChallenges.attemptCount} + 1`,
+    })
+    .where(
+      and(
+        eq(emailChallenges.id, input.challengeId),
+        isNull(emailChallenges.consumedAt),
+        isNull(emailChallenges.revokedAt),
+      ),
+    )
+    .returning();
+  const row = updated[0];
+  if (!row) {
+    throw new IdentityInvariantError('CHALLENGE_NOT_FOUND', 'Challenge was not found');
+  }
+  return row;
+}
+
+export async function findEmailChallengeById(
+  db: Db,
+  challengeId: string,
+): Promise<EmailChallengeRow | null> {
+  const rows = await db
+    .select()
+    .from(emailChallenges)
+    .where(eq(emailChallenges.id, challengeId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function findLatestEmailChallengeForSetup(
+  db: Db,
+  input: {
+    accountId: string;
+    emailNormalized: string;
+    purpose: EmailChallengePurpose;
+  },
+): Promise<EmailChallengeRow | null> {
+  const rows = await db
+    .select()
+    .from(emailChallenges)
+    .where(
+      and(
+        eq(emailChallenges.accountId, input.accountId),
+        eq(emailChallenges.emailNormalized, input.emailNormalized),
+        eq(emailChallenges.purpose, input.purpose),
+      ),
+    )
+    .orderBy(sql`${emailChallenges.createdAt} desc`)
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 export async function createWebAuthnChallenge(

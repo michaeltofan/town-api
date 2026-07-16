@@ -1,0 +1,4 @@
+ALTER TABLE "town"."email_challenges" ADD COLUMN "revoked_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "email_challenges_active_setup_idx" ON "town"."email_challenges" USING btree ("account_id","email_normalized","purpose") WHERE "town"."email_challenges"."consumed_at" is null and "town"."email_challenges"."revoked_at" is null and "town"."email_challenges"."purpose" = 'verify_email';--> statement-breakpoint
+ALTER TABLE "town"."email_challenges" ADD CONSTRAINT "email_challenges_consumed_not_before_created" CHECK ("town"."email_challenges"."consumed_at" is null or "town"."email_challenges"."consumed_at" >= "town"."email_challenges"."created_at");--> statement-breakpoint
+ALTER TABLE "town"."email_challenges" ADD CONSTRAINT "email_challenges_revoked_not_before_created" CHECK ("town"."email_challenges"."revoked_at" is null or "town"."email_challenges"."revoked_at" >= "town"."email_challenges"."created_at");

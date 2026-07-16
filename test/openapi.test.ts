@@ -29,6 +29,8 @@ describe('OpenAPI contract', () => {
     expect(document.paths).toHaveProperty('/v1/communities/{communitySlug}/signals');
     expect(document.paths).toHaveProperty('/v1/signals/{signalId}');
     expect(document.paths).toHaveProperty('/v1/signals/{signalId}/confirmation');
+    expect(document.paths).toHaveProperty('/v1/account/email-verifications');
+    expect(document.paths).toHaveProperty('/v1/account/email-verifications/complete');
     expect(document.paths).not.toHaveProperty('/docs');
     expect(document.paths).not.toHaveProperty('/health');
     expect(document.paths).not.toHaveProperty('/ready');

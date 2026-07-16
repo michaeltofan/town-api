@@ -1,0 +1,1762 @@
+{
+  "id": "8a335b1c-c22e-4546-a9a5-c95ce49adac8",
+  "prevId": "f80e8ec2-018c-48ef-bf79-ca51f99a7893",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "town.account_emails": {
+      "name": "account_emails",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_original": {
+          "name": "email_original",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_normalized": {
+          "name": "email_normalized",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_primary": {
+          "name": "is_primary",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "account_emails_active_normalized_unique": {
+          "name": "account_emails_active_normalized_unique",
+          "columns": [
+            {
+              "expression": "email_normalized",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"town\".\"account_emails\".\"revoked_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "account_emails_one_active_primary": {
+          "name": "account_emails_one_active_primary",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"town\".\"account_emails\".\"is_primary\" = true and \"town\".\"account_emails\".\"revoked_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "account_emails_account_id_fkey": {
+          "name": "account_emails_account_id_fkey",
+          "tableFrom": "account_emails",
+          "tableTo": "accounts",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "account_emails_revoked_not_primary": {
+          "name": "account_emails_revoked_not_primary",
+          "value": "\"town\".\"account_emails\".\"revoked_at\" is null or \"town\".\"account_emails\".\"is_primary\" = false"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.account_sessions": {
+      "name": "account_sessions",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_type": {
+          "name": "client_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "authenticated_at": {
+          "name": "authenticated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idle_expires_at": {
+          "name": "idle_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "absolute_expires_at": {
+          "name": "absolute_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revocation_reason": {
+          "name": "revocation_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recovery_recent_at": {
+          "name": "recovery_recent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "security_version": {
+          "name": "security_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "account_sessions_account_active_idx": {
+          "name": "account_sessions_account_active_idx",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"town\".\"account_sessions\".\"revoked_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "account_sessions_account_id_fkey": {
+          "name": "account_sessions_account_id_fkey",
+          "tableFrom": "account_sessions",
+          "tableTo": "accounts",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "account_sessions_token_hash_unique": {
+          "name": "account_sessions_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "account_sessions_client_type_valid": {
+          "name": "account_sessions_client_type_valid",
+          "value": "\"town\".\"account_sessions\".\"client_type\" in ('web', 'mobile')"
+        },
+        "account_sessions_security_version_positive": {
+          "name": "account_sessions_security_version_positive",
+          "value": "\"town\".\"account_sessions\".\"security_version\" >= 1"
+        },
+        "account_sessions_authenticated_after_created": {
+          "name": "account_sessions_authenticated_after_created",
+          "value": "\"town\".\"account_sessions\".\"authenticated_at\" >= \"town\".\"account_sessions\".\"created_at\""
+        },
+        "account_sessions_last_seen_after_created": {
+          "name": "account_sessions_last_seen_after_created",
+          "value": "\"town\".\"account_sessions\".\"last_seen_at\" >= \"town\".\"account_sessions\".\"created_at\""
+        },
+        "account_sessions_idle_after_created": {
+          "name": "account_sessions_idle_after_created",
+          "value": "\"town\".\"account_sessions\".\"idle_expires_at\" > \"town\".\"account_sessions\".\"created_at\""
+        },
+        "account_sessions_absolute_after_created": {
+          "name": "account_sessions_absolute_after_created",
+          "value": "\"town\".\"account_sessions\".\"absolute_expires_at\" > \"town\".\"account_sessions\".\"created_at\""
+        },
+        "account_sessions_idle_within_absolute": {
+          "name": "account_sessions_idle_within_absolute",
+          "value": "\"town\".\"account_sessions\".\"idle_expires_at\" <= \"town\".\"account_sessions\".\"absolute_expires_at\""
+        },
+        "account_sessions_revoked_not_before_created": {
+          "name": "account_sessions_revoked_not_before_created",
+          "value": "\"town\".\"account_sessions\".\"revoked_at\" is null or \"town\".\"account_sessions\".\"revoked_at\" >= \"town\".\"account_sessions\".\"created_at\""
+        },
+        "account_sessions_revocation_reason_consistency": {
+          "name": "account_sessions_revocation_reason_consistency",
+          "value": "(\n        (\"town\".\"account_sessions\".\"revoked_at\" is null and \"town\".\"account_sessions\".\"revocation_reason\" is null)\n        or (\"town\".\"account_sessions\".\"revoked_at\" is not null and \"town\".\"account_sessions\".\"revocation_reason\" is not null)\n      )"
+        },
+        "account_sessions_revocation_reason_valid": {
+          "name": "account_sessions_revocation_reason_valid",
+          "value": "\"town\".\"account_sessions\".\"revocation_reason\" is null or \"town\".\"account_sessions\".\"revocation_reason\" in (\n        'logout',\n        'logout_all',\n        'rotated',\n        'account_suspended',\n        'account_closed',\n        'recovery_completed',\n        'credential_compromised',\n        'security_version_changed'\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.accounts": {
+      "name": "accounts",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_ready_at": {
+          "name": "account_ready_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "suspended_at": {
+          "name": "suspended_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "accounts_status_valid": {
+          "name": "accounts_status_valid",
+          "value": "\"town\".\"accounts\".\"status\" in ('pending_email', 'pending_passkey', 'active', 'suspended', 'closed')"
+        },
+        "accounts_status_timestamps": {
+          "name": "accounts_status_timestamps",
+          "value": "(\n        (\"town\".\"accounts\".\"status\" = 'pending_email'\n          and \"town\".\"accounts\".\"account_ready_at\" is null\n          and \"town\".\"accounts\".\"suspended_at\" is null\n          and \"town\".\"accounts\".\"closed_at\" is null)\n        or (\"town\".\"accounts\".\"status\" = 'pending_passkey'\n          and \"town\".\"accounts\".\"account_ready_at\" is null\n          and \"town\".\"accounts\".\"suspended_at\" is null\n          and \"town\".\"accounts\".\"closed_at\" is null)\n        or (\"town\".\"accounts\".\"status\" = 'active'\n          and \"town\".\"accounts\".\"account_ready_at\" is not null\n          and \"town\".\"accounts\".\"suspended_at\" is null\n          and \"town\".\"accounts\".\"closed_at\" is null)\n        or (\"town\".\"accounts\".\"status\" = 'suspended'\n          and \"town\".\"accounts\".\"account_ready_at\" is not null\n          and \"town\".\"accounts\".\"suspended_at\" is not null\n          and \"town\".\"accounts\".\"closed_at\" is null)\n        or (\"town\".\"accounts\".\"status\" = 'closed'\n          and \"town\".\"accounts\".\"account_ready_at\" is not null\n          and \"town\".\"accounts\".\"closed_at\" is not null)\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.actors": {
+      "name": "actors",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_label": {
+          "name": "display_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "community_id": {
+          "name": "community_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "actors_account_id_unique": {
+          "name": "actors_account_id_unique",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"town\".\"actors\".\"account_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "actors_community_id_fkey": {
+          "name": "actors_community_id_fkey",
+          "tableFrom": "actors",
+          "tableTo": "communities",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "community_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "actors_account_id_fkey": {
+          "name": "actors_account_id_fkey",
+          "tableFrom": "actors",
+          "tableTo": "accounts",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "actors_kind_valid": {
+          "name": "actors_kind_valid",
+          "value": "\"town\".\"actors\".\"kind\" in ('controlled_test', 'civic')"
+        },
+        "actors_status_active": {
+          "name": "actors_status_active",
+          "value": "\"town\".\"actors\".\"status\" = 'active'"
+        },
+        "actors_controlled_test_unlinked": {
+          "name": "actors_controlled_test_unlinked",
+          "value": "\"town\".\"actors\".\"kind\" <> 'controlled_test' or \"town\".\"actors\".\"account_id\" is null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.ceremony_rate_limits": {
+      "name": "ceremony_rate_limits",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_hash": {
+          "name": "subject_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_started_at": {
+          "name": "window_started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_expires_at": {
+          "name": "window_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempt_count": {
+          "name": "attempt_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "blocked_until": {
+          "name": "blocked_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "ceremony_rate_limits_active_window_idx": {
+          "name": "ceremony_rate_limits_active_window_idx",
+          "columns": [
+            {
+              "expression": "scope",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "window_expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ceremony_rate_limits_blocked_until_idx": {
+          "name": "ceremony_rate_limits_blocked_until_idx",
+          "columns": [
+            {
+              "expression": "scope",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "blocked_until",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"town\".\"ceremony_rate_limits\".\"blocked_until\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ceremony_rate_limits_bucket_unique": {
+          "name": "ceremony_rate_limits_bucket_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "scope",
+            "subject_hash",
+            "window_started_at"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "ceremony_rate_limits_scope_valid": {
+          "name": "ceremony_rate_limits_scope_valid",
+          "value": "\"town\".\"ceremony_rate_limits\".\"scope\" in (\n        'email_verification_request_email',\n        'email_verification_request_ip',\n        'email_verification_attempt_challenge',\n        'email_verification_attempt_email_ip',\n        'passkey_options_ip',\n        'passkey_options_client',\n        'passkey_assertion_credential',\n        'passkey_assertion_ip',\n        'recovery_request_email',\n        'recovery_request_ip',\n        'setup_options_grant',\n        'setup_verification_grant',\n        'recovery_options_grant',\n        'recovery_verification_grant'\n      )"
+        },
+        "ceremony_rate_limits_attempt_count_nonnegative": {
+          "name": "ceremony_rate_limits_attempt_count_nonnegative",
+          "value": "\"town\".\"ceremony_rate_limits\".\"attempt_count\" >= 0"
+        },
+        "ceremony_rate_limits_window_order": {
+          "name": "ceremony_rate_limits_window_order",
+          "value": "\"town\".\"ceremony_rate_limits\".\"window_expires_at\" > \"town\".\"ceremony_rate_limits\".\"window_started_at\""
+        },
+        "ceremony_rate_limits_updated_after_created": {
+          "name": "ceremony_rate_limits_updated_after_created",
+          "value": "\"town\".\"ceremony_rate_limits\".\"updated_at\" >= \"town\".\"ceremony_rate_limits\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.communities": {
+      "name": "communities",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "country_code": {
+          "name": "country_code",
+          "type": "char(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "city_name": {
+          "name": "city_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "default_locale": {
+          "name": "default_locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "communities_slug_unique": {
+          "name": "communities_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        },
+        "communities_position_unique": {
+          "name": "communities_position_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "position"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "communities_position_positive": {
+          "name": "communities_position_positive",
+          "value": "\"town\".\"communities\".\"position\" > 0"
+        },
+        "communities_country_code_length": {
+          "name": "communities_country_code_length",
+          "value": "char_length(\"town\".\"communities\".\"country_code\") = 2"
+        },
+        "communities_status_active": {
+          "name": "communities_status_active",
+          "value": "\"town\".\"communities\".\"status\" = 'active'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.email_challenges": {
+      "name": "email_challenges",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_normalized": {
+          "name": "email_normalized",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "secret_hash": {
+          "name": "secret_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempt_count": {
+          "name": "attempt_count",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "email_challenges_active_setup_idx": {
+          "name": "email_challenges_active_setup_idx",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "email_normalized",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "purpose",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"town\".\"email_challenges\".\"consumed_at\" is null and \"town\".\"email_challenges\".\"revoked_at\" is null and \"town\".\"email_challenges\".\"purpose\" = 'verify_email'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "email_challenges_account_id_fkey": {
+          "name": "email_challenges_account_id_fkey",
+          "tableFrom": "email_challenges",
+          "tableTo": "accounts",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "email_challenges_purpose_valid": {
+          "name": "email_challenges_purpose_valid",
+          "value": "\"town\".\"email_challenges\".\"purpose\" in ('verify_email', 'recover_account')"
+        },
+        "email_challenges_attempt_count_nonnegative": {
+          "name": "email_challenges_attempt_count_nonnegative",
+          "value": "\"town\".\"email_challenges\".\"attempt_count\" >= 0"
+        },
+        "email_challenges_expires_after_created": {
+          "name": "email_challenges_expires_after_created",
+          "value": "\"town\".\"email_challenges\".\"expires_at\" > \"town\".\"email_challenges\".\"created_at\""
+        },
+        "email_challenges_consumed_not_before_created": {
+          "name": "email_challenges_consumed_not_before_created",
+          "value": "\"town\".\"email_challenges\".\"consumed_at\" is null or \"town\".\"email_challenges\".\"consumed_at\" >= \"town\".\"email_challenges\".\"created_at\""
+        },
+        "email_challenges_revoked_not_before_created": {
+          "name": "email_challenges_revoked_not_before_created",
+          "value": "\"town\".\"email_challenges\".\"revoked_at\" is null or \"town\".\"email_challenges\".\"revoked_at\" >= \"town\".\"email_challenges\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.identity_security_events": {
+      "name": "identity_security_events",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "identity_security_events_account_occurred_idx": {
+          "name": "identity_security_events_account_occurred_idx",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "identity_security_events_account_id_fkey": {
+          "name": "identity_security_events_account_id_fkey",
+          "tableFrom": "identity_security_events",
+          "tableTo": "accounts",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "identity_security_events_type_valid": {
+          "name": "identity_security_events_type_valid",
+          "value": "\"town\".\"identity_security_events\".\"event_type\" in (\n        'email_verification_requested',\n        'email_verified',\n        'passkey_registered',\n        'passkey_used',\n        'passkey_revoked',\n        'recovery_requested',\n        'recovery_completed',\n        'account_suspended',\n        'account_closed',\n        'authentication_failed',\n        'session_created',\n        'session_rotated',\n        'session_revoked',\n        'counter_anomaly_detected',\n        'rate_limit_triggered'\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.passkey_credentials": {
+      "name": "passkey_credentials",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "credential_id": {
+          "name": "credential_id",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public_key": {
+          "name": "public_key",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sign_count": {
+          "name": "sign_count",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transports": {
+          "name": "transports",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "device_type": {
+          "name": "device_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "backed_up": {
+          "name": "backed_up",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aaguid": {
+          "name": "aaguid",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "passkey_credentials_account_active_idx": {
+          "name": "passkey_credentials_account_active_idx",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"town\".\"passkey_credentials\".\"revoked_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "passkey_credentials_account_id_fkey": {
+          "name": "passkey_credentials_account_id_fkey",
+          "tableFrom": "passkey_credentials",
+          "tableTo": "accounts",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "passkey_credentials_credential_id_unique": {
+          "name": "passkey_credentials_credential_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "credential_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "passkey_credentials_sign_count_nonnegative": {
+          "name": "passkey_credentials_sign_count_nonnegative",
+          "value": "\"town\".\"passkey_credentials\".\"sign_count\" >= 0"
+        },
+        "passkey_credentials_label_length": {
+          "name": "passkey_credentials_label_length",
+          "value": "\"town\".\"passkey_credentials\".\"label\" is null or char_length(\"town\".\"passkey_credentials\".\"label\") <= 128"
+        },
+        "passkey_credentials_device_type_valid": {
+          "name": "passkey_credentials_device_type_valid",
+          "value": "\"town\".\"passkey_credentials\".\"device_type\" is null or \"town\".\"passkey_credentials\".\"device_type\" in ('platform', 'cross_platform')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.recovery_grants": {
+      "name": "recovery_grants",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "recovery_grants_account_id_fkey": {
+          "name": "recovery_grants_account_id_fkey",
+          "tableFrom": "recovery_grants",
+          "tableTo": "accounts",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "recovery_grants_token_hash_unique": {
+          "name": "recovery_grants_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "recovery_grants_expires_after_created": {
+          "name": "recovery_grants_expires_after_created",
+          "value": "\"town\".\"recovery_grants\".\"expires_at\" > \"town\".\"recovery_grants\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.setup_grants": {
+      "name": "setup_grants",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "setup_grants_account_active_idx": {
+          "name": "setup_grants_account_active_idx",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"town\".\"setup_grants\".\"consumed_at\" is null and \"town\".\"setup_grants\".\"revoked_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "setup_grants_account_id_fkey": {
+          "name": "setup_grants_account_id_fkey",
+          "tableFrom": "setup_grants",
+          "tableTo": "accounts",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "setup_grants_token_hash_unique": {
+          "name": "setup_grants_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "setup_grants_purpose_valid": {
+          "name": "setup_grants_purpose_valid",
+          "value": "\"town\".\"setup_grants\".\"purpose\" in ('initial_passkey_registration')"
+        },
+        "setup_grants_expires_after_created": {
+          "name": "setup_grants_expires_after_created",
+          "value": "\"town\".\"setup_grants\".\"expires_at\" > \"town\".\"setup_grants\".\"created_at\""
+        },
+        "setup_grants_consumed_not_before_created": {
+          "name": "setup_grants_consumed_not_before_created",
+          "value": "\"town\".\"setup_grants\".\"consumed_at\" is null or \"town\".\"setup_grants\".\"consumed_at\" >= \"town\".\"setup_grants\".\"created_at\""
+        },
+        "setup_grants_revoked_not_before_created": {
+          "name": "setup_grants_revoked_not_before_created",
+          "value": "\"town\".\"setup_grants\".\"revoked_at\" is null or \"town\".\"setup_grants\".\"revoked_at\" >= \"town\".\"setup_grants\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.signal_confirmations": {
+      "name": "signal_confirmations",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "signal_id": {
+          "name": "signal_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "confirmed_at": {
+          "name": "confirmed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "signal_confirmations_actor_signal_idx": {
+          "name": "signal_confirmations_actor_signal_idx",
+          "columns": [
+            {
+              "expression": "actor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "signal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "signal_confirmations_signal_id_fkey": {
+          "name": "signal_confirmations_signal_id_fkey",
+          "tableFrom": "signal_confirmations",
+          "tableTo": "signals",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "signal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "signal_confirmations_actor_id_fkey": {
+          "name": "signal_confirmations_actor_id_fkey",
+          "tableFrom": "signal_confirmations",
+          "tableTo": "actors",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "signal_confirmations_signal_actor_unique": {
+          "name": "signal_confirmations_signal_actor_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "signal_id",
+            "actor_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "town.signals": {
+      "name": "signals",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "community_id": {
+          "name": "community_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "area": {
+          "name": "area",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "headline": {
+          "name": "headline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "why_it_matters": {
+          "name": "why_it_matters",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "who_is_affected": {
+          "name": "who_is_affected",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "latest_update": {
+          "name": "latest_update",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status_label": {
+          "name": "status_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status_note": {
+          "name": "status_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_label": {
+          "name": "observed_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_on": {
+          "name": "observed_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observed_precision": {
+          "name": "observed_precision",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_display_name": {
+          "name": "author_display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image_key": {
+          "name": "image_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image_focus_x": {
+          "name": "image_focus_x",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image_focus_y": {
+          "name": "image_focus_y",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publication_status": {
+          "name": "publication_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "signals_community_publication_position_idx": {
+          "name": "signals_community_publication_position_idx",
+          "columns": [
+            {
+              "expression": "community_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "publication_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "signals_community_id_fkey": {
+          "name": "signals_community_id_fkey",
+          "tableFrom": "signals",
+          "tableTo": "communities",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "community_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "signals_community_slug_unique": {
+          "name": "signals_community_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "community_id",
+            "slug"
+          ]
+        },
+        "signals_community_position_unique": {
+          "name": "signals_community_position_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "community_id",
+            "position"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "signals_position_positive": {
+          "name": "signals_position_positive",
+          "value": "\"town\".\"signals\".\"position\" > 0"
+        },
+        "signals_publication_status_published": {
+          "name": "signals_publication_status_published",
+          "value": "\"town\".\"signals\".\"publication_status\" = 'published'"
+        },
+        "signals_observed_precision_valid": {
+          "name": "signals_observed_precision_valid",
+          "value": "\"town\".\"signals\".\"observed_precision\" in ('day', 'week')"
+        },
+        "signals_image_focus_x_range": {
+          "name": "signals_image_focus_x_range",
+          "value": "\"town\".\"signals\".\"image_focus_x\" >= 0 and \"town\".\"signals\".\"image_focus_x\" <= 100"
+        },
+        "signals_image_focus_y_range": {
+          "name": "signals_image_focus_y_range",
+          "value": "\"town\".\"signals\".\"image_focus_y\" >= 0 and \"town\".\"signals\".\"image_focus_y\" <= 100"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.webauthn_challenges": {
+      "name": "webauthn_challenges",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "challenge_hash": {
+          "name": "challenge_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "webauthn_challenges_account_id_fkey": {
+          "name": "webauthn_challenges_account_id_fkey",
+          "tableFrom": "webauthn_challenges",
+          "tableTo": "accounts",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "webauthn_challenges_challenge_hash_unique": {
+          "name": "webauthn_challenges_challenge_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "challenge_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "webauthn_challenges_purpose_valid": {
+          "name": "webauthn_challenges_purpose_valid",
+          "value": "\"town\".\"webauthn_challenges\".\"purpose\" in ('register', 'authenticate', 'recover_register')"
+        },
+        "webauthn_challenges_expires_after_created": {
+          "name": "webauthn_challenges_expires_after_created",
+          "value": "\"town\".\"webauthn_challenges\".\"expires_at\" > \"town\".\"webauthn_challenges\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "town": "town"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

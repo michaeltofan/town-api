@@ -211,9 +211,9 @@ Future identity operations are documented in:
 
 Live `docs/openapi.v1.json` continues to list only implemented routes.
 
-## Authentication ceremony foundation (data + session models only)
+## Authentication ceremony foundation
 
-Slice 1 adds persistent ceremony data and session records required for future authentication. It does **not** implement live login, logout, email delivery, WebAuthn, cookies, CSRF, or JWTs.
+Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated email-verification runtime for account setup. Neither slice implements live login, logout, production email delivery, WebAuthn, cookies, CSRF, or JWTs.
 
 ### Domain separation
 
@@ -296,30 +296,66 @@ npm run auth:contract:check
 
 Fixtures use fixed UUIDs/timestamps/byte sequences and never run at application startup.
 
-Architecture contract: `docs/authentication-ceremony-foundation.v1.json` (contract-only; not live OpenAPI paths).
+Architecture contract: `docs/authentication-ceremony-foundation.v1.json`.
 
-### Explicit exclusions for this slice
+### Email verification runtime (Slice 2)
 
-This slice does **not** implement:
+Email verification proves control of an email address during account setup. It does **not** authenticate a session and does **not** activate an account.
 
-- real email delivery
-- email verification runtime
-- WebAuthn options or verification
+| Item                   | Policy                                                                   |
+| ---------------------- | ------------------------------------------------------------------------ |
+| Feature flag           | `EMAIL_VERIFICATION_ENABLED` (default `false`)                           |
+| Hash key               | `EMAIL_VERIFICATION_HASH_KEY` (HMAC-SHA-256; min 32 chars)               |
+| Rate-limit subject key | `CEREMONY_RATE_LIMIT_HASH_KEY` (min 32 chars)                            |
+| Delivery mode          | `test` or `development` only                                             |
+| Code                   | 6 decimal digits, crypto-secure, 10-minute TTL, max 5 attempts           |
+| Resend                 | invalidates prior active `verify_email` challenges (`revoked_at`)        |
+| Success transition     | `pending_email` → `pending_passkey`                                      |
+| Success authority      | one restricted setup grant (`initial_passkey_registration`, 15 minutes)  |
+| Anti-enumeration       | request always returns generic `202 VERIFICATION_REQUEST_ACCEPTED`       |
+| Trusted proxy          | `TRUST_PROXY` default `false` (do not trust arbitrary `X-Forwarded-For`) |
+
+Implemented routes (also in live OpenAPI when registered):
+
+| Method | Path                                       | Behavior                                                                  |
+| ------ | ------------------------------------------ | ------------------------------------------------------------------------- |
+| `POST` | `/v1/account/email-verifications`          | Accept verification request; generic response; may create pending account |
+| `POST` | `/v1/account/email-verifications/complete` | Verify code; issue one-time setup grant token; generic failure shape      |
+
+When the feature is disabled, both routes return the safe `404 Not Found` shape.
+
+Delivery adapters never send real email. Production cannot enable this feature while only test/development adapters exist.
+
+Rate limits (persistent `town.ceremony_rate_limits`):
+
+- email: 3 / 15 minutes, 5 / 24 hours
+- IP: 10 / 15 minutes, 50 / 24 hours
+- delivery cooldown: 60 seconds per normalized email
+- failed attempts: 5 / challenge; 10 email+IP / 30 minutes
+
+### Explicit exclusions
+
+Still not implemented:
+
+- production email provider (Resend/SendGrid/SES/SMTP/etc.)
+- WebAuthn options or verification / passkey registration runtime
 - login / logout endpoints
+- normal session cookies / CSRF / JWTs
 - recovery runtime
-- cookies / CSRF / JWTs
 - membership / Stripe / local verification
 - Railway / web integration / mobile integration / deployment
 
 ## Other endpoints
 
-| Method | Path                                     | Behavior                           |
-| ------ | ---------------------------------------- | ---------------------------------- |
-| `GET`  | `/health/live`                           | `{"status":"ok"}` (no DB)          |
-| `GET`  | `/health/ready`                          | DB readiness `ready` / `not_ready` |
-| `GET`  | `/v1/communities`                        | active communities by position     |
-| `GET`  | `/v1/communities/:communitySlug/signals` | published signals by position      |
-| `GET`  | `/v1/signals/:signalId`                  | one published signal by UUID       |
+| Method | Path                                       | Behavior                            |
+| ------ | ------------------------------------------ | ----------------------------------- |
+| `GET`  | `/health/live`                             | `{"status":"ok"}` (no DB)           |
+| `GET`  | `/health/ready`                            | DB readiness `ready` / `not_ready`  |
+| `GET`  | `/v1/communities`                          | active communities by position      |
+| `GET`  | `/v1/communities/:communitySlug/signals`   | published signals by position       |
+| `GET`  | `/v1/signals/:signalId`                    | one published signal by UUID        |
+| `POST` | `/v1/account/email-verifications`          | gated email verification request    |
+| `POST` | `/v1/account/email-verifications/complete` | gated email verification completion |
 
 ## Local database workflow
 

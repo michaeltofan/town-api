@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { loadEnv } from '../src/config/env.js';
 
+const TEST_HASH_KEY = 'town-test-email-verification-hash-key-32';
+const TEST_RATE_KEY = 'town-test-ceremony-rate-limit-hash-key-32';
+
 describe('loadEnv', () => {
   it('applies defaults for optional values when DATABASE_URL is present', () => {
     const env = loadEnv({
@@ -17,6 +20,8 @@ describe('loadEnv', () => {
       DB_CONNECTION_TIMEOUT_MS: 5000,
       DB_IDLE_TIMEOUT_MS: 30000,
       CONTROLLED_CONFIRMATION_ENABLED: false,
+      EMAIL_VERIFICATION_ENABLED: false,
+      TRUST_PROXY: false,
     });
   });
 
@@ -31,6 +36,8 @@ describe('loadEnv', () => {
       DB_CONNECTION_TIMEOUT_MS: '1500',
       DB_IDLE_TIMEOUT_MS: '12000',
       CONTROLLED_CONFIRMATION_ENABLED: 'false',
+      EMAIL_VERIFICATION_ENABLED: 'false',
+      TRUST_PROXY: 'true',
     });
 
     expect(env).toEqual({
@@ -43,6 +50,8 @@ describe('loadEnv', () => {
       DB_CONNECTION_TIMEOUT_MS: 1500,
       DB_IDLE_TIMEOUT_MS: 12000,
       CONTROLLED_CONFIRMATION_ENABLED: false,
+      EMAIL_VERIFICATION_ENABLED: false,
+      TRUST_PROXY: true,
     });
   });
 
@@ -101,6 +110,55 @@ describe('loadEnv', () => {
         CONTROLLED_CONFIRMATION_ENABLED: 'yes',
       }),
     ).toThrow(/CONTROLLED_CONFIRMATION_ENABLED must be true or false/);
+  });
+
+  it('requires email verification hash keys and delivery mode when enabled', () => {
+    const env = loadEnv({
+      DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+      NODE_ENV: 'test',
+      EMAIL_VERIFICATION_ENABLED: 'true',
+      EMAIL_VERIFICATION_HASH_KEY: TEST_HASH_KEY,
+      CEREMONY_RATE_LIMIT_HASH_KEY: TEST_RATE_KEY,
+      EMAIL_VERIFICATION_DELIVERY_MODE: 'test',
+    });
+    expect(env.EMAIL_VERIFICATION_ENABLED).toBe(true);
+    expect(env.EMAIL_VERIFICATION_DELIVERY_MODE).toBe('test');
+  });
+
+  it('rejects enabled email verification without hash key and does not leak secrets', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        NODE_ENV: 'test',
+        EMAIL_VERIFICATION_ENABLED: 'true',
+        CEREMONY_RATE_LIMIT_HASH_KEY: TEST_RATE_KEY,
+        EMAIL_VERIFICATION_DELIVERY_MODE: 'test',
+      }),
+    ).toThrow(/EMAIL_VERIFICATION_HASH_KEY is required/);
+  });
+
+  it('rejects unsupported delivery mode and production enablement', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        NODE_ENV: 'test',
+        EMAIL_VERIFICATION_ENABLED: 'true',
+        EMAIL_VERIFICATION_HASH_KEY: TEST_HASH_KEY,
+        CEREMONY_RATE_LIMIT_HASH_KEY: TEST_RATE_KEY,
+        EMAIL_VERIFICATION_DELIVERY_MODE: 'smtp',
+      }),
+    ).toThrow(/EMAIL_VERIFICATION_DELIVERY_MODE must be test or development/);
+
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        NODE_ENV: 'production',
+        EMAIL_VERIFICATION_ENABLED: 'true',
+        EMAIL_VERIFICATION_HASH_KEY: TEST_HASH_KEY,
+        CEREMONY_RATE_LIMIT_HASH_KEY: TEST_RATE_KEY,
+        EMAIL_VERIFICATION_DELIVERY_MODE: 'development',
+      }),
+    ).toThrow(/cannot be true in production/);
   });
 
   it('rejects missing DATABASE_URL without leaking values', () => {

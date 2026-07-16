@@ -81,8 +81,8 @@ async function assertTownFoundationSchema(pool: Pool): Promise<void> {
      FROM drizzle.__drizzle_migrations`,
   );
 
-  if (Number(historyResult.rows[0]?.count ?? 0) < 5) {
-    throw new Error('Expected at least five drizzle migration history rows');
+  if (Number(historyResult.rows[0]?.count ?? 0) < 6) {
+    throw new Error('Expected at least six drizzle migration history rows');
   }
 }
 

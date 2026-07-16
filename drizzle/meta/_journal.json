@@ -36,6 +36,13 @@
       "when": 1784217761210,
       "tag": "0004_create_auth_ceremony_data_session_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784224978929,
+      "tag": "0005_email_challenges_revoked_at",
+      "breakpoints": true
     }
   ]
 }

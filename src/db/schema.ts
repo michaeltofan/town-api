@@ -296,6 +296,7 @@ export const emailChallenges = town.table(
     secretHash: bytea('secret_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
     consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
     attemptCount: smallint('attempt_count').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
@@ -311,6 +312,19 @@ export const emailChallenges = town.table(
     ),
     check('email_challenges_attempt_count_nonnegative', sql`${table.attemptCount} >= 0`),
     check('email_challenges_expires_after_created', sql`${table.expiresAt} > ${table.createdAt}`),
+    check(
+      'email_challenges_consumed_not_before_created',
+      sql`${table.consumedAt} is null or ${table.consumedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      'email_challenges_revoked_not_before_created',
+      sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt}`,
+    ),
+    index('email_challenges_active_setup_idx')
+      .on(table.accountId, table.emailNormalized, table.purpose)
+      .where(
+        sql`${table.consumedAt} is null and ${table.revokedAt} is null and ${table.purpose} = 'verify_email'`,
+      ),
   ],
 );
 

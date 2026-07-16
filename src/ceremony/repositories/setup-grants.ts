@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import {
   accounts,
@@ -12,6 +12,39 @@ import { CeremonyInvariantError } from '../errors.js';
 type Db = Database['db'];
 
 const APPROVED_PURPOSES = new Set<SetupGrantPurpose>(['initial_passkey_registration']);
+
+/**
+ * Revoke previous unconsumed, unrevoked, unexpired setup grants for an account/purpose.
+ */
+export async function revokeActiveSetupGrantsForAccount(
+  db: Db,
+  input: {
+    accountId: string;
+    purpose: SetupGrantPurpose;
+    now: string;
+    excludeGrantId?: string;
+  },
+): Promise<number> {
+  if (!APPROVED_PURPOSES.has(input.purpose)) {
+    throw new CeremonyInvariantError('INVALID_SETUP_GRANT_PURPOSE', 'Invalid setup grant purpose');
+  }
+  const conditions = [
+    eq(setupGrants.accountId, input.accountId),
+    eq(setupGrants.purpose, input.purpose),
+    isNull(setupGrants.consumedAt),
+    isNull(setupGrants.revokedAt),
+    gt(setupGrants.expiresAt, input.now),
+  ];
+  if (input.excludeGrantId !== undefined) {
+    conditions.push(ne(setupGrants.id, input.excludeGrantId));
+  }
+  const updated = await db
+    .update(setupGrants)
+    .set({ revokedAt: input.now })
+    .where(and(...conditions))
+    .returning({ id: setupGrants.id });
+  return updated.length;
+}
 
 /**
  * Setup grants are restricted pre-authentication authority, not sessions.
