@@ -4,7 +4,7 @@ import { migrationsFolder, requireDatabaseUrl, resetAndMigrate } from './helpers
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 
-describe('communities and signals migration', () => {
+describe('actors and signal_confirmations migration', () => {
   const databaseUrl = requireDatabaseUrl();
   let pool: Pool;
 
@@ -17,7 +17,7 @@ describe('communities and signals migration', () => {
     await pool.end();
   });
 
-  it('creates town.communities and town.signals with required constraints and index', async () => {
+  it('creates actors and signal_confirmations with required constraints', async () => {
     const tables = await pool.query<{ table_name: string }>(
       `SELECT table_name
        FROM information_schema.tables
@@ -31,8 +31,8 @@ describe('communities and signals migration', () => {
       'signals',
     ]);
 
-    const constraints = await pool.query<{ conname: string }>(
-      `SELECT conname
+    const constraints = await pool.query<{ conname: string; contype: string }>(
+      `SELECT conname, contype
        FROM pg_constraint
        WHERE connamespace = 'town'::regnamespace
        ORDER BY conname`,
@@ -40,53 +40,57 @@ describe('communities and signals migration', () => {
     const names = constraints.rows.map((row) => row.conname);
     expect(names).toEqual(
       expect.arrayContaining([
+        'actors_pkey',
+        'actors_community_id_fkey',
+        'actors_kind_controlled_test',
+        'actors_status_active',
+        'signal_confirmations_pkey',
+        'signal_confirmations_signal_id_fkey',
+        'signal_confirmations_actor_id_fkey',
+        'signal_confirmations_signal_actor_unique',
         'communities_pkey',
-        'communities_slug_unique',
-        'communities_position_unique',
-        'communities_position_positive',
-        'communities_country_code_length',
-        'communities_status_active',
         'signals_pkey',
-        'signals_community_id_fkey',
-        'signals_community_slug_unique',
-        'signals_community_position_unique',
-        'signals_position_positive',
-        'signals_publication_status_published',
-        'signals_observed_precision_valid',
-        'signals_image_focus_x_range',
-        'signals_image_focus_y_range',
       ]),
     );
 
-    const indexes = await pool.query<{ indexname: string }>(
-      `SELECT indexname
-       FROM pg_indexes
-       WHERE schemaname = 'town'
-       ORDER BY indexname`,
+    const fkDelete = await pool.query<{ conname: string; confdeltype: string }>(
+      `SELECT conname, confdeltype
+       FROM pg_constraint
+       WHERE connamespace = 'town'::regnamespace
+         AND contype = 'f'
+         AND conname IN (
+           'actors_community_id_fkey',
+           'signal_confirmations_signal_id_fkey',
+           'signal_confirmations_actor_id_fkey'
+         )
+       ORDER BY conname`,
     );
-    expect(indexes.rows.map((row) => row.indexname)).toContain(
-      'signals_community_publication_position_idx',
-    );
+    expect(fkDelete.rows).toHaveLength(3);
+    for (const row of fkDelete.rows) {
+      // PostgreSQL stores RESTRICT as 'r'
+      expect(row.confdeltype).toBe('r');
+    }
   });
 
-  it('does not create users, confirmations, or memberships tables', async () => {
+  it('does not create auth, membership, or payment tables', async () => {
     const forbidden = await pool.query<{ table_name: string }>(
       `SELECT table_name
        FROM information_schema.tables
        WHERE table_schema = 'town'
-         AND table_name IN ('users', 'confirmations', 'memberships', 'accounts', 'sessions')`,
+         AND table_name IN (
+           'users',
+           'confirmations',
+           'memberships',
+           'accounts',
+           'sessions',
+           'payments',
+           'stripe_customers'
+         )`,
     );
     expect(forbidden.rows).toEqual([]);
   });
 
-  it('keeps prior town schema migration intact and re-applies safely', async () => {
-    const schema = await pool.query<{ exists: boolean }>(
-      `SELECT EXISTS (
-        SELECT 1 FROM information_schema.schemata WHERE schema_name = 'town'
-      ) AS exists`,
-    );
-    expect(schema.rows[0]?.exists).toBe(true);
-
+  it('keeps prior communities/signals migrations intact and re-applies safely', async () => {
     const history = await pool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );

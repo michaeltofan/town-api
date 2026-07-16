@@ -11,6 +11,12 @@ export default defineConfig({
       'test/communities-signals.constraints.test.ts',
       'test/communities-signals.repository.test.ts',
       'test/communities-signals.api.test.ts',
+      'test/signal-confirmation.migration.test.ts',
+      'test/signal-confirmation.seed.test.ts',
+      'test/signal-confirmation.repository.test.ts',
+      'test/signal-confirmation.api.test.ts',
+      'test/signal-confirmation.persistence.test.ts',
+      'test/signal-confirmation.access.test.ts',
     ],
     fileParallelism: false,
     poolOptions: {

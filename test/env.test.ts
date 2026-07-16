@@ -16,6 +16,7 @@ describe('loadEnv', () => {
       DB_POOL_MAX: 5,
       DB_CONNECTION_TIMEOUT_MS: 5000,
       DB_IDLE_TIMEOUT_MS: 30000,
+      CONTROLLED_CONFIRMATION_ENABLED: false,
     });
   });
 
@@ -29,6 +30,7 @@ describe('loadEnv', () => {
       DB_POOL_MAX: '3',
       DB_CONNECTION_TIMEOUT_MS: '1500',
       DB_IDLE_TIMEOUT_MS: '12000',
+      CONTROLLED_CONFIRMATION_ENABLED: 'false',
     });
 
     expect(env).toEqual({
@@ -40,7 +42,65 @@ describe('loadEnv', () => {
       DB_POOL_MAX: 3,
       DB_CONNECTION_TIMEOUT_MS: 1500,
       DB_IDLE_TIMEOUT_MS: 12000,
+      CONTROLLED_CONFIRMATION_ENABLED: false,
     });
+  });
+
+  it('requires key and actor id when controlled confirmation is enabled', () => {
+    const env = loadEnv({
+      DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+      CONTROLLED_CONFIRMATION_ENABLED: 'true',
+      CONTROLLED_CONFIRMATION_KEY: 'local-placeholder-key',
+      CONTROLLED_TEST_ACTOR_ID: '00000000-0000-4000-8000-000000000301',
+    });
+
+    expect(env.CONTROLLED_CONFIRMATION_ENABLED).toBe(true);
+    expect(env.CONTROLLED_CONFIRMATION_KEY).toBe('local-placeholder-key');
+    expect(env.CONTROLLED_TEST_ACTOR_ID).toBe('00000000-0000-4000-8000-000000000301');
+  });
+
+  it('rejects enabled controlled confirmation without key and does not leak secrets', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        CONTROLLED_CONFIRMATION_ENABLED: 'true',
+        CONTROLLED_TEST_ACTOR_ID: '00000000-0000-4000-8000-000000000301',
+      }),
+    ).toThrow(/CONTROLLED_CONFIRMATION_KEY is required/);
+  });
+
+  it('rejects malformed configured actor id without leaking the value', () => {
+    const badActorId = 'not-a-uuid-secret-actor';
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        CONTROLLED_CONFIRMATION_ENABLED: 'true',
+        CONTROLLED_CONFIRMATION_KEY: 'local-placeholder-key',
+        CONTROLLED_TEST_ACTOR_ID: badActorId,
+      }),
+    ).toThrow(/CONTROLLED_TEST_ACTOR_ID must be a valid UUID/);
+
+    try {
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        CONTROLLED_CONFIRMATION_ENABLED: 'true',
+        CONTROLLED_CONFIRMATION_KEY: 'super-secret-control-key',
+        CONTROLLED_TEST_ACTOR_ID: badActorId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      expect(message).not.toContain('super-secret-control-key');
+      expect(message).not.toContain(badActorId);
+    }
+  });
+
+  it('rejects invalid CONTROLLED_CONFIRMATION_ENABLED values', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        CONTROLLED_CONFIRMATION_ENABLED: 'yes',
+      }),
+    ).toThrow(/CONTROLLED_CONFIRMATION_ENABLED must be true or false/);
   });
 
   it('rejects missing DATABASE_URL without leaking values', () => {

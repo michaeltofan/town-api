@@ -17,3 +17,15 @@ export function communityNotFoundError(): AppError {
 export function signalNotFoundError(): AppError {
   return new AppError(404, 'SIGNAL_NOT_FOUND', 'The requested signal was not found.');
 }
+
+export function controlledAccessRequiredError(): AppError {
+  return new AppError(401, 'CONTROLLED_ACCESS_REQUIRED', 'Controlled access is required.');
+}
+
+export function actorNotEligibleForCommunityError(): AppError {
+  return new AppError(
+    403,
+    'ACTOR_NOT_ELIGIBLE_FOR_COMMUNITY',
+    'The actor is not eligible for this community.',
+  );
+}

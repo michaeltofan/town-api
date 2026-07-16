@@ -6,8 +6,9 @@ import { createTestEnv } from './env.js';
 export async function createTestApp(options?: {
   database?: Database;
   ready?: boolean;
+  envOverrides?: Partial<NodeJS.ProcessEnv>;
 }): Promise<AppInstance> {
-  const env = createTestEnv();
+  const env = createTestEnv(options?.envOverrides);
   const database = options?.database ?? createFakeDatabase({ ready: options?.ready ?? true });
 
   const app = await buildApp({

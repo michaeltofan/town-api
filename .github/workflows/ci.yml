@@ -86,11 +86,13 @@ jobs:
       - name: Database migration test
         run: npm run db:migrate:test
 
-      - name: Foundation seed
+      - name: Foundation and controlled actor seeds
         run: |
           npm run db:migrate
           npm run db:seed:foundation
           npm run db:seed:foundation
+          npm run db:seed:controlled-actor
+          npm run db:seed:controlled-actor
 
       - name: Verify canonical seed counts
         run: |
@@ -99,12 +101,32 @@ jobs:
           const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
           const communities = await pool.query('SELECT COUNT(*)::int AS count FROM town.communities');
           const signals = await pool.query('SELECT COUNT(*)::int AS count FROM town.signals');
+          const actors = await pool.query('SELECT COUNT(*)::int AS count FROM town.actors');
+          const confirmations = await pool.query('SELECT COUNT(*)::int AS count FROM town.signal_confirmations');
+          const controlled = await pool.query(
+            `SELECT id, kind, status, community_id
+             FROM town.actors
+             WHERE id = '00000000-0000-4000-8000-000000000301'`,
+          );
           await pool.end();
           if (communities.rows[0].count !== 2 || signals.rows[0].count !== 6) {
             console.error('Unexpected canonical counts', communities.rows[0], signals.rows[0]);
             process.exit(1);
           }
-          console.log('Canonical seed counts OK: communities=2 signals=6');
+          if (actors.rows[0].count !== 1 || confirmations.rows[0].count !== 0) {
+            console.error('Unexpected actor/confirmation counts', actors.rows[0], confirmations.rows[0]);
+            process.exit(1);
+          }
+          if (
+            controlled.rows.length !== 1 ||
+            controlled.rows[0].kind !== 'controlled_test' ||
+            controlled.rows[0].status !== 'active' ||
+            controlled.rows[0].community_id !== '00000000-0000-4000-8000-000000000001'
+          ) {
+            console.error('Unexpected controlled actor', controlled.rows[0]);
+            process.exit(1);
+          }
+          console.log('Canonical seed counts OK: communities=2 signals=6 actors=1 confirmations=0');
           EOF
 
       - name: PostgreSQL integration tests

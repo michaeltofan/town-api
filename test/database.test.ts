@@ -49,12 +49,17 @@ describe('PostgreSQL foundation integration', () => {
        WHERE table_schema = 'town'
        ORDER BY table_name`,
     );
-    expect(tables.rows.map((row) => row.table_name)).toEqual(['communities', 'signals']);
+    expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'actors',
+      'communities',
+      'signal_confirmations',
+      'signals',
+    ]);
 
     const history = await adminPool.query<{ id: number; hash: string }>(
       `SELECT id, hash FROM drizzle.__drizzle_migrations ORDER BY created_at`,
     );
-    expect(history.rows.length).toBeGreaterThanOrEqual(2);
+    expect(history.rows.length).toBeGreaterThanOrEqual(3);
   });
 
   it('re-applying migrations is safe and does not create forbidden product tables', async () => {
@@ -68,7 +73,12 @@ describe('PostgreSQL foundation integration', () => {
        WHERE table_schema = 'town'
        ORDER BY table_name`,
     );
-    expect(tables.rows.map((row) => row.table_name)).toEqual(['communities', 'signals']);
+    expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'actors',
+      'communities',
+      'signal_confirmations',
+      'signals',
+    ]);
 
     const forbidden = await adminPool.query<{ table_name: string }>(
       `SELECT table_name
@@ -100,12 +110,17 @@ describe('PostgreSQL foundation integration', () => {
        WHERE table_schema = 'town'
        ORDER BY table_name`,
     );
-    expect(tables.rows.map((row) => row.table_name)).toEqual(['communities', 'signals']);
+    expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'actors',
+      'communities',
+      'signal_confirmations',
+      'signals',
+    ]);
 
     const history = await adminPool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
-    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(2);
+    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(3);
   });
 
   it('db:check succeeds against committed migrations', () => {

@@ -12,6 +12,7 @@ export function createTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): Env {
     DB_POOL_MAX: '5',
     DB_CONNECTION_TIMEOUT_MS: '2000',
     DB_IDLE_TIMEOUT_MS: '1000',
+    CONTROLLED_CONFIRMATION_ENABLED: 'false',
     ...overrides,
   });
 }
