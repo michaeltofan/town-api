@@ -40,6 +40,7 @@ export async function generateOpenApiDocument(): Promise<unknown> {
     LOG_LEVEL: 'silent',
     // Placeholder only — OpenAPI generation injects a stub database and never connects.
     DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town_openapi',
+    CONTROLLED_CONFIRMATION_ENABLED: 'false',
   });
 
   const app = await buildApp({

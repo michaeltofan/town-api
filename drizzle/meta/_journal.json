@@ -15,6 +15,13 @@
       "when": 1784209255452,
       "tag": "0001_create_communities_and_signals",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784211345489,
+      "tag": "0002_create_actors_and_signal_confirmations",
+      "breakpoints": true
     }
   ]
 }

@@ -15,7 +15,8 @@ import {
 
 /**
  * TOWN schema namespace and civic foundation tables.
- * Product tables beyond communities/signals remain out of scope.
+ * Includes communities, signals, controlled actors, and signal confirmations.
+ * Public users, membership, and auth tables remain out of scope.
  */
 export const town = pgSchema('town');
 
@@ -100,5 +101,54 @@ export const signals = town.table(
   ],
 );
 
+export const actors = town.table(
+  'actors',
+  {
+    id: uuid('id').primaryKey(),
+    kind: text('kind').notNull(),
+    status: text('status').notNull(),
+    displayLabel: text('display_label').notNull(),
+    communityId: uuid('community_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.communityId],
+      foreignColumns: [communities.id],
+      name: 'actors_community_id_fkey',
+    }).onDelete('restrict'),
+    check('actors_kind_controlled_test', sql`${table.kind} = 'controlled_test'`),
+    check('actors_status_active', sql`${table.status} = 'active'`),
+  ],
+);
+
+export const signalConfirmations = town.table(
+  'signal_confirmations',
+  {
+    id: uuid('id').primaryKey(),
+    signalId: uuid('signal_id').notNull(),
+    actorId: uuid('actor_id').notNull(),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true, mode: 'string' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.signalId],
+      foreignColumns: [signals.id],
+      name: 'signal_confirmations_signal_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.actorId],
+      foreignColumns: [actors.id],
+      name: 'signal_confirmations_actor_id_fkey',
+    }).onDelete('restrict'),
+    unique('signal_confirmations_signal_actor_unique').on(table.signalId, table.actorId),
+    index('signal_confirmations_actor_signal_idx').on(table.actorId, table.signalId),
+  ],
+);
+
 export type CommunityRow = typeof communities.$inferSelect;
 export type SignalRow = typeof signals.$inferSelect;
+export type ActorRow = typeof actors.$inferSelect;
+export type SignalConfirmationRow = typeof signalConfirmations.$inferSelect;

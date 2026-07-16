@@ -34,9 +34,12 @@ async function assertTownFoundationSchema(pool: Pool): Promise<void> {
   );
 
   const tableNames = tablesResult.rows.map((row) => row.table_name);
-  if (JSON.stringify(tableNames) !== JSON.stringify(['communities', 'signals'])) {
+  if (
+    JSON.stringify(tableNames) !==
+    JSON.stringify(['actors', 'communities', 'signal_confirmations', 'signals'])
+  ) {
     throw new Error(
-      `Expected only town.communities and town.signals, received: ${tableNames.join(',') || '(none)'}`,
+      `Expected town.actors, town.communities, town.signal_confirmations, and town.signals, received: ${tableNames.join(',') || '(none)'}`,
     );
   }
 
@@ -56,8 +59,8 @@ async function assertTownFoundationSchema(pool: Pool): Promise<void> {
      FROM drizzle.__drizzle_migrations`,
   );
 
-  if (Number(historyResult.rows[0]?.count ?? 0) < 2) {
-    throw new Error('Expected at least two drizzle migration history rows');
+  if (Number(historyResult.rows[0]?.count ?? 0) < 3) {
+    throw new Error('Expected at least three drizzle migration history rows');
   }
 }
 
