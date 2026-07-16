@@ -20,7 +20,6 @@ async function main(): Promise<void> {
 
   try {
     await app.listen({ host: env.HOST, port: env.PORT });
-    app.log.info(`OpenAPI docs available at http://${env.HOST}:${String(env.PORT)}/docs`);
   } catch (error) {
     app.log.error(error);
     process.exit(1);

@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   quality:
-    name: Lint, typecheck, test, build
+    name: Lint, typecheck, test, openapi, build
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -41,6 +41,9 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: OpenAPI check
+        run: npm run openapi:check
 
       - name: Build
         run: npm run build

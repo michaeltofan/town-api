@@ -1,49 +1,24 @@
-import type { FastifyPluginCallback } from 'fastify';
+import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
+import { LiveResponseSchema, ReadyResponseSchema } from '../schemas/health.js';
 
-const healthResponseSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['status', 'service', 'timestamp'],
-  properties: {
-    status: { type: 'string', enum: ['ok'] },
-    service: { type: 'string' },
-    timestamp: { type: 'string', format: 'date-time' },
-  },
-} as const;
-
-const readyResponseSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['status', 'service', 'timestamp'],
-  properties: {
-    status: { type: 'string', enum: ['ready'] },
-    service: { type: 'string' },
-    timestamp: { type: 'string', format: 'date-time' },
-  },
-} as const;
-
-export const healthRoutes: FastifyPluginCallback = (app, _opts, done) => {
+export const healthRoutes: FastifyPluginCallbackTypebox = (app, _opts, done) => {
   app.get(
-    '/health',
+    '/health/live',
     {
       schema: {
         tags: ['Health'],
         summary: 'Liveness probe',
-        description: 'Returns OK when the process is running and able to serve HTTP.',
+        description: 'Returns ok when the process is running and able to serve HTTP.',
         response: {
-          200: healthResponseSchema,
+          200: LiveResponseSchema,
         },
       },
     },
-    () => ({
-      status: 'ok' as const,
-      service: 'town-api',
-      timestamp: new Date().toISOString(),
-    }),
+    () => ({ status: 'ok' as const }),
   );
 
   app.get(
-    '/ready',
+    '/health/ready',
     {
       schema: {
         tags: ['Health'],
@@ -51,15 +26,11 @@ export const healthRoutes: FastifyPluginCallback = (app, _opts, done) => {
         description:
           'Returns ready when the API process can accept traffic. Foundation scope has no external dependencies.',
         response: {
-          200: readyResponseSchema,
+          200: ReadyResponseSchema,
         },
       },
     },
-    () => ({
-      status: 'ready' as const,
-      service: 'town-api',
-      timestamp: new Date().toISOString(),
-    }),
+    () => ({ status: 'ready' as const }),
   );
 
   done();
