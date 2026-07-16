@@ -29,6 +29,13 @@
       "when": 1784214199370,
       "tag": "0003_create_account_identity_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784217761210,
+      "tag": "0004_create_auth_ceremony_data_session_foundation",
+      "breakpoints": true
     }
   ]
 }

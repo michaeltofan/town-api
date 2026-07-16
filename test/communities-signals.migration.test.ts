@@ -26,13 +26,16 @@ describe('communities and signals migration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_sessions',
       'accounts',
       'actors',
+      'ceremony_rate_limits',
       'communities',
       'email_challenges',
       'identity_security_events',
       'passkey_credentials',
       'recovery_grants',
+      'setup_grants',
       'signal_confirmations',
       'signals',
       'webauthn_challenges',
@@ -97,7 +100,7 @@ describe('communities and signals migration', () => {
     const history = await pool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
-    expect(Number(history.rows[0]?.count)).toBeGreaterThanOrEqual(4);
+    expect(Number(history.rows[0]?.count)).toBeGreaterThanOrEqual(5);
 
     const db = drizzle(pool);
     await migrate(db, { migrationsFolder });
@@ -106,13 +109,16 @@ describe('communities and signals migration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_sessions',
       'accounts',
       'actors',
+      'ceremony_rate_limits',
       'communities',
       'email_challenges',
       'identity_security_events',
       'passkey_credentials',
       'recovery_grants',
+      'setup_grants',
       'signal_confirmations',
       'signals',
       'webauthn_challenges',

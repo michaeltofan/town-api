@@ -21,6 +21,9 @@ export default defineConfig({
       'test/account-identity.migration.test.ts',
       'test/account-identity.repository.test.ts',
       'test/account-identity.fixtures.test.ts',
+      'test/auth-ceremony.migration.test.ts',
+      'test/auth-ceremony.repository.test.ts',
+      'test/auth-ceremony.fixtures.test.ts',
     ],
     coverage: {
       provider: 'v8',

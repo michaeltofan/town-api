@@ -15,13 +15,16 @@ function requireEnv(name: string): string {
 
 const EXPECTED_TOWN_TABLES = [
   'account_emails',
+  'account_sessions',
   'accounts',
   'actors',
+  'ceremony_rate_limits',
   'communities',
   'email_challenges',
   'identity_security_events',
   'passkey_credentials',
   'recovery_grants',
+  'setup_grants',
   'signal_confirmations',
   'signals',
   'webauthn_challenges',
@@ -78,8 +81,8 @@ async function assertTownFoundationSchema(pool: Pool): Promise<void> {
      FROM drizzle.__drizzle_migrations`,
   );
 
-  if (Number(historyResult.rows[0]?.count ?? 0) < 4) {
-    throw new Error('Expected at least four drizzle migration history rows');
+  if (Number(historyResult.rows[0]?.count ?? 0) < 5) {
+    throw new Error('Expected at least five drizzle migration history rows');
   }
 }
 

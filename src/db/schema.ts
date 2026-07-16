@@ -8,6 +8,7 @@ import {
   date,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgSchema,
   smallint,
@@ -19,8 +20,8 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /**
- * TOWN schema namespace: civic foundation tables plus account identity foundation.
- * Membership, payments, sessions, and live authentication remain out of scope.
+ * TOWN schema namespace: civic foundation, account identity, and ceremony data foundations.
+ * Live authentication routes, cookies, JWTs, membership, and payments remain out of scope.
  */
 export const town = pgSchema('town');
 
@@ -390,10 +391,209 @@ export const identitySecurityEvents = town.table(
         'recovery_requested',
         'recovery_completed',
         'account_suspended',
-        'account_closed'
+        'account_closed',
+        'authentication_failed',
+        'session_created',
+        'session_rotated',
+        'session_revoked',
+        'counter_anomaly_detected',
+        'rate_limit_triggered'
       )`,
     ),
     index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
+  ],
+);
+
+/**
+ * Restricted pre-authentication authority after email verification and before first passkey.
+ * Not a session: cannot access normal APIs, civic actions, membership, or create sessions alone.
+ */
+export const setupGrants = town.table(
+  'setup_grants',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    tokenHash: bytea('token_hash').notNull(),
+    purpose: text('purpose').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'setup_grants_account_id_fkey',
+    }).onDelete('restrict'),
+    unique('setup_grants_token_hash_unique').on(table.tokenHash),
+    check('setup_grants_purpose_valid', sql`${table.purpose} in ('initial_passkey_registration')`),
+    check('setup_grants_expires_after_created', sql`${table.expiresAt} > ${table.createdAt}`),
+    check(
+      'setup_grants_consumed_not_before_created',
+      sql`${table.consumedAt} is null or ${table.consumedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      'setup_grants_revoked_not_before_created',
+      sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt}`,
+    ),
+    index('setup_grants_account_active_idx')
+      .on(table.accountId)
+      .where(sql`${table.consumedAt} is null and ${table.revokedAt} is null`),
+  ],
+);
+
+/**
+ * Opaque server-side account sessions for future web/mobile clients.
+ * Does not imply membership, payment, local verification, or civic entitlement.
+ */
+export const accountSessions = town.table(
+  'account_sessions',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    tokenHash: bytea('token_hash').notNull(),
+    clientType: text('client_type').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    authenticatedAt: timestamp('authenticated_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true, mode: 'string' }).notNull(),
+    idleExpiresAt: timestamp('idle_expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+    absoluteExpiresAt: timestamp('absolute_expires_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
+    revocationReason: text('revocation_reason'),
+    recoveryRecentAt: timestamp('recovery_recent_at', {
+      withTimezone: true,
+      mode: 'string',
+    }),
+    securityVersion: smallint('security_version').notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'account_sessions_account_id_fkey',
+    }).onDelete('restrict'),
+    unique('account_sessions_token_hash_unique').on(table.tokenHash),
+    check('account_sessions_client_type_valid', sql`${table.clientType} in ('web', 'mobile')`),
+    check('account_sessions_security_version_positive', sql`${table.securityVersion} >= 1`),
+    check(
+      'account_sessions_authenticated_after_created',
+      sql`${table.authenticatedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      'account_sessions_last_seen_after_created',
+      sql`${table.lastSeenAt} >= ${table.createdAt}`,
+    ),
+    check('account_sessions_idle_after_created', sql`${table.idleExpiresAt} > ${table.createdAt}`),
+    check(
+      'account_sessions_absolute_after_created',
+      sql`${table.absoluteExpiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      'account_sessions_idle_within_absolute',
+      sql`${table.idleExpiresAt} <= ${table.absoluteExpiresAt}`,
+    ),
+    check(
+      'account_sessions_revoked_not_before_created',
+      sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      'account_sessions_revocation_reason_consistency',
+      sql`(
+        (${table.revokedAt} is null and ${table.revocationReason} is null)
+        or (${table.revokedAt} is not null and ${table.revocationReason} is not null)
+      )`,
+    ),
+    check(
+      'account_sessions_revocation_reason_valid',
+      sql`${table.revocationReason} is null or ${table.revocationReason} in (
+        'logout',
+        'logout_all',
+        'rotated',
+        'account_suspended',
+        'account_closed',
+        'recovery_completed',
+        'credential_compromised',
+        'security_version_changed'
+      )`,
+    ),
+    index('account_sessions_account_active_idx')
+      .on(table.accountId)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
+
+/**
+ * Persistent atomic counters for ceremony-specific abuse controls.
+ * Subjects must be pre-hashed; raw email/IP/credential/token values are forbidden.
+ */
+export const ceremonyRateLimits = town.table(
+  'ceremony_rate_limits',
+  {
+    id: uuid('id').primaryKey(),
+    scope: text('scope').notNull(),
+    subjectHash: bytea('subject_hash').notNull(),
+    windowStartedAt: timestamp('window_started_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    windowExpiresAt: timestamp('window_expires_at', {
+      withTimezone: true,
+      mode: 'string',
+    }).notNull(),
+    attemptCount: integer('attempt_count').notNull(),
+    blockedUntil: timestamp('blocked_until', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    unique('ceremony_rate_limits_bucket_unique').on(
+      table.scope,
+      table.subjectHash,
+      table.windowStartedAt,
+    ),
+    check(
+      'ceremony_rate_limits_scope_valid',
+      sql`${table.scope} in (
+        'email_verification_request_email',
+        'email_verification_request_ip',
+        'email_verification_attempt_challenge',
+        'email_verification_attempt_email_ip',
+        'passkey_options_ip',
+        'passkey_options_client',
+        'passkey_assertion_credential',
+        'passkey_assertion_ip',
+        'recovery_request_email',
+        'recovery_request_ip',
+        'setup_options_grant',
+        'setup_verification_grant',
+        'recovery_options_grant',
+        'recovery_verification_grant'
+      )`,
+    ),
+    check('ceremony_rate_limits_attempt_count_nonnegative', sql`${table.attemptCount} >= 0`),
+    check(
+      'ceremony_rate_limits_window_order',
+      sql`${table.windowExpiresAt} > ${table.windowStartedAt}`,
+    ),
+    check(
+      'ceremony_rate_limits_updated_after_created',
+      sql`${table.updatedAt} >= ${table.createdAt}`,
+    ),
+    index('ceremony_rate_limits_active_window_idx').on(
+      table.scope,
+      table.subjectHash,
+      table.windowExpiresAt,
+    ),
+    index('ceremony_rate_limits_blocked_until_idx')
+      .on(table.scope, table.subjectHash, table.blockedUntil)
+      .where(sql`${table.blockedUntil} is not null`),
   ],
 );
 
@@ -408,11 +608,40 @@ export type EmailChallengeRow = typeof emailChallenges.$inferSelect;
 export type RecoveryGrantRow = typeof recoveryGrants.$inferSelect;
 export type WebAuthnChallengeRow = typeof webauthnChallenges.$inferSelect;
 export type IdentitySecurityEventRow = typeof identitySecurityEvents.$inferSelect;
+export type SetupGrantRow = typeof setupGrants.$inferSelect;
+export type AccountSessionRow = typeof accountSessions.$inferSelect;
+export type CeremonyRateLimitRow = typeof ceremonyRateLimits.$inferSelect;
 
 export type AccountStatus = 'pending_email' | 'pending_passkey' | 'active' | 'suspended' | 'closed';
 
 export type EmailChallengePurpose = 'verify_email' | 'recover_account';
 export type WebAuthnChallengePurpose = 'register' | 'authenticate' | 'recover_register';
+export type SetupGrantPurpose = 'initial_passkey_registration';
+export type AccountSessionClientType = 'web' | 'mobile';
+export type AccountSessionRevocationReason =
+  | 'logout'
+  | 'logout_all'
+  | 'rotated'
+  | 'account_suspended'
+  | 'account_closed'
+  | 'recovery_completed'
+  | 'credential_compromised'
+  | 'security_version_changed';
+export type CeremonyRateLimitScope =
+  | 'email_verification_request_email'
+  | 'email_verification_request_ip'
+  | 'email_verification_attempt_challenge'
+  | 'email_verification_attempt_email_ip'
+  | 'passkey_options_ip'
+  | 'passkey_options_client'
+  | 'passkey_assertion_credential'
+  | 'passkey_assertion_ip'
+  | 'recovery_request_email'
+  | 'recovery_request_ip'
+  | 'setup_options_grant'
+  | 'setup_verification_grant'
+  | 'recovery_options_grant'
+  | 'recovery_verification_grant';
 export type IdentitySecurityEventType =
   | 'email_verification_requested'
   | 'email_verified'
@@ -422,4 +651,10 @@ export type IdentitySecurityEventType =
   | 'recovery_requested'
   | 'recovery_completed'
   | 'account_suspended'
-  | 'account_closed';
+  | 'account_closed'
+  | 'authentication_failed'
+  | 'session_created'
+  | 'session_rotated'
+  | 'session_revoked'
+  | 'counter_anomaly_detected'
+  | 'rate_limit_triggered';
