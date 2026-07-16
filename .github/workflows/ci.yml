@@ -15,7 +15,7 @@ jobs:
   quality:
     name: Lint, typecheck, unit, integration, openapi, build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -86,6 +86,27 @@ jobs:
       - name: Database migration test
         run: npm run db:migrate:test
 
+      - name: Foundation seed
+        run: |
+          npm run db:migrate
+          npm run db:seed:foundation
+          npm run db:seed:foundation
+
+      - name: Verify canonical seed counts
+        run: |
+          node --input-type=module <<'EOF'
+          import pg from 'pg';
+          const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+          const communities = await pool.query('SELECT COUNT(*)::int AS count FROM town.communities');
+          const signals = await pool.query('SELECT COUNT(*)::int AS count FROM town.signals');
+          await pool.end();
+          if (communities.rows[0].count !== 2 || signals.rows[0].count !== 6) {
+            console.error('Unexpected canonical counts', communities.rows[0], signals.rows[0]);
+            process.exit(1);
+          }
+          console.log('Canonical seed counts OK: communities=2 signals=6');
+          EOF
+
       - name: PostgreSQL integration tests
         run: npm run test:integration
 
@@ -94,3 +115,12 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: npm audit
+        # Full install reports known moderate drizzle-kit/@esbuild-kit findings (dev-only).
+        # Do not force-fix; production audit below must stay clean.
+        run: npm audit
+        continue-on-error: true
+
+      - name: npm audit omit dev
+        run: npm audit --omit=dev

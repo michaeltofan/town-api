@@ -1,138 +1,109 @@
 # town-api
 
-TOWN API foundation with Fastify 5, strict TypeScript, TypeBox, and a minimal PostgreSQL 18 + Drizzle ORM foundation.
-
-This repository intentionally contains **platform foundation only**. Product domain features remain out of scope.
+TOWN API shared backend foundation: Fastify 5, strict TypeScript, TypeBox, PostgreSQL 18, Drizzle ORM, and the first canonical civic dataset (communities + published signals).
 
 ## Requirements
 
 - Node.js **24+** (see `.nvmrc`)
 - npm 11+
-- PostgreSQL **18** for local integration/migration testing
+- PostgreSQL **18** for local migration/seed/integration testing
 
 ## Architecture
 
-- HTTP: Fastify 5 + TypeBox schemas
-- Database driver: `pg` (node-postgres) connection pool
-- ORM: Drizzle ORM over the same pool
-- Migrations: versioned SQL under `drizzle/` via Drizzle Kit
-- OpenAPI 3.1: generated deterministically from route schemas into `docs/openapi.v1.json`
+- HTTP: Fastify 5 + TypeBox request/response schemas
+- Database: bounded `pg` pool + Drizzle ORM
+- Migrations: versioned SQL under `drizzle/` (no `drizzle-kit push`, no startup migration)
+- Seeds: explicit `db:seed:foundation` only (never on server startup)
+- OpenAPI 3.1: deterministic generation into `docs/openapi.v1.json` (no Swagger UI)
 
-Rules for this slice:
+## Canonical communities and signals
 
-- Migrations are **versioned SQL** committed to the repository.
-- `drizzle-kit push` is **not used**.
-- Application startup **does not run migrations**.
-- One bounded `pg.Pool` is created explicitly per process (or injected in tests).
+This slice seeds exactly:
 
-## Quick start
+| Community slug | City    | Locale  | Signals     |
+| -------------- | ------- | ------- | ----------- |
+| `milano-it`    | Milano  | `it-IT` | 3 published |
+| `munich-de`    | München | `de-DE` | 3 published |
+
+Signal slugs:
+
+- `milano-signal-1` … `milano-signal-3`
+- `munich-signal-1` … `munich-signal-3`
+
+Canonical copy is taken from approved `town-public` feed/detail scenes and is not rewritten.
+
+### Fixed UUID policy
+
+All community and signal IDs are fixed UUIDs in `src/db/seeds/foundation-content.ts`. Seed execution never calls random UUID generators or `Date.now()`.
+
+### Seed command
 
 ```bash
-nvm use
+export DATABASE_URL=postgres://town:town@127.0.0.1:5432/town
+npm run db:migrate
+npm run db:seed:foundation
+```
+
+Seed behavior:
+
+- deterministic and idempotent controlled upserts by fixed IDs
+- no truncation / no deletion of unknown records
+- running twice still yields exactly 2 communities and 6 signals
+- not executed by migrations or application startup
+
+Author `authorDisplayName` values are prototype editorial metadata, not verified user accounts.
+
+Image storage is limited to `imageKey` + focus coordinates. No binaries, base64, CDN, or absolute production URLs.
+
+## Read-only endpoints
+
+| Method | Path                                     | Behavior                           |
+| ------ | ---------------------------------------- | ---------------------------------- |
+| `GET`  | `/health/live`                           | `{"status":"ok"}` (no DB)          |
+| `GET`  | `/health/ready`                          | DB readiness `ready` / `not_ready` |
+| `GET`  | `/v1/communities`                        | active communities by position     |
+| `GET`  | `/v1/communities/:communitySlug/signals` | published signals by position      |
+| `GET`  | `/v1/signals/:signalId`                  | one published signal by UUID       |
+
+Publication filtering: only `publication_status = published` signals and `status = active` communities are returned.
+
+## Local database workflow
+
+```bash
 npm ci
 cp .env.example .env
-# edit DATABASE_URL for your local PostgreSQL 18 instance
 npm run db:migrate
+npm run db:seed:foundation
 npm run dev
 ```
 
-## Environment
+Useful scripts:
 
-| Variable                   | Default       | Description                  |
-| -------------------------- | ------------- | ---------------------------- |
-| `HOST`                     | `0.0.0.0`     | Bind address                 |
-| `PORT`                     | `3000`        | HTTP port                    |
-| `NODE_ENV`                 | `development` | Runtime mode                 |
-| `LOG_LEVEL`                | `info`        | Pino log level               |
-| `DATABASE_URL`             | _(required)_  | PostgreSQL connection string |
-| `DB_POOL_MAX`              | `5`           | Max pool connections (1–50)  |
-| `DB_CONNECTION_TIMEOUT_MS` | `5000`        | Connection timeout           |
-| `DB_IDLE_TIMEOUT_MS`       | `30000`       | Idle client timeout          |
-
-`.env` files are gitignored. `.env.example` contains placeholders only.
-
-## Health endpoints
-
-| Method | Path            | Behavior                                                                                             |
-| ------ | --------------- | ---------------------------------------------------------------------------------------------------- |
-| `GET`  | `/health/live`  | Always `{"status":"ok"}` when process is up. Does **not** query PostgreSQL.                          |
-| `GET`  | `/health/ready` | `200 {"status":"ready"}` when PostgreSQL readiness succeeds; `503 {"status":"not_ready"}` otherwise. |
-
-## Database commands
-
-| Script                    | Description                                               |
-| ------------------------- | --------------------------------------------------------- |
-| `npm run db:generate`     | Generate reviewable SQL migrations from TypeScript schema |
-| `npm run db:check`        | Validate committed migration history                      |
-| `npm run db:migrate`      | Apply committed migrations (requires `DATABASE_URL`)      |
-| `npm run db:migrate:test` | Reset + migrate + verify schema `town` on a test DB       |
-
-Migration V1 creates only:
-
-```sql
-CREATE SCHEMA IF NOT EXISTS "town";
-```
-
-No product tables are created.
-
-## Tests
-
-| Script                     | Description                                               |
-| -------------------------- | --------------------------------------------------------- |
-| `npm test`                 | Unit tests (no PostgreSQL required; DB injected)          |
-| `npm run test:integration` | PostgreSQL 18 integration tests (requires `DATABASE_URL`) |
-| `npm run check`            | Non-destructive quality gate (no production/Railway)      |
-
-Example integration run against local PostgreSQL 18:
-
-```bash
-export DATABASE_URL=postgres://town_test:town_test@127.0.0.1:5432/town_test
-npm run db:migrate:test
-npm run test:integration
-```
+| Script                       | Purpose                             |
+| ---------------------------- | ----------------------------------- |
+| `npm run db:generate`        | generate reviewable SQL             |
+| `npm run db:check`           | validate migration history          |
+| `npm run db:migrate`         | apply committed migrations          |
+| `npm run db:migrate:test`    | clean-DB migration verification     |
+| `npm run db:seed:foundation` | upsert canonical civic content      |
+| `npm test`                   | unit tests (no PostgreSQL required) |
+| `npm run test:integration`   | PostgreSQL 18 integration suite     |
+| `npm run check`              | non-destructive quality gate        |
 
 ## CI
 
-GitHub Actions uses:
+GitHub Actions uses Node.js 24 and a PostgreSQL 18 service container with CI-only credentials (no GitHub secrets, no Railway).
 
-- Node.js 24
-- PostgreSQL 18 service container with isolated CI-only credentials
-- `npm ci`, format, lint, typecheck, unit tests
-- `db:check`, `db:migrate:test`, integration tests
-- OpenAPI check and production build
-
-CI does **not** use GitHub repository secrets and does **not** connect to Railway.
-
-## Project layout
-
-```text
-src/
-  config/env.ts
-  db/
-    client.ts
-    lifecycle.ts
-    schema.ts
-    plugin.ts
-  routes/health.ts
-  app.ts
-  server.ts
-drizzle/                 # committed versioned SQL + metadata
-docs/openapi.v1.json
-test/
-  *.test.ts              # unit tests
-  database.test.ts       # PostgreSQL integration
-  readiness.test.ts      # PostgreSQL readiness integration
-```
+CI runs format/lint/typecheck/unit tests, migration checks, foundation seed (+ count verification), integration tests, OpenAPI check, build, and dependency audits.
 
 ## Out of scope
 
-This slice still does **not** include:
+This slice still excludes:
 
-- communities, signals, confirmations
-- users, authentication, passkeys, sessions, membership
-- Stripe, GPS, moderation
-- seed content
-- Railway deployment
-- town-public integration
-- town-safe-space-mobile integration
-- Redis, queues, workers, GraphQL, Docker deploy files, PgBouncer
+- users / test users / authentication / sessions / passkeys
+- signal confirmations / membership
+- Stripe / GPS / moderation / reports
+- public content submission / content editing / admin tooling
+- translation tables / search / pagination infrastructure
+- Redis / queues / workers / GraphQL
+- web integration / mobile integration / Railway deployment

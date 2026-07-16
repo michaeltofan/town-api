@@ -8,6 +8,13 @@
       "when": 1784205016900,
       "tag": "0000_create_town_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784209255452,
+      "tag": "0001_create_communities_and_signals",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@
     "schemas": {}
   },
   "info": {
-    "description": "TOWN API foundation — health probes and platform scaffolding only.",
+    "description": "TOWN API civic foundation — health probes, communities, and published signals. Read-only in this slice.",
     "title": "TOWN API",
     "version": "0.1.0"
   },
@@ -96,12 +96,537 @@
           "Health"
         ]
       }
+    },
+    "/v1/communities": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "cityName": {
+                            "type": "string"
+                          },
+                          "countryCode": {
+                            "maxLength": 2,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "defaultLocale": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "position": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "timezone": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "slug",
+                          "position",
+                          "countryCode",
+                          "cityName",
+                          "displayName",
+                          "defaultLocale",
+                          "timezone"
+                        ],
+                        "title": "PublicCommunity",
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "List active communities",
+        "tags": [
+          "Communities"
+        ]
+      }
+    },
+    "/v1/communities/{communitySlug}/signals": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "communitySlug",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "community": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "defaultLocale": {
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "slug": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "slug",
+                            "displayName",
+                            "defaultLocale"
+                          ],
+                          "title": "SignalListCommunity",
+                          "type": "object"
+                        },
+                        "signals": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "area": {
+                                "type": "string"
+                              },
+                              "category": {
+                                "type": "string"
+                              },
+                              "headline": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "imageFocus": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "x": {
+                                    "maximum": 100,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "y": {
+                                    "maximum": 100,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "x",
+                                  "y"
+                                ],
+                                "title": "ImageFocus",
+                                "type": "object"
+                              },
+                              "imageKey": {
+                                "type": "string"
+                              },
+                              "locale": {
+                                "type": "string"
+                              },
+                              "observedLabel": {
+                                "type": "string"
+                              },
+                              "position": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "slug": {
+                                "type": "string"
+                              },
+                              "summary": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "slug",
+                              "position",
+                              "locale",
+                              "category",
+                              "area",
+                              "headline",
+                              "summary",
+                              "observedLabel",
+                              "imageKey",
+                              "imageFocus"
+                            ],
+                            "title": "SignalListItem",
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "community",
+                        "signals"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "List published signals for a community",
+        "tags": [
+          "Signals"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "area": {
+                          "type": "string"
+                        },
+                        "authorDisplayName": {
+                          "type": "string"
+                        },
+                        "category": {
+                          "type": "string"
+                        },
+                        "community": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "displayName": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "slug": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "slug",
+                            "displayName"
+                          ],
+                          "title": "SignalDetailCommunity",
+                          "type": "object"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "headline": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "imageFocus": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "x": {
+                              "maximum": 100,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "y": {
+                              "maximum": 100,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y"
+                          ],
+                          "type": "object"
+                        },
+                        "imageKey": {
+                          "type": "string"
+                        },
+                        "latestUpdate": {
+                          "type": "string"
+                        },
+                        "locale": {
+                          "type": "string"
+                        },
+                        "observedLabel": {
+                          "type": "string"
+                        },
+                        "observedOn": {
+                          "anyOf": [
+                            {
+                              "format": "date",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "observedPrecision": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "day"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "week"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "publishedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "statusLabel": {
+                          "type": "string"
+                        },
+                        "statusNote": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "whoIsAffected": {
+                          "type": "string"
+                        },
+                        "whyItMatters": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "slug",
+                        "community",
+                        "locale",
+                        "category",
+                        "area",
+                        "headline",
+                        "summary",
+                        "description",
+                        "whyItMatters",
+                        "whoIsAffected",
+                        "latestUpdate",
+                        "statusLabel",
+                        "statusNote",
+                        "observedLabel",
+                        "observedOn",
+                        "observedPrecision",
+                        "authorDisplayName",
+                        "imageKey",
+                        "imageFocus",
+                        "publishedAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get one published signal by UUID",
+        "tags": [
+          "Signals"
+        ]
+      }
     }
   },
   "tags": [
     {
       "description": "Liveness and readiness probes",
       "name": "Health"
+    },
+    {
+      "description": "Active local communities",
+      "name": "Communities"
+    },
+    {
+      "description": "Published civic signals",
+      "name": "Signals"
     }
   ]
 }

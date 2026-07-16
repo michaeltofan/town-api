@@ -4,7 +4,15 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],
-    exclude: ['test/database.test.ts', 'test/readiness.test.ts'],
+    exclude: [
+      'test/database.test.ts',
+      'test/readiness.test.ts',
+      'test/communities-signals.migration.test.ts',
+      'test/communities-signals.seed.test.ts',
+      'test/communities-signals.constraints.test.ts',
+      'test/communities-signals.repository.test.ts',
+      'test/communities-signals.api.test.ts',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
