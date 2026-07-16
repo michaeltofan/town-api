@@ -44,7 +44,7 @@
     },
     "/health/ready": {
       "get": {
-        "description": "Returns ready when the API process can accept traffic. Foundation scope has no external dependencies.",
+        "description": "Returns ready when PostgreSQL is reachable. Returns not_ready when the database readiness check fails.",
         "responses": {
           "200": {
             "content": {
@@ -55,6 +55,28 @@
                     "status": {
                       "enum": [
                         "ready"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "not_ready"
                       ],
                       "type": "string"
                     }

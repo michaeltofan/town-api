@@ -1,99 +1,138 @@
 # town-api
 
-TOWN API foundation (V1): Fastify 5 + strict TypeScript with TypeBox schemas, health probes, committed OpenAPI 3.1 contract, linting, formatting, tests, and CI.
+TOWN API foundation with Fastify 5, strict TypeScript, TypeBox, and a minimal PostgreSQL 18 + Drizzle ORM foundation.
 
-This repository intentionally contains **platform foundation only**. Domain features (auth, payments, GPS, moderation, PostgreSQL/Drizzle, etc.) are out of scope for V1.
+This repository intentionally contains **platform foundation only**. Product domain features remain out of scope.
 
 ## Requirements
 
 - Node.js **24+** (see `.nvmrc`)
 - npm 11+
+- PostgreSQL **18** for local integration/migration testing
+
+## Architecture
+
+- HTTP: Fastify 5 + TypeBox schemas
+- Database driver: `pg` (node-postgres) connection pool
+- ORM: Drizzle ORM over the same pool
+- Migrations: versioned SQL under `drizzle/` via Drizzle Kit
+- OpenAPI 3.1: generated deterministically from route schemas into `docs/openapi.v1.json`
+
+Rules for this slice:
+
+- Migrations are **versioned SQL** committed to the repository.
+- `drizzle-kit push` is **not used**.
+- Application startup **does not run migrations**.
+- One bounded `pg.Pool` is created explicitly per process (or injected in tests).
 
 ## Quick start
 
 ```bash
 nvm use
 npm ci
+cp .env.example .env
+# edit DATABASE_URL for your local PostgreSQL 18 instance
+npm run db:migrate
 npm run dev
 ```
 
-Server defaults:
+## Environment
 
-| Variable    | Default       | Description    |
-| ----------- | ------------- | -------------- |
-| `HOST`      | `0.0.0.0`     | Bind address   |
-| `PORT`      | `3000`        | HTTP port      |
-| `NODE_ENV`  | `development` | Runtime mode   |
-| `LOG_LEVEL` | `info`        | Pino log level |
+| Variable                   | Default       | Description                  |
+| -------------------------- | ------------- | ---------------------------- |
+| `HOST`                     | `0.0.0.0`     | Bind address                 |
+| `PORT`                     | `3000`        | HTTP port                    |
+| `NODE_ENV`                 | `development` | Runtime mode                 |
+| `LOG_LEVEL`                | `info`        | Pino log level               |
+| `DATABASE_URL`             | _(required)_  | PostgreSQL connection string |
+| `DB_POOL_MAX`              | `5`           | Max pool connections (1–50)  |
+| `DB_CONNECTION_TIMEOUT_MS` | `5000`        | Connection timeout           |
+| `DB_IDLE_TIMEOUT_MS`       | `30000`       | Idle client timeout          |
 
-Copy `.env.example` if you want a local env file (the process also reads shell env vars directly).
+`.env` files are gitignored. `.env.example` contains placeholders only.
 
-## Endpoints
+## Health endpoints
 
-| Method | Path            | Body                 |
-| ------ | --------------- | -------------------- |
-| `GET`  | `/health/live`  | `{"status":"ok"}`    |
-| `GET`  | `/health/ready` | `{"status":"ready"}` |
+| Method | Path            | Behavior                                                                                             |
+| ------ | --------------- | ---------------------------------------------------------------------------------------------------- |
+| `GET`  | `/health/live`  | Always `{"status":"ok"}` when process is up. Does **not** query PostgreSQL.                          |
+| `GET`  | `/health/ready` | `200 {"status":"ready"}` when PostgreSQL readiness succeeds; `503 {"status":"not_ready"}` otherwise. |
 
-Example:
+## Database commands
 
-```bash
-curl -s http://127.0.0.1:3000/health/live
+| Script                    | Description                                               |
+| ------------------------- | --------------------------------------------------------- |
+| `npm run db:generate`     | Generate reviewable SQL migrations from TypeScript schema |
+| `npm run db:check`        | Validate committed migration history                      |
+| `npm run db:migrate`      | Apply committed migrations (requires `DATABASE_URL`)      |
+| `npm run db:migrate:test` | Reset + migrate + verify schema `town` on a test DB       |
+
+Migration V1 creates only:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS "town";
 ```
 
-OpenAPI 3.1 is generated from Fastify/TypeBox schemas and committed at [`docs/openapi.v1.json`](docs/openapi.v1.json). There is no Swagger UI route.
+No product tables are created.
 
-## Scripts
+## Tests
 
-| Script                     | Description                                        |
-| -------------------------- | -------------------------------------------------- |
-| `npm run dev`              | Start with hot reload (`tsx watch src/server.ts`)  |
-| `npm run build`            | Compile TypeScript to `dist/`                      |
-| `npm start`                | Run compiled server (`node dist/server.js`)        |
-| `npm run typecheck`        | Strict TypeScript check (no emit)                  |
-| `npm run lint`             | ESLint (strict TypeScript rules)                   |
-| `npm run format`           | Prettier write                                     |
-| `npm run format:check`     | Prettier check                                     |
-| `npm test`                 | Vitest suite                                       |
-| `npm run test:coverage`    | Vitest with coverage                               |
-| `npm run openapi:generate` | Regenerate `docs/openapi.v1.json`                  |
-| `npm run openapi:check`    | Fail if generated OpenAPI differs from committed   |
-| `npm run check`            | format + lint + typecheck + test + openapi + build |
+| Script                     | Description                                               |
+| -------------------------- | --------------------------------------------------------- |
+| `npm test`                 | Unit tests (no PostgreSQL required; DB injected)          |
+| `npm run test:integration` | PostgreSQL 18 integration tests (requires `DATABASE_URL`) |
+| `npm run check`            | Non-destructive quality gate (no production/Railway)      |
+
+Example integration run against local PostgreSQL 18:
+
+```bash
+export DATABASE_URL=postgres://town_test:town_test@127.0.0.1:5432/town_test
+npm run db:migrate:test
+npm run test:integration
+```
+
+## CI
+
+GitHub Actions uses:
+
+- Node.js 24
+- PostgreSQL 18 service container with isolated CI-only credentials
+- `npm ci`, format, lint, typecheck, unit tests
+- `db:check`, `db:migrate:test`, integration tests
+- OpenAPI check and production build
+
+CI does **not** use GitHub repository secrets and does **not** connect to Railway.
 
 ## Project layout
 
 ```text
 src/
-  config/env.ts         # TypeBox-validated environment
-  plugins/openapi.ts    # OpenAPI 3.1 generation (no UI)
-  plugins/error-handler.ts
-  routes/health.ts      # /health/live and /health/ready
-  schemas/              # TypeBox schemas
-  openapi/document.ts   # Deterministic OpenAPI serialization
-  app.ts                # Fastify app factory
-  server.ts             # Process entrypoint
-scripts/openapi.ts      # openapi:generate / openapi:check
-docs/openapi.v1.json    # Committed OpenAPI contract
-test/                   # Vitest suite
-.github/workflows/      # CI (Node 24)
+  config/env.ts
+  db/
+    client.ts
+    lifecycle.ts
+    schema.ts
+    plugin.ts
+  routes/health.ts
+  app.ts
+  server.ts
+drizzle/                 # committed versioned SQL + metadata
+docs/openapi.v1.json
+test/
+  *.test.ts              # unit tests
+  database.test.ts       # PostgreSQL integration
+  readiness.test.ts      # PostgreSQL readiness integration
 ```
 
-## CI
+## Out of scope
 
-GitHub Actions workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pushes and pull requests with Node.js 24:
+This slice still does **not** include:
 
-1. `npm ci`
-2. `format:check`
-3. `lint`
-4. `typecheck`
-5. `test`
-6. `openapi:check`
-7. `build`
-
-## Out of scope (V1)
-
-- PostgreSQL / Drizzle / migrations
-- Domain models and business routes
-- Auth, Stripe, GPS, moderation
-- Railway / mobile / public-site changes
-- Swagger UI route
+- communities, signals, confirmations
+- users, authentication, passkeys, sessions, membership
+- Stripe, GPS, moderation
+- seed content
+- Railway deployment
+- town-public integration
+- town-safe-space-mobile integration
+- Redis, queues, workers, GraphQL, Docker deploy files, PgBouncer
