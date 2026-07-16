@@ -13,9 +13,27 @@ concurrency:
 
 jobs:
   quality:
-    name: Lint, typecheck, test, openapi, build
+    name: Lint, typecheck, unit, integration, openapi, build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: town_ci
+          POSTGRES_PASSWORD: town_ci
+          POSTGRES_DB: town_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U town_ci -d town_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://town_ci:town_ci@127.0.0.1:5432/town_ci
 
     steps:
       - name: Checkout
@@ -39,8 +57,37 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
+      - name: Unit tests
         run: npm test
+
+      - name: Wait for PostgreSQL 18
+        run: |
+          node --input-type=module <<'EOF'
+          import pg from 'pg';
+          const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1, connectionTimeoutMillis: 2000 });
+          for (let attempt = 1; attempt <= 30; attempt += 1) {
+            try {
+              await pool.query('SELECT 1');
+              await pool.end();
+              console.log('PostgreSQL is ready');
+              process.exit(0);
+            } catch {
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+          }
+          await pool.end().catch(() => undefined);
+          console.error('PostgreSQL did not become ready');
+          process.exit(1);
+          EOF
+
+      - name: Database migration check
+        run: npm run db:check
+
+      - name: Database migration test
+        run: npm run db:migrate:test
+
+      - name: PostgreSQL integration tests
+        run: npm run test:integration
 
       - name: OpenAPI check
         run: npm run openapi:check

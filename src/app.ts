@@ -1,6 +1,8 @@
 import { type TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Fastify from 'fastify';
 import type { Env } from './config/env.js';
+import { createDatabaseFromEnv, type Database } from './db/client.js';
+import databasePlugin from './db/plugin.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
 import openApiPlugin from './plugins/openapi.js';
 import { healthRoutes } from './routes/health.js';
@@ -8,6 +10,11 @@ import { healthRoutes } from './routes/health.js';
 export type BuildAppOptions = {
   env: Env;
   logger?: boolean | { level: Env['LOG_LEVEL'] };
+  /**
+   * Optional injected database dependency for tests.
+   * When omitted, a pool is created from validated environment settings.
+   */
+  database?: Database;
 };
 
 export async function buildApp(options: BuildAppOptions) {
@@ -23,8 +30,11 @@ export async function buildApp(options: BuildAppOptions) {
     },
   }).withTypeProvider<TypeBoxTypeProvider>();
 
+  const database = options.database ?? createDatabaseFromEnv(options.env);
+
   await app.register(errorHandlerPlugin);
   await app.register(openApiPlugin);
+  await app.register(databasePlugin, { database });
   await app.register(healthRoutes);
 
   return app;

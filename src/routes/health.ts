@@ -1,5 +1,9 @@
 import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
-import { LiveResponseSchema, ReadyResponseSchema } from '../schemas/health.js';
+import {
+  LiveResponseSchema,
+  NotReadyResponseSchema,
+  ReadyResponseSchema,
+} from '../schemas/health.js';
 
 export const healthRoutes: FastifyPluginCallbackTypebox = (app, _opts, done) => {
   app.get(
@@ -24,13 +28,23 @@ export const healthRoutes: FastifyPluginCallbackTypebox = (app, _opts, done) => 
         tags: ['Health'],
         summary: 'Readiness probe',
         description:
-          'Returns ready when the API process can accept traffic. Foundation scope has no external dependencies.',
+          'Returns ready when PostgreSQL is reachable. Returns not_ready when the database readiness check fails.',
         response: {
           200: ReadyResponseSchema,
+          503: NotReadyResponseSchema,
         },
       },
     },
-    () => ({ status: 'ready' as const }),
+    async (_request, reply) => {
+      const isReady = await app.database.checkReadiness();
+
+      if (!isReady) {
+        app.log.warn({ code: 'DATABASE_READINESS_FAILED' }, 'Database readiness check failed');
+        return reply.status(503).send({ status: 'not_ready' as const });
+      }
+
+      return reply.status(200).send({ status: 'ready' as const });
+    },
   );
 
   done();

@@ -26,8 +26,15 @@ describe('OpenAPI contract', () => {
     expect(document.paths).not.toHaveProperty('/health');
     expect(document.paths).not.toHaveProperty('/ready');
 
+    const readyPath = document.paths['/health/ready'] as {
+      get: { responses: Record<string, unknown> };
+    };
+    expect(readyPath.get.responses).toHaveProperty('200');
+    expect(readyPath.get.responses).toHaveProperty('503');
+
     const serialized = serializeOpenApiDocument(document);
     expect(() => JSON.parse(serialized) as unknown).not.toThrow();
+    expect(serialized).not.toMatch(/DATABASE_URL|postgres:\/\//i);
   });
 
   it('generated OpenAPI equals committed docs/openapi.v1.json', async () => {
