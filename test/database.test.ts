@@ -32,7 +32,7 @@ describe('PostgreSQL foundation integration', () => {
     await adminPool.end();
   });
 
-  it('applies migrations to a clean database and creates only schema town', async () => {
+  it('applies migrations to a clean database and creates town foundation tables only', async () => {
     const db = drizzle(adminPool);
     await migrate(db, { migrationsFolder });
 
@@ -46,17 +46,18 @@ describe('PostgreSQL foundation integration', () => {
     const tables = await adminPool.query<{ table_name: string }>(
       `SELECT table_name
        FROM information_schema.tables
-       WHERE table_schema = 'town'`,
+       WHERE table_schema = 'town'
+       ORDER BY table_name`,
     );
-    expect(tables.rows).toEqual([]);
+    expect(tables.rows.map((row) => row.table_name)).toEqual(['communities', 'signals']);
 
     const history = await adminPool.query<{ id: number; hash: string }>(
       `SELECT id, hash FROM drizzle.__drizzle_migrations ORDER BY created_at`,
     );
-    expect(history.rows.length).toBeGreaterThanOrEqual(1);
+    expect(history.rows.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('re-applying migrations is safe and does not create product tables', async () => {
+  it('re-applying migrations is safe and does not create forbidden product tables', async () => {
     const db = drizzle(adminPool);
     await migrate(db, { migrationsFolder });
     await migrate(db, { migrationsFolder });
@@ -64,9 +65,18 @@ describe('PostgreSQL foundation integration', () => {
     const tables = await adminPool.query<{ table_name: string }>(
       `SELECT table_name
        FROM information_schema.tables
-       WHERE table_schema = 'town'`,
+       WHERE table_schema = 'town'
+       ORDER BY table_name`,
     );
-    expect(tables.rows).toEqual([]);
+    expect(tables.rows.map((row) => row.table_name)).toEqual(['communities', 'signals']);
+
+    const forbidden = await adminPool.query<{ table_name: string }>(
+      `SELECT table_name
+       FROM information_schema.tables
+       WHERE table_schema = 'town'
+         AND table_name IN ('users', 'confirmations', 'memberships')`,
+    );
+    expect(forbidden.rows).toEqual([]);
   });
 
   it('is safe when schema town already exists before Drizzle applies the migration', async () => {
@@ -87,14 +97,15 @@ describe('PostgreSQL foundation integration', () => {
     const tables = await adminPool.query<{ table_name: string }>(
       `SELECT table_name
        FROM information_schema.tables
-       WHERE table_schema = 'town'`,
+       WHERE table_schema = 'town'
+       ORDER BY table_name`,
     );
-    expect(tables.rows).toEqual([]);
+    expect(tables.rows.map((row) => row.table_name)).toEqual(['communities', 'signals']);
 
     const history = await adminPool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
-    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(1);
+    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(2);
   });
 
   it('db:check succeeds against committed migrations', () => {

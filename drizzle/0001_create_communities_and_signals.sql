@@ -1,0 +1,57 @@
+CREATE TABLE "town"."communities" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"slug" text NOT NULL,
+	"position" smallint NOT NULL,
+	"country_code" char(2) NOT NULL,
+	"city_name" text NOT NULL,
+	"display_name" text NOT NULL,
+	"default_locale" text NOT NULL,
+	"timezone" text NOT NULL,
+	"status" text NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "communities_slug_unique" UNIQUE("slug"),
+	CONSTRAINT "communities_position_unique" UNIQUE("position"),
+	CONSTRAINT "communities_position_positive" CHECK ("town"."communities"."position" > 0),
+	CONSTRAINT "communities_country_code_length" CHECK (char_length("town"."communities"."country_code") = 2),
+	CONSTRAINT "communities_status_active" CHECK ("town"."communities"."status" = 'active')
+);
+--> statement-breakpoint
+CREATE TABLE "town"."signals" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"community_id" uuid NOT NULL,
+	"slug" text NOT NULL,
+	"position" smallint NOT NULL,
+	"locale" text NOT NULL,
+	"category" text NOT NULL,
+	"area" text NOT NULL,
+	"headline" text NOT NULL,
+	"summary" text NOT NULL,
+	"description" text NOT NULL,
+	"why_it_matters" text NOT NULL,
+	"who_is_affected" text NOT NULL,
+	"latest_update" text NOT NULL,
+	"status_label" text NOT NULL,
+	"status_note" text NOT NULL,
+	"observed_label" text NOT NULL,
+	"observed_on" date,
+	"observed_precision" text NOT NULL,
+	"author_display_name" text NOT NULL,
+	"image_key" text NOT NULL,
+	"image_focus_x" smallint NOT NULL,
+	"image_focus_y" smallint NOT NULL,
+	"publication_status" text NOT NULL,
+	"published_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "signals_community_slug_unique" UNIQUE("community_id","slug"),
+	CONSTRAINT "signals_community_position_unique" UNIQUE("community_id","position"),
+	CONSTRAINT "signals_position_positive" CHECK ("town"."signals"."position" > 0),
+	CONSTRAINT "signals_publication_status_published" CHECK ("town"."signals"."publication_status" = 'published'),
+	CONSTRAINT "signals_observed_precision_valid" CHECK ("town"."signals"."observed_precision" in ('day', 'week')),
+	CONSTRAINT "signals_image_focus_x_range" CHECK ("town"."signals"."image_focus_x" >= 0 and "town"."signals"."image_focus_x" <= 100),
+	CONSTRAINT "signals_image_focus_y_range" CHECK ("town"."signals"."image_focus_y" >= 0 and "town"."signals"."image_focus_y" <= 100)
+);
+--> statement-breakpoint
+ALTER TABLE "town"."signals" ADD CONSTRAINT "signals_community_id_fkey" FOREIGN KEY ("community_id") REFERENCES "town"."communities"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "signals_community_publication_position_idx" ON "town"."signals" USING btree ("community_id","publication_status","position");

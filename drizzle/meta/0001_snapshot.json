@@ -1,0 +1,378 @@
+{
+  "id": "19dcc86e-67ab-4251-85ec-21072f033af8",
+  "prevId": "7a35b26e-ba8a-41a1-b753-cbc5b5b5f6a8",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "town.communities": {
+      "name": "communities",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "country_code": {
+          "name": "country_code",
+          "type": "char(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "city_name": {
+          "name": "city_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "default_locale": {
+          "name": "default_locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "communities_slug_unique": {
+          "name": "communities_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        },
+        "communities_position_unique": {
+          "name": "communities_position_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "position"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "communities_position_positive": {
+          "name": "communities_position_positive",
+          "value": "\"town\".\"communities\".\"position\" > 0"
+        },
+        "communities_country_code_length": {
+          "name": "communities_country_code_length",
+          "value": "char_length(\"town\".\"communities\".\"country_code\") = 2"
+        },
+        "communities_status_active": {
+          "name": "communities_status_active",
+          "value": "\"town\".\"communities\".\"status\" = 'active'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "town.signals": {
+      "name": "signals",
+      "schema": "town",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "community_id": {
+          "name": "community_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "area": {
+          "name": "area",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "headline": {
+          "name": "headline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "why_it_matters": {
+          "name": "why_it_matters",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "who_is_affected": {
+          "name": "who_is_affected",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "latest_update": {
+          "name": "latest_update",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status_label": {
+          "name": "status_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status_note": {
+          "name": "status_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_label": {
+          "name": "observed_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_on": {
+          "name": "observed_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observed_precision": {
+          "name": "observed_precision",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_display_name": {
+          "name": "author_display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image_key": {
+          "name": "image_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image_focus_x": {
+          "name": "image_focus_x",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image_focus_y": {
+          "name": "image_focus_y",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publication_status": {
+          "name": "publication_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "signals_community_publication_position_idx": {
+          "name": "signals_community_publication_position_idx",
+          "columns": [
+            {
+              "expression": "community_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "publication_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "signals_community_id_fkey": {
+          "name": "signals_community_id_fkey",
+          "tableFrom": "signals",
+          "tableTo": "communities",
+          "schemaTo": "town",
+          "columnsFrom": [
+            "community_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "signals_community_slug_unique": {
+          "name": "signals_community_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "community_id",
+            "slug"
+          ]
+        },
+        "signals_community_position_unique": {
+          "name": "signals_community_position_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "community_id",
+            "position"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "signals_position_positive": {
+          "name": "signals_position_positive",
+          "value": "\"town\".\"signals\".\"position\" > 0"
+        },
+        "signals_publication_status_published": {
+          "name": "signals_publication_status_published",
+          "value": "\"town\".\"signals\".\"publication_status\" = 'published'"
+        },
+        "signals_observed_precision_valid": {
+          "name": "signals_observed_precision_valid",
+          "value": "\"town\".\"signals\".\"observed_precision\" in ('day', 'week')"
+        },
+        "signals_image_focus_x_range": {
+          "name": "signals_image_focus_x_range",
+          "value": "\"town\".\"signals\".\"image_focus_x\" >= 0 and \"town\".\"signals\".\"image_focus_x\" <= 100"
+        },
+        "signals_image_focus_y_range": {
+          "name": "signals_image_focus_y_range",
+          "value": "\"town\".\"signals\".\"image_focus_y\" >= 0 and \"town\".\"signals\".\"image_focus_y\" <= 100"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "town": "town"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

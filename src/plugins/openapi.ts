@@ -8,13 +8,22 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
       openapi: '3.1.0',
       info: {
         title: 'TOWN API',
-        description: 'TOWN API foundation — health probes and platform scaffolding only.',
+        description:
+          'TOWN API civic foundation — health probes, communities, and published signals. Read-only in this slice.',
         version: '0.1.0',
       },
       tags: [
         {
           name: 'Health',
           description: 'Liveness and readiness probes',
+        },
+        {
+          name: 'Communities',
+          description: 'Active local communities',
+        },
+        {
+          name: 'Signals',
+          description: 'Published civic signals',
         },
       ],
     },

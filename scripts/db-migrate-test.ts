@@ -13,7 +13,7 @@ function requireEnv(name: string): string {
   return value;
 }
 
-async function assertTownSchemaOnly(pool: Pool): Promise<void> {
+async function assertTownFoundationSchema(pool: Pool): Promise<void> {
   const schemaResult = await pool.query<{ exists: boolean }>(
     `SELECT EXISTS (
       SELECT 1
@@ -33,8 +33,22 @@ async function assertTownSchemaOnly(pool: Pool): Promise<void> {
      ORDER BY table_name`,
   );
 
-  if (tablesResult.rows.length > 0) {
-    throw new Error('Expected no product tables in schema "town"');
+  const tableNames = tablesResult.rows.map((row) => row.table_name);
+  if (JSON.stringify(tableNames) !== JSON.stringify(['communities', 'signals'])) {
+    throw new Error(
+      `Expected only town.communities and town.signals, received: ${tableNames.join(',') || '(none)'}`,
+    );
+  }
+
+  const forbidden = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+     FROM information_schema.tables
+     WHERE table_schema = 'town'
+       AND table_name IN ('users', 'confirmations', 'memberships', 'accounts', 'sessions')`,
+  );
+
+  if (forbidden.rows.length > 0) {
+    throw new Error('Forbidden product tables present in town schema');
   }
 
   const historyResult = await pool.query<{ count: string }>(
@@ -42,8 +56,8 @@ async function assertTownSchemaOnly(pool: Pool): Promise<void> {
      FROM drizzle.__drizzle_migrations`,
   );
 
-  if (Number(historyResult.rows[0]?.count ?? 0) < 1) {
-    throw new Error('Expected drizzle migration history rows');
+  if (Number(historyResult.rows[0]?.count ?? 0) < 2) {
+    throw new Error('Expected at least two drizzle migration history rows');
   }
 }
 
@@ -51,7 +65,6 @@ async function main(): Promise<void> {
   const databaseUrl = requireEnv('DATABASE_URL');
   const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../drizzle');
 
-  // Validate committed migration history consistency without applying.
   execFileSync('npx', ['drizzle-kit', 'check'], {
     env: process.env,
     stdio: 'inherit',
@@ -63,23 +76,21 @@ async function main(): Promise<void> {
   });
 
   try {
-    // Reset public/drizzle state for a clean migration test database.
     await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
     await pool.query('DROP SCHEMA IF EXISTS town CASCADE');
 
     const db = drizzle(pool);
     await migrate(db, { migrationsFolder });
-    await assertTownSchemaOnly(pool);
+    await assertTownFoundationSchema(pool);
 
-    // Re-applying must be safe and must not create duplicate schema objects.
     await migrate(db, { migrationsFolder });
-    await assertTownSchemaOnly(pool);
+    await assertTownFoundationSchema(pool);
 
-    // Migration must remain safe when schema town already exists before Drizzle applies.
     await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
+    await pool.query('DROP SCHEMA IF EXISTS town CASCADE');
     await pool.query('CREATE SCHEMA IF NOT EXISTS town');
     await migrate(db, { migrationsFolder });
-    await assertTownSchemaOnly(pool);
+    await assertTownFoundationSchema(pool);
 
     process.stdout.write('db:migrate:test passed\n');
   } finally {

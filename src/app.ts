@@ -5,7 +5,9 @@ import { createDatabaseFromEnv, type Database } from './db/client.js';
 import databasePlugin from './db/plugin.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
 import openApiPlugin from './plugins/openapi.js';
+import { communitiesRoutes } from './routes/communities.js';
 import { healthRoutes } from './routes/health.js';
+import { signalsRoutes } from './routes/signals.js';
 
 export type BuildAppOptions = {
   env: Env;
@@ -36,6 +38,8 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(openApiPlugin);
   await app.register(databasePlugin, { database });
   await app.register(healthRoutes);
+  await app.register(communitiesRoutes);
+  await app.register(signalsRoutes);
 
   return app;
 }

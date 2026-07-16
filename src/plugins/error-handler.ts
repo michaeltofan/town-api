@@ -1,11 +1,20 @@
 import type { FastifyError, FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
+import { AppError } from '../errors/app-error.js';
 
 type PublicClientError = {
   statusCode: number;
   error: string;
   message: string;
   requestId: string;
+};
+
+type PublicDomainError = {
+  error: {
+    code: string;
+    message: string;
+    requestId: string;
+  };
 };
 
 type PublicInternalError = {
@@ -30,6 +39,16 @@ function toClientErrorBody(
   };
 }
 
+function toDomainErrorBody(code: string, message: string, requestId: string): PublicDomainError {
+  return {
+    error: {
+      code,
+      message,
+      requestId,
+    },
+  };
+}
+
 function toInternalErrorBody(requestId: string): PublicInternalError {
   return {
     error: {
@@ -47,6 +66,12 @@ const errorHandlerPlugin: FastifyPluginCallback = (app, _opts, done) => {
   });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
+    if (error instanceof AppError) {
+      const body = toDomainErrorBody(error.code, error.message, request.id);
+      void reply.status(error.statusCode).type('application/json; charset=utf-8').send(body);
+      return;
+    }
+
     const statusCode =
       typeof error.statusCode === 'number' && error.statusCode >= 400 ? error.statusCode : 500;
 
