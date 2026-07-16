@@ -50,16 +50,23 @@ describe('PostgreSQL foundation integration', () => {
        ORDER BY table_name`,
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'account_emails',
+      'accounts',
       'actors',
       'communities',
+      'email_challenges',
+      'identity_security_events',
+      'passkey_credentials',
+      'recovery_grants',
       'signal_confirmations',
       'signals',
+      'webauthn_challenges',
     ]);
 
     const history = await adminPool.query<{ id: number; hash: string }>(
       `SELECT id, hash FROM drizzle.__drizzle_migrations ORDER BY created_at`,
     );
-    expect(history.rows.length).toBeGreaterThanOrEqual(3);
+    expect(history.rows.length).toBeGreaterThanOrEqual(4);
   });
 
   it('re-applying migrations is safe and does not create forbidden product tables', async () => {
@@ -74,10 +81,17 @@ describe('PostgreSQL foundation integration', () => {
        ORDER BY table_name`,
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'account_emails',
+      'accounts',
       'actors',
       'communities',
+      'email_challenges',
+      'identity_security_events',
+      'passkey_credentials',
+      'recovery_grants',
       'signal_confirmations',
       'signals',
+      'webauthn_challenges',
     ]);
 
     const forbidden = await adminPool.query<{ table_name: string }>(
@@ -111,16 +125,23 @@ describe('PostgreSQL foundation integration', () => {
        ORDER BY table_name`,
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'account_emails',
+      'accounts',
       'actors',
       'communities',
+      'email_challenges',
+      'identity_security_events',
+      'passkey_credentials',
+      'recovery_grants',
       'signal_confirmations',
       'signals',
+      'webauthn_challenges',
     ]);
 
     const history = await adminPool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
-    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(3);
+    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(4);
   });
 
   it('db:check succeeds against committed migrations', () => {

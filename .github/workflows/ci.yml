@@ -104,7 +104,7 @@ jobs:
           const actors = await pool.query('SELECT COUNT(*)::int AS count FROM town.actors');
           const confirmations = await pool.query('SELECT COUNT(*)::int AS count FROM town.signal_confirmations');
           const controlled = await pool.query(
-            `SELECT id, kind, status, community_id
+            `SELECT id, kind, status, community_id, account_id
              FROM town.actors
              WHERE id = '00000000-0000-4000-8000-000000000301'`,
           );
@@ -121,7 +121,8 @@ jobs:
             controlled.rows.length !== 1 ||
             controlled.rows[0].kind !== 'controlled_test' ||
             controlled.rows[0].status !== 'active' ||
-            controlled.rows[0].community_id !== '00000000-0000-4000-8000-000000000001'
+            controlled.rows[0].community_id !== '00000000-0000-4000-8000-000000000001' ||
+            controlled.rows[0].account_id !== null
           ) {
             console.error('Unexpected controlled actor', controlled.rows[0]);
             process.exit(1);
@@ -134,6 +135,9 @@ jobs:
 
       - name: OpenAPI check
         run: npm run openapi:check
+
+      - name: Identity contract check
+        run: npm run identity:contract:check
 
       - name: Build
         run: npm run build

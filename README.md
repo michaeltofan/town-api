@@ -1,6 +1,6 @@
 # town-api
 
-TOWN API shared backend foundation: Fastify 5, strict TypeScript, TypeBox, PostgreSQL 18, Drizzle ORM, canonical civic content (communities + published signals), and the first persistent controlled signal confirmation capability.
+TOWN API shared backend foundation: Fastify 5, strict TypeScript, TypeBox, PostgreSQL 18, Drizzle ORM, canonical civic content, controlled signal confirmation, and the Account Identity Foundation (database + architecture contract only).
 
 ## Requirements
 
@@ -14,7 +14,9 @@ TOWN API shared backend foundation: Fastify 5, strict TypeScript, TypeBox, Postg
 - Database: bounded `pg` pool + Drizzle ORM
 - Migrations: versioned SQL under `drizzle/` (no `drizzle-kit push`, no startup migration)
 - Seeds: explicit `db:seed:foundation` and `db:seed:controlled-actor` only (never on server startup)
-- OpenAPI 3.1: deterministic generation into `docs/openapi.v1.json` (no Swagger UI)
+- Identity fixtures: explicit test-only `identity:fixtures:load` (never on server startup)
+- OpenAPI 3.1: deterministic generation into `docs/openapi.v1.json` (implemented routes only; no Swagger UI)
+- Identity architecture contract: `docs/account-identity-contract.v1.json` (not live routes)
 
 ## Canonical communities and signals
 
@@ -61,13 +63,13 @@ Image storage is limited to `imageKey` + focus coordinates. No binaries, base64,
 
 ### `town.actors`
 
-Minimal controlled-test actor table (not public users/accounts):
+Civic actors (distinct from account identity):
 
-- fixed UUID controlled actor
-- `kind = controlled_test`
-- `status = active`
-- `display_label = Controlled test actor`
-- belongs to Milano (`milano-it`)
+- kinds: `controlled_test` | `civic`
+- optional nullable `account_id` (1:1 with accounts when set)
+- fixed UUID controlled actor remains `account_id = null`
+- controlled actor is never converted into a real account
+- `kind = controlled_test`, `status = active`, Milano community
 
 ### `town.signal_confirmations`
 
@@ -128,6 +130,85 @@ Persistence after restart is proven by an integration test that closes app insta
 
 No public confirmation counts or social mechanics are exposed.
 
+## Account identity foundation (database + contract only)
+
+This slice adds canonical identity tables and repository invariants. It does **not** implement live authentication, email delivery, WebAuthn ceremonies, sessions, or public account endpoints.
+
+### Domain separation
+
+| Concept                | Meaning in V1                                                                |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| Account identity       | Account shell, verified email, passkeys, challenges, recovery grants, events |
+| Civic actor            | Local civic identity; optionally linked 1:1 to an account                    |
+| Local verification     | Out of scope                                                                 |
+| Membership entitlement | Out of scope — active account does **not** imply paid membership/Stripe/GPS  |
+
+### Account states
+
+`pending_email` → `pending_passkey` → `active` ↔ `suspended` → `closed`
+
+Valid transitions are repository-enforced. Active requires:
+
+- verified primary email
+- at least one active passkey
+- linked civic actor
+
+### Email model and normalization
+
+`town.account_emails` stores original + normalized values.
+
+Conservative normalization:
+
+- trim whitespace
+- lowercase domain only
+- preserve local-part casing, dots, and plus tags
+- no Gmail/provider-specific rewriting
+
+Partial unique index enforces one active normalized email. At most one active primary email per account. Revoked emails cannot remain primary.
+
+### Passkeys
+
+`town.passkey_credentials` stores credential id + public key bytes only (never private keys/biometrics).
+
+- multiple passkeys per account
+- unique `credential_id`
+- `sign_count >= 0`; decreasing sign count rejected
+- final active passkey cannot be revoked while account is `active`
+
+### Challenges, recovery grants, WebAuthn challenge records
+
+Hashed-only storage:
+
+- `town.email_challenges` (`verify_email`, `recover_account`)
+- `town.webauthn_challenges` (`register`, `authenticate`, `recover_register`)
+- `town.recovery_grants` — restricted recovery authorization, **not sessions**
+
+Raw codes/tokens/challenges are never stored.
+
+### Identity security events
+
+Append-only `town.identity_security_events` with approved event types. Metadata is optional, bounded, and rejects sensitive keys.
+
+### Deterministic fixtures
+
+Test-only loader:
+
+```bash
+npm run identity:fixtures:load
+```
+
+Fixed UUIDs/timestamps/byte sequences. Never runs at application startup. Does not modify the controlled actor or confirmation history.
+
+### Architecture contract (not live OpenAPI paths)
+
+Future identity operations are documented in:
+
+- `docs/account-identity-contract.v1.json`
+- `npm run identity:contract:generate`
+- `npm run identity:contract:check`
+
+Live `docs/openapi.v1.json` continues to list only implemented routes.
+
 ## Other endpoints
 
 | Method | Path                                     | Behavior                           |
@@ -151,30 +232,35 @@ npm run dev
 
 Useful scripts:
 
-| Script                             | Purpose                                 |
-| ---------------------------------- | --------------------------------------- |
-| `npm run db:generate`              | generate reviewable SQL                 |
-| `npm run db:check`                 | validate migration history              |
-| `npm run db:migrate`               | apply committed migrations              |
-| `npm run db:migrate:test`          | clean-DB migration verification         |
-| `npm run db:seed:foundation`       | upsert canonical civic content          |
-| `npm run db:seed:controlled-actor` | upsert the single controlled test actor |
-| `npm test`                         | unit tests (no PostgreSQL required)     |
-| `npm run test:integration`         | PostgreSQL 18 integration suite         |
-| `npm run check`                    | non-destructive quality gate            |
+| Script                               | Purpose                                          |
+| ------------------------------------ | ------------------------------------------------ |
+| `npm run db:generate`                | generate reviewable SQL                          |
+| `npm run db:check`                   | validate migration history                       |
+| `npm run db:migrate`                 | apply committed migrations                       |
+| `npm run db:migrate:test`            | clean-DB migration verification                  |
+| `npm run db:seed:foundation`         | upsert canonical civic content                   |
+| `npm run db:seed:controlled-actor`   | upsert the single controlled test actor          |
+| `npm run identity:fixtures:load`     | load deterministic identity fixtures (test-only) |
+| `npm run identity:contract:generate` | write identity architecture contract             |
+| `npm run identity:contract:check`    | verify committed identity contract               |
+| `npm test`                           | unit tests (no PostgreSQL required)              |
+| `npm run test:integration`           | PostgreSQL 18 integration suite                  |
+| `npm run check`                      | non-destructive quality gate                     |
 
 ## CI
 
 GitHub Actions uses Node.js 24 and a PostgreSQL 18 service container with CI-only credentials (no GitHub secrets, no Railway).
 
-CI runs format/lint/typecheck/unit tests, migration checks, foundation + controlled-actor seeds, confirmation persistence/concurrency coverage via integration tests, OpenAPI check, build, and dependency audits.
+CI runs format/lint/typecheck/unit tests, migration checks, foundation + controlled-actor seeds, confirmation + identity integration coverage, live OpenAPI check, identity contract check, build, and dependency audits.
 
 ## Out of scope
 
 This slice still excludes:
 
-- public users / real accounts / email verification
-- passkeys / passwords / social login / sessions
+- real email delivery
+- WebAuthn ceremonies / live passkey login
+- public account endpoints
+- passwords / social login / sessions / cookies / JWTs
 - membership
 - Stripe
 - GPS / residency verification

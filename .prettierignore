@@ -3,4 +3,5 @@ dist
 coverage
 package-lock.json
 docs/openapi.v1.json
+docs/account-identity-contract.v1.json
 drizzle/meta

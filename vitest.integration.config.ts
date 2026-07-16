@@ -17,6 +17,9 @@ export default defineConfig({
       'test/signal-confirmation.api.test.ts',
       'test/signal-confirmation.persistence.test.ts',
       'test/signal-confirmation.access.test.ts',
+      'test/account-identity.migration.test.ts',
+      'test/account-identity.repository.test.ts',
+      'test/account-identity.fixtures.test.ts',
     ],
     fileParallelism: false,
     poolOptions: {
