@@ -29,7 +29,10 @@
     "identity:fixtures:load": "tsx scripts/load-identity-fixtures.ts",
     "identity:contract:generate": "tsx scripts/identity-contract.ts generate",
     "identity:contract:check": "tsx scripts/identity-contract.ts check",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run openapi:check && npm run identity:contract:check && npm run build"
+    "auth:fixtures:load": "tsx scripts/load-ceremony-fixtures.ts",
+    "auth:contract:generate": "tsx scripts/auth-contract.ts generate",
+    "auth:contract:check": "tsx scripts/auth-contract.ts check",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run openapi:check && npm run identity:contract:check && npm run auth:contract:check && npm run build"
   },
   "dependencies": {
     "@fastify/swagger": "^9.5.1",

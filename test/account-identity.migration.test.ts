@@ -4,13 +4,16 @@ import { requireDatabaseUrl, resetAndMigrate } from './helpers/pg.js';
 
 const EXPECTED_TABLES = [
   'account_emails',
+  'account_sessions',
   'accounts',
   'actors',
+  'ceremony_rate_limits',
   'communities',
   'email_challenges',
   'identity_security_events',
   'passkey_credentials',
   'recovery_grants',
+  'setup_grants',
   'signal_confirmations',
   'signals',
   'webauthn_challenges',

@@ -20,6 +20,12 @@ const APPROVED_EVENT_TYPES = new Set<IdentitySecurityEventType>([
   'recovery_completed',
   'account_suspended',
   'account_closed',
+  'authentication_failed',
+  'session_created',
+  'session_rotated',
+  'session_revoked',
+  'counter_anomaly_detected',
+  'rate_limit_triggered',
 ]);
 
 export async function appendIdentitySecurityEvent(

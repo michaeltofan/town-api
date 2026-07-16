@@ -1,6 +1,6 @@
 # town-api
 
-TOWN API shared backend foundation: Fastify 5, strict TypeScript, TypeBox, PostgreSQL 18, Drizzle ORM, canonical civic content, controlled signal confirmation, and the Account Identity Foundation (database + architecture contract only).
+TOWN API shared backend foundation: Fastify 5, strict TypeScript, TypeBox, PostgreSQL 18, Drizzle ORM, canonical civic content, controlled signal confirmation, Account Identity Foundation, and Authentication Ceremony Data/Session Foundation (database + architecture contracts only).
 
 ## Requirements
 
@@ -15,8 +15,10 @@ TOWN API shared backend foundation: Fastify 5, strict TypeScript, TypeBox, Postg
 - Migrations: versioned SQL under `drizzle/` (no `drizzle-kit push`, no startup migration)
 - Seeds: explicit `db:seed:foundation` and `db:seed:controlled-actor` only (never on server startup)
 - Identity fixtures: explicit test-only `identity:fixtures:load` (never on server startup)
+- Ceremony fixtures: explicit test-only `auth:fixtures:load` (never on server startup)
 - OpenAPI 3.1: deterministic generation into `docs/openapi.v1.json` (implemented routes only; no Swagger UI)
 - Identity architecture contract: `docs/account-identity-contract.v1.json` (not live routes)
+- Ceremony architecture contract: `docs/authentication-ceremony-foundation.v1.json` (not live routes)
 
 ## Canonical communities and signals
 
@@ -209,6 +211,106 @@ Future identity operations are documented in:
 
 Live `docs/openapi.v1.json` continues to list only implemented routes.
 
+## Authentication ceremony foundation (data + session models only)
+
+Slice 1 adds persistent ceremony data and session records required for future authentication. It does **not** implement live login, logout, email delivery, WebAuthn, cookies, CSRF, or JWTs.
+
+### Domain separation
+
+| Concept                 | Meaning in V1                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| Account identity        | Account shell, emails, passkeys, challenges, recovery grants                    |
+| Civic actor             | Local civic identity; optional 1:1 link to an account                           |
+| Authentication ceremony | Setup grants, WebAuthn/email challenge records, ceremony rate-limit buckets     |
+| Authenticated session   | Opaque server-side `town.account_sessions`                                      |
+| Local verification      | Out of scope                                                                    |
+| Membership entitlement  | Out of scope — a session does **not** imply membership, Stripe, or civic rights |
+
+### Setup grants vs recovery grants vs sessions
+
+| Record                  | Role                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------- |
+| `town.setup_grants`     | Restricted authority after email verification and before first passkey registration |
+| `town.recovery_grants`  | Restricted recovery authority; not a normal session                                 |
+| `town.account_sessions` | Opaque authenticated sessions for future web/mobile clients                         |
+
+Setup grants:
+
+- purpose: `initial_passkey_registration` only
+- TTL: **15 minutes**
+- stored as `token_hash` only (raw tokens never stored)
+- are **not** sessions
+- cannot access normal account APIs, civic actions, or membership operations
+- cannot create a session without completed passkey registration
+- authorize only `pending_passkey` accounts
+
+### Server-side opaque sessions
+
+`town.account_sessions` stores hashed session tokens only.
+
+| Policy                          | Value          |
+| ------------------------------- | -------------- |
+| Idle timeout                    | **1 hour**     |
+| Absolute reauthentication bound | **24 hours**   |
+| Sensitive-operation freshness   | **10 minutes** |
+
+Client types: `web` | `mobile`.
+
+Rules:
+
+- creation requires an **active** account with verified primary email, at least one active passkey, and a linked civic actor
+- suspended/closed/pending accounts cannot receive sessions
+- setup grants and recovery grants cannot create sessions
+- ordinary activity may extend `idle_expires_at` only (never absolute expiry, never `authenticated_at`)
+- idle expiry never exceeds absolute expiry
+- rotation creates a replacement session and revokes the old token atomically (`revocation_reason = rotated`)
+- revocation supports one session, all sessions, or all other sessions
+- `recovery_recent_at` is distinct from `authenticated_at`
+
+### Persistent ceremony rate-limit buckets
+
+`town.ceremony_rate_limits` stores atomic counters for ceremony-specific abuse controls.
+
+- subjects are **pre-hashed** only (no raw email, IP, credential id, or token storage)
+- uniqueness: `(scope, subject_hash, window_started_at)`
+- no Redis and no live enforcement middleware in this slice
+
+### Additional identity security event types
+
+Preserved prior types, plus:
+
+- `authentication_failed`
+- `session_created`
+- `session_rotated`
+- `session_revoked`
+- `counter_anomaly_detected`
+- `rate_limit_triggered`
+
+### Deterministic ceremony fixtures and contract
+
+```bash
+npm run auth:fixtures:load
+npm run auth:contract:generate
+npm run auth:contract:check
+```
+
+Fixtures use fixed UUIDs/timestamps/byte sequences and never run at application startup.
+
+Architecture contract: `docs/authentication-ceremony-foundation.v1.json` (contract-only; not live OpenAPI paths).
+
+### Explicit exclusions for this slice
+
+This slice does **not** implement:
+
+- real email delivery
+- email verification runtime
+- WebAuthn options or verification
+- login / logout endpoints
+- recovery runtime
+- cookies / CSRF / JWTs
+- membership / Stripe / local verification
+- Railway / web integration / mobile integration / deployment
+
 ## Other endpoints
 
 | Method | Path                                     | Behavior                           |
@@ -243,6 +345,9 @@ Useful scripts:
 | `npm run identity:fixtures:load`     | load deterministic identity fixtures (test-only) |
 | `npm run identity:contract:generate` | write identity architecture contract             |
 | `npm run identity:contract:check`    | verify committed identity contract               |
+| `npm run auth:fixtures:load`         | load deterministic ceremony fixtures (test-only) |
+| `npm run auth:contract:generate`     | write ceremony architecture contract             |
+| `npm run auth:contract:check`        | verify committed ceremony contract               |
 | `npm test`                           | unit tests (no PostgreSQL required)              |
 | `npm run test:integration`           | PostgreSQL 18 integration suite                  |
 | `npm run check`                      | non-destructive quality gate                     |
@@ -251,16 +356,16 @@ Useful scripts:
 
 GitHub Actions uses Node.js 24 and a PostgreSQL 18 service container with CI-only credentials (no GitHub secrets, no Railway).
 
-CI runs format/lint/typecheck/unit tests, migration checks, foundation + controlled-actor seeds, confirmation + identity integration coverage, live OpenAPI check, identity contract check, build, and dependency audits.
+CI runs format/lint/typecheck/unit tests, migration checks, foundation + controlled-actor seeds, confirmation + identity + ceremony integration coverage, live OpenAPI check, identity + ceremony contract checks, build, and dependency audits.
 
 ## Out of scope
 
 This slice still excludes:
 
-- real email delivery
-- WebAuthn ceremonies / live passkey login
-- public account endpoints
-- passwords / social login / sessions / cookies / JWTs
+- real email delivery / email verification runtime
+- WebAuthn ceremonies / live passkey login / logout endpoints
+- public account authentication endpoints
+- passwords / social login / cookies / CSRF / JWTs
 - membership
 - Stripe
 - GPS / residency verification

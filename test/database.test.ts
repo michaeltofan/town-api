@@ -51,13 +51,16 @@ describe('PostgreSQL foundation integration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_sessions',
       'accounts',
       'actors',
+      'ceremony_rate_limits',
       'communities',
       'email_challenges',
       'identity_security_events',
       'passkey_credentials',
       'recovery_grants',
+      'setup_grants',
       'signal_confirmations',
       'signals',
       'webauthn_challenges',
@@ -66,7 +69,7 @@ describe('PostgreSQL foundation integration', () => {
     const history = await adminPool.query<{ id: number; hash: string }>(
       `SELECT id, hash FROM drizzle.__drizzle_migrations ORDER BY created_at`,
     );
-    expect(history.rows.length).toBeGreaterThanOrEqual(4);
+    expect(history.rows.length).toBeGreaterThanOrEqual(5);
   });
 
   it('re-applying migrations is safe and does not create forbidden product tables', async () => {
@@ -82,13 +85,16 @@ describe('PostgreSQL foundation integration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_sessions',
       'accounts',
       'actors',
+      'ceremony_rate_limits',
       'communities',
       'email_challenges',
       'identity_security_events',
       'passkey_credentials',
       'recovery_grants',
+      'setup_grants',
       'signal_confirmations',
       'signals',
       'webauthn_challenges',
@@ -126,13 +132,16 @@ describe('PostgreSQL foundation integration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_sessions',
       'accounts',
       'actors',
+      'ceremony_rate_limits',
       'communities',
       'email_challenges',
       'identity_security_events',
       'passkey_credentials',
       'recovery_grants',
+      'setup_grants',
       'signal_confirmations',
       'signals',
       'webauthn_challenges',
@@ -141,7 +150,7 @@ describe('PostgreSQL foundation integration', () => {
     const history = await adminPool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
-    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(4);
+    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(5);
   });
 
   it('db:check succeeds against committed migrations', () => {

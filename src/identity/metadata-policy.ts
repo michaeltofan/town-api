@@ -11,6 +11,12 @@ const FORBIDDEN_METADATA_KEYS = new Set([
   'authorization',
   'cookie',
   'challenge',
+  'sessionToken',
+  'session_token',
+  'tokenHash',
+  'token_hash',
+  'setupToken',
+  'setup_token',
 ]);
 
 /**
