@@ -104,7 +104,7 @@ describe('actors and signal_confirmations migration', () => {
     const history = await pool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
-    expect(Number(history.rows[0]?.count)).toBeGreaterThanOrEqual(5);
+    expect(Number(history.rows[0]?.count)).toBeGreaterThanOrEqual(6);
 
     const db = drizzle(pool);
     await migrate(db, { migrationsFolder });

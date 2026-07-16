@@ -27,12 +27,16 @@ export function serializeAuthenticationCeremonyContract(document: unknown): stri
 export function generateAuthenticationCeremonyContractDocument(): unknown {
   return {
     contractVersion: '1.0.0',
-    title: 'TOWN Authentication Ceremony Foundation V1 — Slice 1',
+    title: 'TOWN Authentication Ceremony Foundation V1',
     description:
-      'Architecture contract for ceremony data and session foundation only. No live authentication routes, cookies, CSRF, JWTs, email delivery, or WebAuthn runtime are implemented in this slice.',
-    status: 'architecture_only',
-    implementedLiveRoutes: false,
-    slice: 'ceremony_data_and_session_foundation',
+      'Architecture contract for ceremony data/session foundation and email verification runtime. Production email delivery, WebAuthn, login/logout, cookies, CSRF, and JWTs remain out of scope.',
+    status: 'partially_implemented',
+    implementedLiveRoutes: true,
+    implementedRoutes: [
+      'POST /v1/account/email-verifications',
+      'POST /v1/account/email-verifications/complete',
+    ],
+    slice: 'ceremony_data_and_session_foundation_plus_email_verification_runtime',
     domainSeparation: {
       accountIdentity: 'Account shell, verified email, passkeys, challenges, recovery grants',
       civicActor: 'Local civic participation identity; optionally linked 1:1 to an account',
@@ -175,9 +179,28 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         'No RP ID or origin runtime configuration is shipped in this slice',
       ],
     },
+    emailVerificationRuntime: {
+      status: 'implemented',
+      featureFlag: 'EMAIL_VERIFICATION_ENABLED',
+      routes: [
+        'POST /v1/account/email-verifications',
+        'POST /v1/account/email-verifications/complete',
+      ],
+      codePolicy: {
+        length: 6,
+        ttlMinutes: 10,
+        maxAttempts: 5,
+        storage: 'HMAC-SHA-256 secret_hash only',
+      },
+      antiEnumeration: true,
+      createsSession: false,
+      activatesAccount: false,
+      transitions: ['pending_email -> pending_passkey'],
+      issues: ['restricted setup grant initial_passkey_registration'],
+      deliveryModes: ['test', 'development'],
+    },
     explicitExclusions: [
-      'real email delivery',
-      'email verification runtime',
+      'production email provider',
       'WebAuthn options or verification',
       'login routes',
       'logout endpoints',
@@ -193,7 +216,6 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       'mobile integration',
       'deployment',
       'Redis',
-      'live rate-limit middleware',
     ],
   };
 }

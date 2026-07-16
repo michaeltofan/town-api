@@ -9,7 +9,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
       info: {
         title: 'TOWN API',
         description:
-          'TOWN API civic foundation — health probes, communities, published signals, and temporary controlled signal confirmation. Controlled confirmation uses a temporary test key header and is not public authentication.',
+          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, and gated email verification for account setup. Controlled confirmation and email verification are not public authentication.',
         version: '0.1.0',
       },
       tags: [
@@ -29,6 +29,11 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
           name: 'Confirmations',
           description:
             'Temporary controlled signal confirmation for a single seeded test actor. Not public authentication, membership, or social counting.',
+        },
+        {
+          name: 'Account',
+          description:
+            'Account setup email verification. Does not create sessions, activate accounts, or disclose account existence.',
         },
       ],
       components: {

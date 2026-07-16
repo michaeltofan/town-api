@@ -6,8 +6,10 @@ import databasePlugin from './db/plugin.js';
 import controlledAccessPlugin from './plugins/controlled-access.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
 import openApiPlugin from './plugins/openapi.js';
+import type { EmailVerificationDeliveryAdapter } from './ceremony/email-verification/delivery.js';
 import { communitiesRoutes } from './routes/communities.js';
 import { confirmationRoutes } from './routes/confirmations.js';
+import { emailVerificationRoutes } from './routes/email-verifications.js';
 import { healthRoutes } from './routes/health.js';
 import { signalsRoutes } from './routes/signals.js';
 
@@ -19,6 +21,13 @@ export type BuildAppOptions = {
    * When omitted, a pool is created from validated environment settings.
    */
   database?: Database;
+  emailVerification?: {
+    deliveryAdapter?: EmailVerificationDeliveryAdapter;
+    now?: () => string;
+    generateCode?: () => string;
+    generateSetupToken?: () => string;
+    generateId?: () => string;
+  };
 };
 
 const CONTROL_KEY_REDACT = {
@@ -57,6 +66,7 @@ export async function buildApp(options: BuildAppOptions) {
   const app = Fastify({
     logger: resolveLoggerOption(options.env, options.logger),
     requestIdHeader: 'x-request-id',
+    trustProxy: options.env.TRUST_PROXY,
     genReqId: (req) => {
       const header = req.headers['x-request-id'];
       if (typeof header === 'string' && header.length > 0) {
@@ -82,6 +92,22 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(communitiesRoutes);
   await app.register(signalsRoutes);
   await app.register(confirmationRoutes, { env: options.env });
+  await app.register(emailVerificationRoutes, {
+    env: options.env,
+    ...(options.emailVerification?.deliveryAdapter !== undefined
+      ? { deliveryAdapter: options.emailVerification.deliveryAdapter }
+      : {}),
+    ...(options.emailVerification?.now !== undefined ? { now: options.emailVerification.now } : {}),
+    ...(options.emailVerification?.generateCode !== undefined
+      ? { generateCode: options.emailVerification.generateCode }
+      : {}),
+    ...(options.emailVerification?.generateSetupToken !== undefined
+      ? { generateSetupToken: options.emailVerification.generateSetupToken }
+      : {}),
+    ...(options.emailVerification?.generateId !== undefined
+      ? { generateId: options.emailVerification.generateId }
+      : {}),
+  });
 
   return app;
 }

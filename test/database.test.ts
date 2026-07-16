@@ -69,7 +69,7 @@ describe('PostgreSQL foundation integration', () => {
     const history = await adminPool.query<{ id: number; hash: string }>(
       `SELECT id, hash FROM drizzle.__drizzle_migrations ORDER BY created_at`,
     );
-    expect(history.rows.length).toBeGreaterThanOrEqual(5);
+    expect(history.rows.length).toBeGreaterThanOrEqual(6);
   });
 
   it('re-applying migrations is safe and does not create forbidden product tables', async () => {
@@ -150,7 +150,7 @@ describe('PostgreSQL foundation integration', () => {
     const history = await adminPool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
-    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(5);
+    expect(Number(history.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(6);
   });
 
   it('db:check succeeds against committed migrations', () => {

@@ -34,6 +34,12 @@ jobs:
 
     env:
       DATABASE_URL: postgres://town_ci:town_ci@127.0.0.1:5432/town_ci
+      # Isolated CI-only placeholders for email verification tests (not GitHub secrets).
+      EMAIL_VERIFICATION_ENABLED: 'true'
+      EMAIL_VERIFICATION_HASH_KEY: town-ci-email-verification-hash-key-32b
+      CEREMONY_RATE_LIMIT_HASH_KEY: town-ci-ceremony-rate-limit-hash-key-32b
+      EMAIL_VERIFICATION_DELIVERY_MODE: test
+      TRUST_PROXY: 'false'
 
     steps:
       - name: Checkout

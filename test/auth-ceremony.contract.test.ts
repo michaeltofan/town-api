@@ -18,10 +18,11 @@ const openApiPath = path.resolve(
 );
 
 describe('authentication ceremony architecture contract', () => {
-  it('documents slice-1 semantics without live routes', () => {
+  it('documents ceremony semantics and implemented email verification routes', () => {
     const document = generateAuthenticationCeremonyContractDocument() as {
       implementedLiveRoutes: boolean;
       status: string;
+      implementedRoutes: string[];
       accountSessions: {
         idleTimeoutMinutes: number;
         absoluteTimeoutHours: number;
@@ -31,8 +32,14 @@ describe('authentication ceremony architecture contract', () => {
       explicitExclusions: string[];
     };
 
-    expect(document.implementedLiveRoutes).toBe(false);
-    expect(document.status).toBe('architecture_only');
+    expect(document.implementedLiveRoutes).toBe(true);
+    expect(document.status).toBe('partially_implemented');
+    expect(document.implementedRoutes).toEqual(
+      expect.arrayContaining([
+        'POST /v1/account/email-verifications',
+        'POST /v1/account/email-verifications/complete',
+      ]),
+    );
     expect(document.accountSessions.idleTimeoutMinutes).toBe(60);
     expect(document.accountSessions.absoluteTimeoutHours).toBe(24);
     expect(document.accountSessions.sensitiveReauthFreshnessMinutes).toBe(10);
@@ -43,6 +50,7 @@ describe('authentication ceremony architecture contract', () => {
         'JWTs',
         'WebAuthn options or verification',
         'login routes',
+        'production email provider',
       ]),
     );
   });
@@ -74,6 +82,8 @@ describe('authentication ceremony architecture contract', () => {
         '/health/ready',
         '/v1/communities',
         '/v1/signals/{signalId}/confirmation',
+        '/v1/account/email-verifications',
+        '/v1/account/email-verifications/complete',
       ]),
     );
   });

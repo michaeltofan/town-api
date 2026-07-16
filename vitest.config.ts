@@ -24,6 +24,8 @@ export default defineConfig({
       'test/auth-ceremony.migration.test.ts',
       'test/auth-ceremony.repository.test.ts',
       'test/auth-ceremony.fixtures.test.ts',
+      'test/email-verification.api.test.ts',
+      'test/email-verification.migration.test.ts',
     ],
     coverage: {
       provider: 'v8',
