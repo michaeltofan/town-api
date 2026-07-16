@@ -13,6 +13,20 @@ function requireEnv(name: string): string {
   return value;
 }
 
+const EXPECTED_TOWN_TABLES = [
+  'account_emails',
+  'accounts',
+  'actors',
+  'communities',
+  'email_challenges',
+  'identity_security_events',
+  'passkey_credentials',
+  'recovery_grants',
+  'signal_confirmations',
+  'signals',
+  'webauthn_challenges',
+];
+
 async function assertTownFoundationSchema(pool: Pool): Promise<void> {
   const schemaResult = await pool.query<{ exists: boolean }>(
     `SELECT EXISTS (
@@ -34,12 +48,9 @@ async function assertTownFoundationSchema(pool: Pool): Promise<void> {
   );
 
   const tableNames = tablesResult.rows.map((row) => row.table_name);
-  if (
-    JSON.stringify(tableNames) !==
-    JSON.stringify(['actors', 'communities', 'signal_confirmations', 'signals'])
-  ) {
+  if (JSON.stringify(tableNames) !== JSON.stringify(EXPECTED_TOWN_TABLES)) {
     throw new Error(
-      `Expected town.actors, town.communities, town.signal_confirmations, and town.signals, received: ${tableNames.join(',') || '(none)'}`,
+      `Expected town identity+civic tables, received: ${tableNames.join(',') || '(none)'}`,
     );
   }
 
@@ -47,7 +58,15 @@ async function assertTownFoundationSchema(pool: Pool): Promise<void> {
     `SELECT table_name
      FROM information_schema.tables
      WHERE table_schema = 'town'
-       AND table_name IN ('users', 'confirmations', 'memberships', 'accounts', 'sessions')`,
+       AND table_name IN (
+         'users',
+         'confirmations',
+         'memberships',
+         'sessions',
+         'payments',
+         'stripe_customers',
+         'passwords'
+       )`,
   );
 
   if (forbidden.rows.length > 0) {
@@ -59,8 +78,8 @@ async function assertTownFoundationSchema(pool: Pool): Promise<void> {
      FROM drizzle.__drizzle_migrations`,
   );
 
-  if (Number(historyResult.rows[0]?.count ?? 0) < 3) {
-    throw new Error('Expected at least three drizzle migration history rows');
+  if (Number(historyResult.rows[0]?.count ?? 0) < 4) {
+    throw new Error('Expected at least four drizzle migration history rows');
   }
 }
 

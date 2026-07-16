@@ -64,6 +64,7 @@ describe('controlled actor seed', () => {
         status: 'active',
         displayLabel: 'Unknown retained actor',
         communityId: FOUNDATION_COMMUNITY_IDS.munichDe,
+        accountId: null,
         createdAt: '2026-07-15T09:00:00.000Z',
         updatedAt: '2026-07-15T09:00:00.000Z',
       });

@@ -1,0 +1,392 @@
+{
+  "components": {
+    "schemas": {
+      "AcceptedIdentityOperation": {
+        "$id": "AcceptedIdentityOperation",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "accepted",
+                    "type": "string"
+                  },
+                  {
+                    "const": "completed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "unavailable",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "EmailVerificationComplete": {
+        "$id": "EmailVerificationComplete",
+        "additionalProperties": false,
+        "properties": {
+          "challengeId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "challengeId",
+          "code"
+        ],
+        "type": "object"
+      },
+      "EmailVerificationRequest": {
+        "$id": "EmailVerificationRequest",
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
+      "IdentityErrorBody": {
+        "$id": "IdentityErrorBody",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "requestId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "PasskeyAuthenticationOptionsRequest": {
+        "$id": "PasskeyAuthenticationOptionsRequest",
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "PasskeyAuthenticationVerifyRequest": {
+        "$id": "PasskeyAuthenticationVerifyRequest",
+        "additionalProperties": false,
+        "properties": {
+          "authenticatorData": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "challengeId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "clientDataJSON": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "credentialId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "signature": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "challengeId",
+          "credentialId",
+          "authenticatorData",
+          "clientDataJSON",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "PasskeyListResponse": {
+        "$id": "PasskeyListResponse",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "passkeys": {
+                "items": {
+                  "$id": "PasskeyListItem",
+                  "additionalProperties": false,
+                  "properties": {
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "label": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastUsedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "createdAt",
+                    "lastUsedAt"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "passkeys"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "PasskeyRegistrationOptionsRequest": {
+        "$id": "PasskeyRegistrationOptionsRequest",
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "PasskeyRegistrationVerifyRequest": {
+        "$id": "PasskeyRegistrationVerifyRequest",
+        "additionalProperties": false,
+        "properties": {
+          "attestationObject": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "challengeId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "clientDataJSON": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "challengeId",
+          "attestationObject",
+          "clientDataJSON"
+        ],
+        "type": "object"
+      },
+      "RecoveryRequest": {
+        "$id": "RecoveryRequest",
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
+      "RecoveryVerifyEmail": {
+        "$id": "RecoveryVerifyEmail",
+        "additionalProperties": false,
+        "properties": {
+          "challengeId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "challengeId",
+          "code"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "contractVersion": "1.0.0",
+  "description": "Architecture-only contract for future TOWN account identity endpoints. These operations are not registered as live routes in this foundation slice. Temporary controlled confirmation remains separate from real account identity. This contract is not public authentication documentation for shipping login.",
+  "domainSeparation": {
+    "accountIdentity": "Real account shell, verified email, passkeys, recovery grants",
+    "civicActor": "Local civic participation identity, optionally linked 1:1 to an account",
+    "localVerification": "Out of scope",
+    "membershipEntitlement": "Out of scope; active account does not imply paid membership"
+  },
+  "errorCodes": [
+    "VERIFICATION_REQUEST_ACCEPTED",
+    "INVALID_OR_EXPIRED_CHALLENGE",
+    "PASSKEY_REGISTRATION_FAILED",
+    "PASSKEY_AUTHENTICATION_FAILED",
+    "RECOVERY_REQUEST_ACCEPTED",
+    "RECOVERY_NOT_AUTHORIZED",
+    "ACCOUNT_UNAVAILABLE"
+  ],
+  "forbiddenPublicErrorCodes": [
+    "EMAIL_NOT_FOUND",
+    "EMAIL_ALREADY_REGISTERED",
+    "ACCOUNT_EXISTS_FOR_EMAIL"
+  ],
+  "futureOperations": [
+    {
+      "method": "POST",
+      "notes": "Future operation. Must not enumerate account existence. Not implemented in this foundation slice.",
+      "path": "/v1/account/email-verifications",
+      "request": "EmailVerificationRequest",
+      "summary": "Request email verification challenge"
+    },
+    {
+      "method": "POST",
+      "notes": "Future operation. Not implemented in this foundation slice.",
+      "path": "/v1/account/email-verifications/complete",
+      "request": "EmailVerificationComplete",
+      "summary": "Complete email verification"
+    },
+    {
+      "method": "POST",
+      "notes": "Future WebAuthn ceremony. Not implemented in this foundation slice.",
+      "path": "/v1/account/passkeys/registration/options",
+      "request": "PasskeyRegistrationOptionsRequest",
+      "summary": "Begin passkey registration"
+    },
+    {
+      "method": "POST",
+      "notes": "Future WebAuthn ceremony. Not implemented in this foundation slice.",
+      "path": "/v1/account/passkeys/registration/verify",
+      "request": "PasskeyRegistrationVerifyRequest",
+      "summary": "Verify passkey registration"
+    },
+    {
+      "method": "POST",
+      "notes": "Future WebAuthn ceremony. Not implemented in this foundation slice.",
+      "path": "/v1/auth/passkeys/options",
+      "request": "PasskeyAuthenticationOptionsRequest",
+      "summary": "Begin passkey authentication"
+    },
+    {
+      "method": "POST",
+      "notes": "Future WebAuthn ceremony. Not implemented in this foundation slice.",
+      "path": "/v1/auth/passkeys/verify",
+      "request": "PasskeyAuthenticationVerifyRequest",
+      "summary": "Verify passkey authentication"
+    },
+    {
+      "method": "POST",
+      "notes": "Future operation. Recovery grants are restricted authorization, not sessions. Not implemented in this foundation slice.",
+      "path": "/v1/account/recovery",
+      "request": "RecoveryRequest",
+      "summary": "Request restricted account recovery"
+    },
+    {
+      "method": "POST",
+      "notes": "Future operation. Not implemented in this foundation slice.",
+      "path": "/v1/account/recovery/verify-email",
+      "request": "RecoveryVerifyEmail",
+      "summary": "Verify recovery email challenge"
+    },
+    {
+      "method": "POST",
+      "notes": "Future operation. Not implemented in this foundation slice.",
+      "path": "/v1/account/recovery/passkeys/registration/options",
+      "request": "PasskeyRegistrationOptionsRequest",
+      "summary": "Begin recovery passkey registration"
+    },
+    {
+      "method": "POST",
+      "notes": "Future operation. Not implemented in this foundation slice.",
+      "path": "/v1/account/recovery/passkeys/registration/verify",
+      "request": "PasskeyRegistrationVerifyRequest",
+      "summary": "Verify recovery passkey registration"
+    },
+    {
+      "method": "GET",
+      "notes": "Future operation. Not implemented in this foundation slice.",
+      "path": "/v1/account/passkeys",
+      "request": null,
+      "summary": "List active passkeys for the authenticated account"
+    },
+    {
+      "method": "DELETE",
+      "notes": "Future operation. Final active passkey for an active account must remain protected. Not implemented in this foundation slice.",
+      "path": "/v1/account/passkeys/{credentialId}",
+      "request": null,
+      "summary": "Revoke a passkey credential"
+    }
+  ],
+  "implementedLiveRoutes": false,
+  "securityNotes": [
+    "X-TOWN-Control-Key is unrelated temporary controlled confirmation access and is not account authentication.",
+    "No passwords, sessions, cookies, JWTs, or social login in this foundation slice.",
+    "Raw verification codes, recovery tokens, and WebAuthn challenges must be stored only as hashes.",
+    "Public responses must not enumerate account existence by email."
+  ],
+  "status": "architecture_only",
+  "title": "TOWN Account Identity Architecture Contract V1"
+}

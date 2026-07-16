@@ -25,10 +25,17 @@ describe('communities and signals migration', () => {
        ORDER BY table_name`,
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'account_emails',
+      'accounts',
       'actors',
       'communities',
+      'email_challenges',
+      'identity_security_events',
+      'passkey_credentials',
+      'recovery_grants',
       'signal_confirmations',
       'signals',
+      'webauthn_challenges',
     ]);
 
     const constraints = await pool.query<{ conname: string }>(
@@ -74,7 +81,7 @@ describe('communities and signals migration', () => {
       `SELECT table_name
        FROM information_schema.tables
        WHERE table_schema = 'town'
-         AND table_name IN ('users', 'confirmations', 'memberships', 'accounts', 'sessions')`,
+         AND table_name IN ('users', 'confirmations', 'memberships', 'sessions', 'passwords')`,
     );
     expect(forbidden.rows).toEqual([]);
   });
@@ -90,7 +97,7 @@ describe('communities and signals migration', () => {
     const history = await pool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
-    expect(Number(history.rows[0]?.count)).toBeGreaterThanOrEqual(3);
+    expect(Number(history.rows[0]?.count)).toBeGreaterThanOrEqual(4);
 
     const db = drizzle(pool);
     await migrate(db, { migrationsFolder });
@@ -98,10 +105,17 @@ describe('communities and signals migration', () => {
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'town' ORDER BY table_name`,
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'account_emails',
+      'accounts',
       'actors',
       'communities',
+      'email_challenges',
+      'identity_security_events',
+      'passkey_credentials',
+      'recovery_grants',
       'signal_confirmations',
       'signals',
+      'webauthn_challenges',
     ]);
   });
 });

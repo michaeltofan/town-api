@@ -25,10 +25,17 @@ describe('actors and signal_confirmations migration', () => {
        ORDER BY table_name`,
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'account_emails',
+      'accounts',
       'actors',
       'communities',
+      'email_challenges',
+      'identity_security_events',
+      'passkey_credentials',
+      'recovery_grants',
       'signal_confirmations',
       'signals',
+      'webauthn_challenges',
     ]);
 
     const constraints = await pool.query<{ conname: string; contype: string }>(
@@ -42,7 +49,7 @@ describe('actors and signal_confirmations migration', () => {
       expect.arrayContaining([
         'actors_pkey',
         'actors_community_id_fkey',
-        'actors_kind_controlled_test',
+        'actors_kind_valid',
         'actors_status_active',
         'signal_confirmations_pkey',
         'signal_confirmations_signal_id_fkey',
@@ -81,10 +88,10 @@ describe('actors and signal_confirmations migration', () => {
            'users',
            'confirmations',
            'memberships',
-           'accounts',
            'sessions',
            'payments',
-           'stripe_customers'
+           'stripe_customers',
+           'passwords'
          )`,
     );
     expect(forbidden.rows).toEqual([]);
@@ -94,7 +101,7 @@ describe('actors and signal_confirmations migration', () => {
     const history = await pool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
-    expect(Number(history.rows[0]?.count)).toBeGreaterThanOrEqual(3);
+    expect(Number(history.rows[0]?.count)).toBeGreaterThanOrEqual(4);
 
     const db = drizzle(pool);
     await migrate(db, { migrationsFolder });
@@ -102,10 +109,17 @@ describe('actors and signal_confirmations migration', () => {
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'town' ORDER BY table_name`,
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'account_emails',
+      'accounts',
       'actors',
       'communities',
+      'email_challenges',
+      'identity_security_events',
+      'passkey_credentials',
+      'recovery_grants',
       'signal_confirmations',
       'signals',
+      'webauthn_challenges',
     ]);
   });
 });

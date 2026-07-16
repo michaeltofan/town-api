@@ -1,24 +1,34 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
+  boolean,
   char,
   check,
+  customType,
   date,
   foreignKey,
   index,
+  jsonb,
   pgSchema,
   smallint,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
 /**
- * TOWN schema namespace and civic foundation tables.
- * Includes communities, signals, controlled actors, and signal confirmations.
- * Public users, membership, and auth tables remain out of scope.
+ * TOWN schema namespace: civic foundation tables plus account identity foundation.
+ * Membership, payments, sessions, and live authentication remain out of scope.
  */
 export const town = pgSchema('town');
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
 
 export const communities = town.table(
   'communities',
@@ -41,6 +51,49 @@ export const communities = town.table(
     check('communities_position_positive', sql`${table.position} > 0`),
     check('communities_country_code_length', sql`char_length(${table.countryCode}) = 2`),
     check('communities_status_active', sql`${table.status} = 'active'`),
+  ],
+);
+
+export const accounts = town.table(
+  'accounts',
+  {
+    id: uuid('id').primaryKey(),
+    status: text('status').notNull(),
+    accountReadyAt: timestamp('account_ready_at', { withTimezone: true, mode: 'string' }),
+    suspendedAt: timestamp('suspended_at', { withTimezone: true, mode: 'string' }),
+    closedAt: timestamp('closed_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    check(
+      'accounts_status_valid',
+      sql`${table.status} in ('pending_email', 'pending_passkey', 'active', 'suspended', 'closed')`,
+    ),
+    check(
+      'accounts_status_timestamps',
+      sql`(
+        (${table.status} = 'pending_email'
+          and ${table.accountReadyAt} is null
+          and ${table.suspendedAt} is null
+          and ${table.closedAt} is null)
+        or (${table.status} = 'pending_passkey'
+          and ${table.accountReadyAt} is null
+          and ${table.suspendedAt} is null
+          and ${table.closedAt} is null)
+        or (${table.status} = 'active'
+          and ${table.accountReadyAt} is not null
+          and ${table.suspendedAt} is null
+          and ${table.closedAt} is null)
+        or (${table.status} = 'suspended'
+          and ${table.accountReadyAt} is not null
+          and ${table.suspendedAt} is not null
+          and ${table.closedAt} is null)
+        or (${table.status} = 'closed'
+          and ${table.accountReadyAt} is not null
+          and ${table.closedAt} is not null)
+      )`,
+    ),
   ],
 );
 
@@ -109,6 +162,7 @@ export const actors = town.table(
     status: text('status').notNull(),
     displayLabel: text('display_label').notNull(),
     communityId: uuid('community_id').notNull(),
+    accountId: uuid('account_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
@@ -118,8 +172,20 @@ export const actors = town.table(
       foreignColumns: [communities.id],
       name: 'actors_community_id_fkey',
     }).onDelete('restrict'),
-    check('actors_kind_controlled_test', sql`${table.kind} = 'controlled_test'`),
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'actors_account_id_fkey',
+    }).onDelete('restrict'),
+    uniqueIndex('actors_account_id_unique')
+      .on(table.accountId)
+      .where(sql`${table.accountId} is not null`),
+    check('actors_kind_valid', sql`${table.kind} in ('controlled_test', 'civic')`),
     check('actors_status_active', sql`${table.status} = 'active'`),
+    check(
+      'actors_controlled_test_unlinked',
+      sql`${table.kind} <> 'controlled_test' or ${table.accountId} is null`,
+    ),
   ],
 );
 
@@ -148,7 +214,212 @@ export const signalConfirmations = town.table(
   ],
 );
 
+export const accountEmails = town.table(
+  'account_emails',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    emailOriginal: text('email_original').notNull(),
+    emailNormalized: text('email_normalized').notNull(),
+    isPrimary: boolean('is_primary').notNull(),
+    verifiedAt: timestamp('verified_at', { withTimezone: true, mode: 'string' }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'account_emails_account_id_fkey',
+    }).onDelete('restrict'),
+    uniqueIndex('account_emails_active_normalized_unique')
+      .on(table.emailNormalized)
+      .where(sql`${table.revokedAt} is null`),
+    uniqueIndex('account_emails_one_active_primary')
+      .on(table.accountId)
+      .where(sql`${table.isPrimary} = true and ${table.revokedAt} is null`),
+    check(
+      'account_emails_revoked_not_primary',
+      sql`${table.revokedAt} is null or ${table.isPrimary} = false`,
+    ),
+  ],
+);
+
+export const passkeyCredentials = town.table(
+  'passkey_credentials',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    credentialId: bytea('credential_id').notNull(),
+    publicKey: bytea('public_key').notNull(),
+    signCount: bigint('sign_count', { mode: 'number' }).notNull(),
+    transports: text('transports').array(),
+    deviceType: text('device_type'),
+    backedUp: boolean('backed_up'),
+    aaguid: uuid('aaguid'),
+    label: text('label'),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'passkey_credentials_account_id_fkey',
+    }).onDelete('restrict'),
+    unique('passkey_credentials_credential_id_unique').on(table.credentialId),
+    check('passkey_credentials_sign_count_nonnegative', sql`${table.signCount} >= 0`),
+    check(
+      'passkey_credentials_label_length',
+      sql`${table.label} is null or char_length(${table.label}) <= 128`,
+    ),
+    check(
+      'passkey_credentials_device_type_valid',
+      sql`${table.deviceType} is null or ${table.deviceType} in ('platform', 'cross_platform')`,
+    ),
+    index('passkey_credentials_account_active_idx')
+      .on(table.accountId)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
+
+export const emailChallenges = town.table(
+  'email_challenges',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id'),
+    emailNormalized: text('email_normalized').notNull(),
+    purpose: text('purpose').notNull(),
+    secretHash: bytea('secret_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    attemptCount: smallint('attempt_count').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'email_challenges_account_id_fkey',
+    }).onDelete('restrict'),
+    check(
+      'email_challenges_purpose_valid',
+      sql`${table.purpose} in ('verify_email', 'recover_account')`,
+    ),
+    check('email_challenges_attempt_count_nonnegative', sql`${table.attemptCount} >= 0`),
+    check('email_challenges_expires_after_created', sql`${table.expiresAt} > ${table.createdAt}`),
+  ],
+);
+
+export const recoveryGrants = town.table(
+  'recovery_grants',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    tokenHash: bytea('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'recovery_grants_account_id_fkey',
+    }).onDelete('restrict'),
+    unique('recovery_grants_token_hash_unique').on(table.tokenHash),
+    check('recovery_grants_expires_after_created', sql`${table.expiresAt} > ${table.createdAt}`),
+  ],
+);
+
+export const webauthnChallenges = town.table(
+  'webauthn_challenges',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id'),
+    purpose: text('purpose').notNull(),
+    challengeHash: bytea('challenge_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'webauthn_challenges_account_id_fkey',
+    }).onDelete('restrict'),
+    unique('webauthn_challenges_challenge_hash_unique').on(table.challengeHash),
+    check(
+      'webauthn_challenges_purpose_valid',
+      sql`${table.purpose} in ('register', 'authenticate', 'recover_register')`,
+    ),
+    check(
+      'webauthn_challenges_expires_after_created',
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+  ],
+);
+
+export const identitySecurityEvents = town.table(
+  'identity_security_events',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id'),
+    eventType: text('event_type').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull(),
+    requestId: text('request_id'),
+    metadata: jsonb('metadata'),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'identity_security_events_account_id_fkey',
+    }).onDelete('restrict'),
+    check(
+      'identity_security_events_type_valid',
+      sql`${table.eventType} in (
+        'email_verification_requested',
+        'email_verified',
+        'passkey_registered',
+        'passkey_used',
+        'passkey_revoked',
+        'recovery_requested',
+        'recovery_completed',
+        'account_suspended',
+        'account_closed'
+      )`,
+    ),
+    index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
+  ],
+);
+
 export type CommunityRow = typeof communities.$inferSelect;
 export type SignalRow = typeof signals.$inferSelect;
 export type ActorRow = typeof actors.$inferSelect;
 export type SignalConfirmationRow = typeof signalConfirmations.$inferSelect;
+export type AccountRow = typeof accounts.$inferSelect;
+export type AccountEmailRow = typeof accountEmails.$inferSelect;
+export type PasskeyCredentialRow = typeof passkeyCredentials.$inferSelect;
+export type EmailChallengeRow = typeof emailChallenges.$inferSelect;
+export type RecoveryGrantRow = typeof recoveryGrants.$inferSelect;
+export type WebAuthnChallengeRow = typeof webauthnChallenges.$inferSelect;
+export type IdentitySecurityEventRow = typeof identitySecurityEvents.$inferSelect;
+
+export type AccountStatus = 'pending_email' | 'pending_passkey' | 'active' | 'suspended' | 'closed';
+
+export type EmailChallengePurpose = 'verify_email' | 'recover_account';
+export type WebAuthnChallengePurpose = 'register' | 'authenticate' | 'recover_register';
+export type IdentitySecurityEventType =
+  | 'email_verification_requested'
+  | 'email_verified'
+  | 'passkey_registered'
+  | 'passkey_used'
+  | 'passkey_revoked'
+  | 'recovery_requested'
+  | 'recovery_completed'
+  | 'account_suspended'
+  | 'account_closed';
