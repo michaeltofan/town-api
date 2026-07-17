@@ -34,6 +34,23 @@ const EnvSchema = Type.Object(
       [Type.Literal('development'), Type.Literal('test'), Type.Literal('production')],
       { default: 'development' },
     ),
+    APP_ENV: Type.Union(
+      [
+        Type.Literal('development'),
+        Type.Literal('test'),
+        Type.Literal('staging'),
+        Type.Literal('production'),
+      ],
+      { default: 'development' },
+    ),
+    APP_COMMIT_SHA: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+    APP_BUILD_TIMESTAMP: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+    READINESS_TIMEOUT_MS: Type.Integer({ minimum: 100, maximum: 60_000, default: 3_000 }),
+    GRACEFUL_SHUTDOWN_TIMEOUT_MS: Type.Integer({
+      minimum: 100,
+      maximum: 120_000,
+      default: 10_000,
+    }),
     HOST: Type.String({ default: '0.0.0.0' }),
     PORT: Type.Integer({ minimum: 1, maximum: 65535, default: 3000 }),
     LOG_LEVEL: Type.Union(
@@ -139,6 +156,52 @@ function parseBooleanFlag(value: string | undefined, fieldName: string): boolean
 
 function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
+}
+
+function resolveAppEnv(
+  raw: string | undefined,
+  nodeEnv: string,
+): 'development' | 'test' | 'staging' | 'production' {
+  if (isNonEmptyString(raw)) {
+    const normalized = raw.trim().toLowerCase();
+    if (
+      normalized === 'development' ||
+      normalized === 'test' ||
+      normalized === 'staging' ||
+      normalized === 'production'
+    ) {
+      return normalized;
+    }
+    throw new Error(
+      'Invalid environment configuration: APP_ENV must be one of development|test|staging|production',
+    );
+  }
+  if (nodeEnv === 'test') {
+    return 'test';
+  }
+  if (nodeEnv === 'production') {
+    return 'production';
+  }
+  return 'development';
+}
+
+const KNOWN_CI_HASH_KEY_PLACEHOLDERS = new Set<string>([
+  'town-ci-email-verification-hash-key-32b',
+  'town-ci-ceremony-rate-limit-hash-key-32b',
+  'town-ci-webauthn-challenge-hash-key-32by',
+  'town-ci-passkey-auth-challenge-hash-key32',
+  'town-ci-session-token-hash-key-32bytesxx',
+  'town-ci-account-recovery-hash-key-32byt',
+  'town-ci-account-recovery-token-key-32b',
+]);
+
+function assertNoLocalDatabaseUrl(url: string): void {
+  const lower = url.toLowerCase();
+  if (lower.includes('127.0.0.1') || lower.includes('localhost') || lower.includes('town:town@')) {
+    throw new Error(
+      'Invalid environment configuration: production DATABASE_URL must not use local or default credentials',
+    );
+  }
 }
 
 function sanitizeEnvErrorPath(path: string, message: string): string {
@@ -262,9 +325,35 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     'STRIPE_BILLING_ENABLED',
   );
   const nodeEnv = source.NODE_ENV ?? 'development';
+  const appEnv = resolveAppEnv(source.APP_ENV, nodeEnv);
+  const runtimeIsProduction = appEnv === 'production' || nodeEnv === 'production';
+  const runtimeIsStaging = appEnv === 'staging';
+  const commitShaRaw = source.APP_COMMIT_SHA;
+  const commitSha = isNonEmptyString(commitShaRaw) ? commitShaRaw.trim() : undefined;
+  if (commitSha !== undefined && /\s/.test(commitSha)) {
+    throw new Error(
+      'Invalid environment configuration: APP_COMMIT_SHA must not contain whitespace',
+    );
+  }
+  if (commitSha !== undefined && commitSha.length > 128) {
+    throw new Error(
+      'Invalid environment configuration: APP_COMMIT_SHA must be 128 characters or fewer',
+    );
+  }
+  const buildTimestampRaw = source.APP_BUILD_TIMESTAMP;
+  const buildTimestamp = isNonEmptyString(buildTimestampRaw) ? buildTimestampRaw.trim() : undefined;
 
   const candidate: Record<string, unknown> = {
     NODE_ENV: nodeEnv,
+    APP_ENV: appEnv,
+    ...(commitSha !== undefined ? { APP_COMMIT_SHA: commitSha } : {}),
+    ...(buildTimestamp !== undefined ? { APP_BUILD_TIMESTAMP: buildTimestamp } : {}),
+    READINESS_TIMEOUT_MS:
+      source.READINESS_TIMEOUT_MS === undefined ? 3_000 : parseInteger(source.READINESS_TIMEOUT_MS),
+    GRACEFUL_SHUTDOWN_TIMEOUT_MS:
+      source.GRACEFUL_SHUTDOWN_TIMEOUT_MS === undefined
+        ? 10_000
+        : parseInteger(source.GRACEFUL_SHUTDOWN_TIMEOUT_MS),
     HOST: source.HOST ?? '0.0.0.0',
     PORT: source.PORT === undefined ? 3000 : parseInteger(source.PORT),
     LOG_LEVEL: source.LOG_LEVEL ?? 'info',
@@ -638,16 +727,16 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 
     let expectedLivemode: boolean;
     if (expectedLivemodeRaw === undefined || expectedLivemodeRaw === '') {
-      expectedLivemode = nodeEnv === 'production';
+      expectedLivemode = runtimeIsProduction;
     } else {
       expectedLivemode = parseBooleanFlag(expectedLivemodeRaw, 'STRIPE_EXPECTED_LIVEMODE');
     }
-    if (nodeEnv === 'production' && !expectedLivemode) {
+    if (runtimeIsProduction && !expectedLivemode) {
       throw new Error(
         'Invalid environment configuration: STRIPE_EXPECTED_LIVEMODE must be true in production',
       );
     }
-    if (nodeEnv !== 'production' && expectedLivemode) {
+    if (!runtimeIsProduction && expectedLivemode) {
       throw new Error(
         'Invalid environment configuration: STRIPE_EXPECTED_LIVEMODE must be false outside production',
       );
@@ -678,6 +767,86 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 
   if (!isNonEmptyString(candidate.DATABASE_URL)) {
     throw new Error('Invalid environment configuration: DATABASE_URL is required');
+  }
+
+  if (runtimeIsProduction) {
+    if (commitSha === undefined) {
+      throw new Error(
+        'Invalid environment configuration: APP_COMMIT_SHA is required when APP_ENV or NODE_ENV is production',
+      );
+    }
+    assertNoLocalDatabaseUrl(candidate.DATABASE_URL);
+    const webauthnEnabled =
+      webauthnRegistrationEnabled || passkeyAuthenticationEnabled || accountRecoveryEnabled;
+    if (webauthnEnabled) {
+      const originsRaw = source.WEBAUTHN_ALLOWED_ORIGINS;
+      if (typeof originsRaw === 'string' && originsRaw.length > 0) {
+        for (const part of originsRaw.split(',')) {
+          const lower = part.trim().toLowerCase();
+          if (lower.includes('localhost') || lower.includes('127.0.0.1')) {
+            throw new Error(
+              'Invalid environment configuration: WEBAUTHN_ALLOWED_ORIGINS must not include localhost in production',
+            );
+          }
+        }
+      }
+      const rpId = source.WEBAUTHN_RP_ID;
+      if (typeof rpId === 'string' && rpId.toLowerCase() === 'localhost') {
+        throw new Error(
+          'Invalid environment configuration: WEBAUTHN_RP_ID must not be localhost in production',
+        );
+      }
+    }
+    // Reject known dev/CI hash placeholders if any are set to those exact values.
+    for (const key of [
+      'SESSION_TOKEN_HASH_KEY',
+      'EMAIL_VERIFICATION_HASH_KEY',
+      'CEREMONY_RATE_LIMIT_HASH_KEY',
+      'WEBAUTHN_CHALLENGE_HASH_KEY',
+      'PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY',
+      'ACCOUNT_RECOVERY_HASH_KEY',
+      'ACCOUNT_RECOVERY_TOKEN_HASH_KEY',
+    ] as const) {
+      const value = candidate[key];
+      if (typeof value === 'string' && KNOWN_CI_HASH_KEY_PLACEHOLDERS.has(value)) {
+        throw new Error(
+          `Invalid environment configuration: ${key} must not equal a known CI placeholder in production`,
+        );
+      }
+    }
+    if (stripeBillingEnabled && candidate.STRIPE_EXPECTED_LIVEMODE !== true) {
+      throw new Error(
+        'Invalid environment configuration: STRIPE_EXPECTED_LIVEMODE must be true when STRIPE_BILLING_ENABLED is true in production',
+      );
+    }
+  }
+
+  if (runtimeIsStaging) {
+    if (commitSha === undefined) {
+      throw new Error(
+        'Invalid environment configuration: APP_COMMIT_SHA is required when APP_ENV is staging',
+      );
+    }
+    if (stripeBillingEnabled) {
+      if (candidate.STRIPE_EXPECTED_LIVEMODE === true) {
+        throw new Error(
+          'Invalid environment configuration: STRIPE_EXPECTED_LIVEMODE must be false when APP_ENV is staging',
+        );
+      }
+      const secretKey = candidate.STRIPE_SECRET_KEY;
+      if (typeof secretKey === 'string' && secretKey.startsWith('sk_live_')) {
+        throw new Error(
+          'Invalid environment configuration: STRIPE_SECRET_KEY must not be a live key when APP_ENV is staging',
+        );
+      }
+    }
+  }
+
+  // Canonical browser origin allowlist (WebAuthn + runtime CORS). Retain and
+  // validate whenever set, even if ceremony features are disabled.
+  if (isNonEmptyString(source.WEBAUTHN_ALLOWED_ORIGINS)) {
+    parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, nodeEnv);
+    candidate.WEBAUTHN_ALLOWED_ORIGINS = source.WEBAUTHN_ALLOWED_ORIGINS;
   }
 
   if (!Value.Check(EnvSchema, candidate)) {

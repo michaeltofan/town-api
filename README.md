@@ -801,7 +801,8 @@ Still not implemented:
 | Method   | Path                                                     | Behavior                                        |
 | -------- | -------------------------------------------------------- | ----------------------------------------------- |
 | `GET`    | `/health/live`                                           | `{"status":"ok"}` (no DB)                       |
-| `GET`    | `/health/ready`                                          | DB readiness `ready` / `not_ready`              |
+| `GET`    | `/health/ready`                                          | component readiness `ready` / `not_ready`       |
+| `GET`    | `/health/build`                                          | immutable runtime build identity                |
 | `GET`    | `/v1/communities`                                        | active communities by position                  |
 | `GET`    | `/v1/communities/:communitySlug/signals`                 | published signals by position                   |
 | `GET`    | `/v1/signals/:signalId`                                  | one published signal by UUID                    |
@@ -846,6 +847,8 @@ Useful scripts:
 | `npm run db:check`                     | validate migration history                       |
 | `npm run db:migrate`                   | apply committed migrations                       |
 | `npm run db:migrate:test`              | clean-DB migration verification                  |
+| `npm run db:migrate:verify`            | non-mutating drizzle ledger verification         |
+| `npm run smoke:deployment`             | deployment smoke checks (see docs/operations)    |
 | `npm run db:seed:foundation`           | upsert canonical civic content                   |
 | `npm run db:seed:controlled-actor`     | upsert the single controlled test actor          |
 | `npm run identity:fixtures:load`       | load deterministic identity fixtures (test-only) |
@@ -861,6 +864,15 @@ Useful scripts:
 | `npm test`                             | unit tests (no PostgreSQL required)              |
 | `npm run test:integration`             | PostgreSQL 18 integration suite                  |
 | `npm run check`                        | non-destructive quality gate                     |
+
+## Deployment Readiness V1
+
+Runtime deployment surface — health/build, readiness components,
+graceful shutdown, advisory-locked migration runner, structured logging,
+container image, and smoke tooling — is documented in
+[`docs/operations/DEPLOYMENT_READINESS_V1.md`](docs/operations/DEPLOYMENT_READINESS_V1.md).
+Use [`docs/operations/DEPLOYMENT_CHECKLIST_V1.md`](docs/operations/DEPLOYMENT_CHECKLIST_V1.md)
+for every staging or production deployment.
 
 ## CI
 

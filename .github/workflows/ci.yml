@@ -34,6 +34,11 @@ jobs:
 
     env:
       DATABASE_URL: postgres://town_ci:town_ci@127.0.0.1:5432/town_ci
+      # Deployment Readiness V1: pin runtime identity for tests and smoke tooling.
+      APP_ENV: test
+      APP_COMMIT_SHA: ${{ github.sha }}
+      READINESS_TIMEOUT_MS: '3000'
+      GRACEFUL_SHUTDOWN_TIMEOUT_MS: '10000'
       # Isolated CI-only placeholders for email verification tests (not GitHub secrets).
       EMAIL_VERIFICATION_ENABLED: 'true'
       EMAIL_VERIFICATION_HASH_KEY: town-ci-email-verification-hash-key-32b
@@ -126,6 +131,9 @@ jobs:
           npm run db:seed:foundation
           npm run db:seed:controlled-actor
           npm run db:seed:controlled-actor
+
+      - name: Migration ledger verify
+        run: npm run db:migrate:verify
 
       - name: Verify canonical seed counts
         run: |

@@ -49,6 +49,7 @@ export default defineConfig({
       'test/billing.customer.integration.test.ts',
       'test/billing.webhook.events.integration.test.ts',
       'test/billing.webhook.signature.test.ts',
+      'test/ops.migration-ledger.integration.test.ts',
     ],
     coverage: {
       provider: 'v8',

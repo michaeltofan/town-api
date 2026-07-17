@@ -25,6 +25,7 @@ describe('OpenAPI contract', () => {
     expect(document.info.version).toBe('0.1.0');
     expect(document.paths).toHaveProperty('/health/live');
     expect(document.paths).toHaveProperty('/health/ready');
+    expect(document.paths).toHaveProperty('/health/build');
     expect(document.paths).toHaveProperty('/v1/communities');
     expect(document.paths).toHaveProperty('/v1/communities/{communitySlug}/signals');
     expect(document.paths).toHaveProperty('/v1/signals/{signalId}');
@@ -40,6 +41,11 @@ describe('OpenAPI contract', () => {
     };
     expect(readyPath.get.responses).toHaveProperty('200');
     expect(readyPath.get.responses).toHaveProperty('503');
+
+    const buildPath = document.paths['/health/build'] as {
+      get: { responses: Record<string, unknown> };
+    };
+    expect(buildPath.get.responses).toHaveProperty('200');
 
     const signalDetail = document.paths['/v1/signals/{signalId}'] as {
       get: { responses: Record<string, unknown> };

@@ -24,6 +24,8 @@
     "db:check": "drizzle-kit check",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:migrate:test": "tsx scripts/db-migrate-test.ts",
+    "db:migrate:verify": "tsx scripts/db-migrate-verify.ts",
+    "smoke:deployment": "tsx scripts/smoke-deployment.ts",
     "db:seed:foundation": "tsx scripts/seed-foundation-content.ts",
     "db:seed:controlled-actor": "tsx scripts/seed-controlled-actor.ts",
     "identity:fixtures:load": "tsx scripts/load-identity-fixtures.ts",
@@ -40,6 +42,7 @@
   },
   "dependencies": {
     "@fastify/cookie": "11.1.2",
+    "@fastify/cors": "11.3.0",
     "@fastify/swagger": "^9.5.1",
     "@fastify/type-provider-typebox": "^6.1.0",
     "@simplewebauthn/server": "13.3.2",

@@ -28,6 +28,9 @@ function createOpenApiDatabaseStub(): Database {
     pool: undefined as unknown as Database['pool'],
     db: undefined as unknown as Database['db'],
     checkReadiness: () => Promise.resolve(true),
+    checkConnection: () => Promise.resolve('ok'),
+    checkMigrations: () =>
+      Promise.resolve({ status: 'ok', expected: 0, applied: 0, detail: 'ok' } as const),
     close: () => Promise.resolve(),
   };
 }
