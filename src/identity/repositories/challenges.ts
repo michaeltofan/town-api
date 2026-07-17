@@ -222,6 +222,7 @@ export async function createWebAuthnChallenge(
       challengeHash,
       expiresAt: input.expiresAt,
       consumedAt: null,
+      revokedAt: null,
       createdAt: input.createdAt,
     })
     .returning();
@@ -230,6 +231,50 @@ export async function createWebAuthnChallenge(
     throw new Error('Failed to create webauthn challenge');
   }
   return row;
+}
+
+/**
+ * Invalidate previous unconsumed, unrevoked, unexpired WebAuthn challenges for an account/purpose.
+ * Retains audit history; does not delete rows.
+ */
+export async function revokeActiveWebAuthnChallengesForAccount(
+  db: Db,
+  input: {
+    accountId: string;
+    purpose: WebAuthnChallengePurpose;
+    now: string;
+    excludeChallengeId?: string;
+  },
+): Promise<number> {
+  const conditions = [
+    eq(webauthnChallenges.accountId, input.accountId),
+    eq(webauthnChallenges.purpose, input.purpose),
+    isNull(webauthnChallenges.consumedAt),
+    isNull(webauthnChallenges.revokedAt),
+    gt(webauthnChallenges.expiresAt, input.now),
+  ];
+  if (input.excludeChallengeId !== undefined) {
+    conditions.push(sql`${webauthnChallenges.id} <> ${input.excludeChallengeId}`);
+  }
+
+  const updated = await db
+    .update(webauthnChallenges)
+    .set({ revokedAt: input.now })
+    .where(and(...conditions))
+    .returning({ id: webauthnChallenges.id });
+  return updated.length;
+}
+
+export async function findWebAuthnChallengeById(
+  db: Db,
+  challengeId: string,
+): Promise<WebAuthnChallengeRow | null> {
+  const rows = await db
+    .select()
+    .from(webauthnChallenges)
+    .where(eq(webauthnChallenges.id, challengeId))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 export async function consumeWebAuthnChallenge(
@@ -248,16 +293,26 @@ export async function consumeWebAuthnChallenge(
   if (challenge.consumedAt !== null) {
     throw new IdentityInvariantError('CHALLENGE_ALREADY_CONSUMED', 'Challenge already consumed');
   }
+  if (challenge.revokedAt !== null) {
+    throw new IdentityInvariantError('CHALLENGE_REVOKED', 'Challenge has been revoked');
+  }
   assertNotExpired(challenge.expiresAt, input.now, 'CHALLENGE_EXPIRED');
 
   const updated = await db
     .update(webauthnChallenges)
     .set({ consumedAt: input.now })
-    .where(eq(webauthnChallenges.id, input.challengeId))
+    .where(
+      and(
+        eq(webauthnChallenges.id, input.challengeId),
+        isNull(webauthnChallenges.consumedAt),
+        isNull(webauthnChallenges.revokedAt),
+        gt(webauthnChallenges.expiresAt, input.now),
+      ),
+    )
     .returning();
   const row = updated[0];
   if (!row) {
-    throw new Error('Failed to consume webauthn challenge');
+    throw new IdentityInvariantError('CHALLENGE_ALREADY_CONSUMED', 'Challenge already consumed');
   }
   return row;
 }

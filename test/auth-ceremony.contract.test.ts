@@ -18,7 +18,7 @@ const openApiPath = path.resolve(
 );
 
 describe('authentication ceremony architecture contract', () => {
-  it('documents ceremony semantics and implemented email verification routes', () => {
+  it('documents ceremony semantics and implemented email + WebAuthn registration routes', () => {
     const document = generateAuthenticationCeremonyContractDocument() as {
       implementedLiveRoutes: boolean;
       status: string;
@@ -30,6 +30,7 @@ describe('authentication ceremony architecture contract', () => {
       };
       setupGrants: { purpose: string[] };
       explicitExclusions: string[];
+      webauthnRegistrationRuntime: { status: string; dependency: string };
     };
 
     expect(document.implementedLiveRoutes).toBe(true);
@@ -38,18 +39,22 @@ describe('authentication ceremony architecture contract', () => {
       expect.arrayContaining([
         'POST /v1/account/email-verifications',
         'POST /v1/account/email-verifications/complete',
+        'POST /v1/account/passkeys/registration/options',
+        'POST /v1/account/passkeys/registration/verify',
       ]),
     );
     expect(document.accountSessions.idleTimeoutMinutes).toBe(60);
     expect(document.accountSessions.absoluteTimeoutHours).toBe(24);
     expect(document.accountSessions.sensitiveReauthFreshnessMinutes).toBe(10);
     expect(document.setupGrants.purpose).toEqual(['initial_passkey_registration']);
+    expect(document.webauthnRegistrationRuntime.status).toBe('implemented');
+    expect(document.webauthnRegistrationRuntime.dependency).toBe('@simplewebauthn/server@13.3.2');
     expect(document.explicitExclusions).toEqual(
       expect.arrayContaining([
         'cookies',
         'JWTs',
-        'WebAuthn options or verification',
-        'login routes',
+        'passkey login / authentication assertions',
+        'session issuance',
         'production email provider',
       ]),
     );
@@ -84,6 +89,8 @@ describe('authentication ceremony architecture contract', () => {
         '/v1/signals/{signalId}/confirmation',
         '/v1/account/email-verifications',
         '/v1/account/email-verifications/complete',
+        '/v1/account/passkeys/registration/options',
+        '/v1/account/passkeys/registration/verify',
       ]),
     );
   });

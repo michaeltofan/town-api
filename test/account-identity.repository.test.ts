@@ -8,12 +8,13 @@ import { FOUNDATION_COMMUNITY_IDS } from '../src/db/seeds/foundation-content.js'
 import { IdentityInvariantError } from '../src/identity/errors.js';
 import { normalizeEmail } from '../src/identity/email-normalize.js';
 import { deterministicSha256 } from '../src/identity/hashing.js';
-import { createCivicActor, linkActorToAccount } from '../src/identity/repositories/actor-link.js';
 import {
   createAccountShell,
+  ensureWebAuthnUserHandle,
   findAccountById,
   transitionAccountState,
 } from '../src/identity/repositories/accounts.js';
+import { createCivicActor, linkActorToAccount } from '../src/identity/repositories/actor-link.js';
 import {
   consumeEmailChallenge,
   consumeWebAuthnChallenge,
@@ -131,6 +132,11 @@ describe('account identity repositories', () => {
       updatedAt: T2,
     });
     await linkActorToAccount(db(), { actorId, accountId, at: T2 });
+    await ensureWebAuthnUserHandle(db(), {
+      accountId,
+      handle: deterministicSha256(`test-webauthn-handle-${accountId}`),
+      now: T2,
+    });
     return { emailId, passkeyId, actorId };
   }
 

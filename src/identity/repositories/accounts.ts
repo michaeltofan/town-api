@@ -12,6 +12,8 @@ import { IdentityInvariantError } from '../errors.js';
 
 type Db = Database['db'];
 
+const WEBAUTHN_USER_HANDLE_BYTES = 32;
+
 const VALID_TRANSITIONS: Record<AccountStatus, readonly AccountStatus[]> = {
   pending_email: ['pending_passkey'],
   pending_passkey: ['active'],
@@ -29,6 +31,7 @@ export async function createAccountShell(
     .values({
       id: input.id,
       status: 'pending_email',
+      webauthnUserHandle: null,
       accountReadyAt: null,
       suspendedAt: null,
       closedAt: null,
@@ -49,7 +52,88 @@ export async function findAccountById(db: Db, accountId: string): Promise<Accoun
   return rows[0] ?? null;
 }
 
+/**
+ * Ensure a pending_passkey (or later) account has a stable opaque 32-byte WebAuthn user handle.
+ * Concurrent callers race on unique index and converge on exactly one handle.
+ */
+export async function ensureWebAuthnUserHandle(
+  db: Db,
+  input: {
+    accountId: string;
+    handle: Buffer;
+    now: string;
+  },
+): Promise<Buffer> {
+  if (!Buffer.isBuffer(input.handle) || input.handle.length !== WEBAUTHN_USER_HANDLE_BYTES) {
+    throw new IdentityInvariantError(
+      'INVALID_WEBAUTHN_USER_HANDLE',
+      'WebAuthn user handle must be exactly 32 bytes',
+    );
+  }
+
+  const existing = await findAccountById(db, input.accountId);
+  if (!existing) {
+    throw new IdentityInvariantError('ACCOUNT_NOT_FOUND', 'Account was not found');
+  }
+  if (existing.webauthnUserHandle) {
+    return Buffer.isBuffer(existing.webauthnUserHandle)
+      ? existing.webauthnUserHandle
+      : Buffer.from(existing.webauthnUserHandle);
+  }
+
+  try {
+    const updated = await db
+      .update(accounts)
+      .set({ webauthnUserHandle: input.handle, updatedAt: input.now })
+      .where(and(eq(accounts.id, input.accountId), isNull(accounts.webauthnUserHandle)))
+      .returning({ webauthnUserHandle: accounts.webauthnUserHandle });
+    const row = updated[0];
+    if (row?.webauthnUserHandle) {
+      return Buffer.isBuffer(row.webauthnUserHandle)
+        ? row.webauthnUserHandle
+        : Buffer.from(row.webauthnUserHandle);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const causeMessage =
+      error instanceof Error && error.cause instanceof Error ? error.cause.message : '';
+    if (
+      !/accounts_webauthn_user_handle_unique/i.test(message) &&
+      !/accounts_webauthn_user_handle_unique/i.test(causeMessage)
+    ) {
+      throw error;
+    }
+  }
+
+  const raced = await findAccountById(db, input.accountId);
+  if (!raced?.webauthnUserHandle) {
+    throw new Error('Failed to create or locate WebAuthn user handle');
+  }
+  return Buffer.isBuffer(raced.webauthnUserHandle)
+    ? raced.webauthnUserHandle
+    : Buffer.from(raced.webauthnUserHandle);
+}
+
+/** Lock account row for concurrent ceremony completion. */
+export async function lockAccountById(db: Db, accountId: string): Promise<AccountRow | null> {
+  const selected = await db
+    .select()
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
+    .limit(1)
+    .for('update');
+  return selected[0] ?? null;
+}
+
 async function assertActiveRequirements(db: Db, accountId: string): Promise<void> {
+  const account = await findAccountById(db, accountId);
+  if (!account?.webauthnUserHandle) {
+    throw new IdentityInvariantError(
+      'ACTIVE_REQUIRES_WEBAUTHN_USER_HANDLE',
+      'Active account requires a WebAuthn user handle',
+    );
+  }
+
   const primary = await db
     .select()
     .from(accountEmails)
@@ -116,6 +200,7 @@ export async function transitionAccountState(
 
   let next: Omit<AccountRow, 'id' | 'createdAt'> = {
     status: input.to,
+    webauthnUserHandle: account.webauthnUserHandle,
     accountReadyAt: account.accountReadyAt,
     suspendedAt: account.suspendedAt,
     closedAt: account.closedAt,

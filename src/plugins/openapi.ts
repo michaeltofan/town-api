@@ -9,7 +9,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
       info: {
         title: 'TOWN API',
         description:
-          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, and gated email verification for account setup. Controlled confirmation and email verification are not public authentication.',
+          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, and first-passkey WebAuthn registration. Controlled confirmation, email verification, and setup-grant passkey registration are not public authentication or login sessions.',
         version: '0.1.0',
       },
       tags: [
@@ -33,7 +33,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Account',
           description:
-            'Account setup email verification. Does not create sessions, activate accounts, or disclose account existence.',
+            'Account setup email verification and first-passkey WebAuthn registration. Does not create sessions or disclose account existence beyond protocol-required WebAuthn options.',
         },
       ],
       components: {
@@ -44,6 +44,13 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
             name: 'X-TOWN-Control-Key',
             description:
               'Temporary controlled test mechanism for confirmation routes. Not public authentication. Do not treat this as a user session, OAuth token, or production identity system. Example secret values are intentionally omitted.',
+          },
+          setupGrantAuth: {
+            type: 'apiKey',
+            in: 'header',
+            name: 'Authorization',
+            description:
+              'Restricted setup-grant authorization for first-passkey registration. Exact header form: Authorization: SetupGrant <opaque-token>. Not an account session and not a Bearer token.',
           },
         },
       },

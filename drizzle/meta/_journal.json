@@ -43,6 +43,13 @@
       "when": 1784224978929,
       "tag": "0005_email_challenges_revoked_at",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784264817341,
+      "tag": "0006_webauthn_registration_runtime",
+      "breakpoints": true
     }
   ]
 }
