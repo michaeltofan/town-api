@@ -29,6 +29,8 @@ const EXPECTED_TOWN_TABLES = [
   'setup_grants',
   'signal_confirmations',
   'signals',
+  'stripe_checkout_attempts',
+  'stripe_customer_links',
   'webauthn_challenges',
 ];
 
@@ -73,6 +75,8 @@ async function assertTownFoundationSchema(pool: Pool): Promise<void> {
          'passwords'
        )`,
   );
+  // Note: stripe_customer_links and stripe_checkout_attempts are approved billing tables
+  // introduced by the Stripe Billing Runtime slice; only the legacy 'stripe_customers' name is forbidden.
 
   if (forbidden.rows.length > 0) {
     throw new Error('Forbidden product tables present in town schema');
@@ -83,8 +87,8 @@ async function assertTownFoundationSchema(pool: Pool): Promise<void> {
      FROM drizzle.__drizzle_migrations`,
   );
 
-  if (Number(historyResult.rows[0]?.count ?? 0) < 6) {
-    throw new Error('Expected at least six drizzle migration history rows');
+  if (Number(historyResult.rows[0]?.count ?? 0) < 7) {
+    throw new Error('Expected at least seven drizzle migration history rows');
   }
 }
 

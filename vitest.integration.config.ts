@@ -42,6 +42,12 @@ export default defineConfig({
       'test/membership.api.test.ts',
       'test/membership.confirmation.api.test.ts',
       'test/membership.audit.integration.test.ts',
+      'test/billing.migration.test.ts',
+      'test/billing.checkout.api.test.ts',
+      'test/billing.portal.api.test.ts',
+      'test/billing.customer.integration.test.ts',
+      'test/billing.webhook.events.integration.test.ts',
+      'test/billing.webhook.signature.test.ts',
     ],
     fileParallelism: false,
     poolOptions: {
