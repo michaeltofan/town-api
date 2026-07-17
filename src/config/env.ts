@@ -5,6 +5,10 @@ import {
   EMAIL_VERIFICATION_HASH_KEY_MIN_LENGTH,
 } from '../ceremony/email-verification/policy.js';
 import {
+  ACCOUNT_RECOVERY_HASH_KEY_MIN_LENGTH,
+  ACCOUNT_RECOVERY_TOKEN_HASH_KEY_MIN_LENGTH,
+} from '../ceremony/account-recovery/policy.js';
+import {
   assertProductionWebAuthnPolicy,
   parseAllowedOrigins,
 } from '../ceremony/passkey-registration/config.js';
@@ -73,6 +77,16 @@ const EnvSchema = Type.Object(
       Type.String({ minLength: SESSION_TOKEN_HASH_KEY_MIN_LENGTH }),
     ),
     WEB_SESSION_COOKIE_NAME: Type.Optional(Type.String({ minLength: 1 })),
+    ACCOUNT_RECOVERY_ENABLED: Type.Boolean({ default: false }),
+    ACCOUNT_RECOVERY_HASH_KEY: Type.Optional(
+      Type.String({ minLength: ACCOUNT_RECOVERY_HASH_KEY_MIN_LENGTH }),
+    ),
+    ACCOUNT_RECOVERY_TOKEN_HASH_KEY: Type.Optional(
+      Type.String({ minLength: ACCOUNT_RECOVERY_TOKEN_HASH_KEY_MIN_LENGTH }),
+    ),
+    ACCOUNT_RECOVERY_DELIVERY_MODE: Type.Optional(
+      Type.Union([Type.Literal('test'), Type.Literal('development')]),
+    ),
     TRUST_PROXY: Type.Boolean({ default: false }),
   },
   { additionalProperties: false },
@@ -148,6 +162,15 @@ function sanitizeEnvErrorPath(path: string, message: string): string {
   if (path.includes('SESSION_TOKEN_HASH_KEY')) {
     return `${path}: must meet minimum length when passkey authentication is enabled`;
   }
+  if (path.includes('ACCOUNT_RECOVERY_HASH_KEY')) {
+    return `${path}: must meet minimum length when account recovery is enabled`;
+  }
+  if (path.includes('ACCOUNT_RECOVERY_TOKEN_HASH_KEY')) {
+    return `${path}: must meet minimum length when account recovery is enabled`;
+  }
+  if (path.includes('ACCOUNT_RECOVERY_DELIVERY_MODE')) {
+    return `${path}: must be test or development when account recovery is enabled`;
+  }
   return `${path}: ${message}`;
 }
 
@@ -167,6 +190,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const passkeyAuthenticationEnabled = parseBooleanFlag(
     source.PASSKEY_AUTHENTICATION_ENABLED,
     'PASSKEY_AUTHENTICATION_ENABLED',
+  );
+  const accountRecoveryEnabled = parseBooleanFlag(
+    source.ACCOUNT_RECOVERY_ENABLED,
+    'ACCOUNT_RECOVERY_ENABLED',
   );
   const trustProxy = parseBooleanFlag(source.TRUST_PROXY, 'TRUST_PROXY');
   const nodeEnv = source.NODE_ENV ?? 'development';
@@ -188,6 +215,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     EMAIL_VERIFICATION_ENABLED: emailVerificationEnabled,
     WEBAUTHN_REGISTRATION_ENABLED: webauthnRegistrationEnabled,
     PASSKEY_AUTHENTICATION_ENABLED: passkeyAuthenticationEnabled,
+    ACCOUNT_RECOVERY_ENABLED: accountRecoveryEnabled,
     TRUST_PROXY: trustProxy,
   };
 
@@ -394,6 +422,100 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     candidate.SESSION_TOKEN_HASH_KEY = source.SESSION_TOKEN_HASH_KEY;
     candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
     candidate.WEB_SESSION_COOKIE_NAME = cookieName;
+  }
+
+  if (accountRecoveryEnabled) {
+    if (nodeEnv === 'production') {
+      throw new Error(
+        'Invalid environment configuration: ACCOUNT_RECOVERY_ENABLED cannot be true in production while only test/development delivery adapters exist',
+      );
+    }
+    if (!isNonEmptyString(source.ACCOUNT_RECOVERY_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: ACCOUNT_RECOVERY_HASH_KEY is required when ACCOUNT_RECOVERY_ENABLED is true',
+      );
+    }
+    if (source.ACCOUNT_RECOVERY_HASH_KEY.length < ACCOUNT_RECOVERY_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: ACCOUNT_RECOVERY_HASH_KEY must be at least ${String(ACCOUNT_RECOVERY_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+    if (!isNonEmptyString(source.ACCOUNT_RECOVERY_TOKEN_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: ACCOUNT_RECOVERY_TOKEN_HASH_KEY is required when ACCOUNT_RECOVERY_ENABLED is true',
+      );
+    }
+    if (
+      source.ACCOUNT_RECOVERY_TOKEN_HASH_KEY.length < ACCOUNT_RECOVERY_TOKEN_HASH_KEY_MIN_LENGTH
+    ) {
+      throw new Error(
+        `Invalid environment configuration: ACCOUNT_RECOVERY_TOKEN_HASH_KEY must be at least ${String(ACCOUNT_RECOVERY_TOKEN_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+    const deliveryMode = source.ACCOUNT_RECOVERY_DELIVERY_MODE;
+    if (deliveryMode !== 'test' && deliveryMode !== 'development') {
+      throw new Error(
+        'Invalid environment configuration: ACCOUNT_RECOVERY_DELIVERY_MODE must be test or development when ACCOUNT_RECOVERY_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(source.CEREMONY_RATE_LIMIT_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: CEREMONY_RATE_LIMIT_HASH_KEY is required when ACCOUNT_RECOVERY_ENABLED is true',
+      );
+    }
+    if (source.CEREMONY_RATE_LIMIT_HASH_KEY.length < CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: CEREMONY_RATE_LIMIT_HASH_KEY must be at least ${String(CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+    if (!isNonEmptyString(source.WEBAUTHN_RP_ID)) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_RP_ID is required when ACCOUNT_RECOVERY_ENABLED is true',
+      );
+    }
+    if (source.WEBAUTHN_RP_ID.includes('*')) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_RP_ID must not contain wildcards',
+      );
+    }
+    const rpName =
+      isNonEmptyString(source.WEBAUTHN_RP_NAME) && source.WEBAUTHN_RP_NAME.trim().length > 0
+        ? source.WEBAUTHN_RP_NAME.trim()
+        : DEFAULT_WEBAUTHN_RP_NAME;
+    if (!isNonEmptyString(source.WEBAUTHN_ALLOWED_ORIGINS)) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_ALLOWED_ORIGINS is required when ACCOUNT_RECOVERY_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(source.WEBAUTHN_CHALLENGE_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_CHALLENGE_HASH_KEY is required when ACCOUNT_RECOVERY_ENABLED is true',
+      );
+    }
+    if (source.WEBAUTHN_CHALLENGE_HASH_KEY.length < WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: WEBAUTHN_CHALLENGE_HASH_KEY must be at least ${String(WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+
+    const allowedOrigins = parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, nodeEnv);
+    if (nodeEnv === 'production') {
+      assertProductionWebAuthnPolicy(source.WEBAUTHN_RP_ID, allowedOrigins);
+      if (source.WEBAUTHN_RP_ID === 'localhost') {
+        throw new Error(
+          'Invalid environment configuration: production WEBAUTHN_RP_ID cannot be localhost',
+        );
+      }
+    }
+
+    candidate.ACCOUNT_RECOVERY_HASH_KEY = source.ACCOUNT_RECOVERY_HASH_KEY;
+    candidate.ACCOUNT_RECOVERY_TOKEN_HASH_KEY = source.ACCOUNT_RECOVERY_TOKEN_HASH_KEY;
+    candidate.ACCOUNT_RECOVERY_DELIVERY_MODE = deliveryMode;
+    candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
+    candidate.WEBAUTHN_RP_ID = source.WEBAUTHN_RP_ID;
+    candidate.WEBAUTHN_RP_NAME = rpName;
+    candidate.WEBAUTHN_ALLOWED_ORIGINS = source.WEBAUTHN_ALLOWED_ORIGINS;
+    candidate.WEBAUTHN_CHALLENGE_HASH_KEY = source.WEBAUTHN_CHALLENGE_HASH_KEY;
   }
 
   if (!isNonEmptyString(candidate.DATABASE_URL)) {

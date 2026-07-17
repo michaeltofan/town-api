@@ -29,6 +29,8 @@ export default defineConfig({
       'test/passkey-registration.migration.test.ts',
       'test/passkey-authentication.api.test.ts',
       'test/passkey-authentication.migration.test.ts',
+      'test/account-recovery.api.test.ts',
+      'test/account-recovery.migration.test.ts',
     ],
     fileParallelism: false,
     poolOptions: {

@@ -25,6 +25,8 @@ const APPROVED_SCOPES = new Set<CeremonyRateLimitScope>([
   'setup_verification_grant',
   'recovery_options_grant',
   'recovery_verification_grant',
+  'recovery_email_attempt_challenge',
+  'recovery_email_attempt_email_ip',
 ]);
 
 function assertApprovedScope(scope: CeremonyRateLimitScope): CeremonyRateLimitScope {

@@ -33,6 +33,7 @@ export async function createAccountShell(
       status: 'pending_email',
       webauthnUserHandle: null,
       accountReadyAt: null,
+      recoveryCompletedAt: null,
       suspendedAt: null,
       closedAt: null,
       createdAt: input.createdAt,
@@ -202,6 +203,7 @@ export async function transitionAccountState(
     status: input.to,
     webauthnUserHandle: account.webauthnUserHandle,
     accountReadyAt: account.accountReadyAt,
+    recoveryCompletedAt: account.recoveryCompletedAt,
     suspendedAt: account.suspendedAt,
     closedAt: account.closedAt,
     updatedAt: input.at,
@@ -246,6 +248,33 @@ export async function transitionAccountState(
   const row = rows[0];
   if (!row) {
     throw new Error('Failed to transition account state');
+  }
+  return row;
+}
+
+/**
+ * Sets recovery_completed_at without changing status or account_ready_at.
+ * Recovery completion keeps the account active and does not re-activate.
+ */
+export async function setAccountRecoveryCompletedAt(
+  db: Db,
+  input: {
+    accountId: string;
+    recoveryCompletedAt: string;
+    updatedAt: string;
+  },
+): Promise<AccountRow> {
+  const updated = await db
+    .update(accounts)
+    .set({
+      recoveryCompletedAt: input.recoveryCompletedAt,
+      updatedAt: input.updatedAt,
+    })
+    .where(eq(accounts.id, input.accountId))
+    .returning();
+  const row = updated[0];
+  if (!row) {
+    throw new IdentityInvariantError('ACCOUNT_NOT_FOUND', 'Account was not found');
   }
   return row;
 }

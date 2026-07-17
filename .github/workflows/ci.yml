@@ -50,6 +50,11 @@ jobs:
       PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY: town-ci-passkey-auth-challenge-hash-key32
       SESSION_TOKEN_HASH_KEY: town-ci-session-token-hash-key-32bytesxx
       WEB_SESSION_COOKIE_NAME: __Host-Http-town_session
+      # CI-only account recovery placeholders (test delivery only).
+      ACCOUNT_RECOVERY_ENABLED: 'true'
+      ACCOUNT_RECOVERY_HASH_KEY: town-ci-account-recovery-hash-key-32byt
+      ACCOUNT_RECOVERY_TOKEN_HASH_KEY: town-ci-account-recovery-token-key-32b
+      ACCOUNT_RECOVERY_DELIVERY_MODE: test
       TRUST_PROXY: 'false'
 
     steps:

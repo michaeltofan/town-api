@@ -23,6 +23,7 @@ describe('loadEnv', () => {
       EMAIL_VERIFICATION_ENABLED: false,
       WEBAUTHN_REGISTRATION_ENABLED: false,
       PASSKEY_AUTHENTICATION_ENABLED: false,
+      ACCOUNT_RECOVERY_ENABLED: false,
       TRUST_PROXY: false,
     });
   });
@@ -55,6 +56,7 @@ describe('loadEnv', () => {
       EMAIL_VERIFICATION_ENABLED: false,
       WEBAUTHN_REGISTRATION_ENABLED: false,
       PASSKEY_AUTHENTICATION_ENABLED: false,
+      ACCOUNT_RECOVERY_ENABLED: false,
       TRUST_PROXY: true,
     });
   });

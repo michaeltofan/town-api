@@ -459,7 +459,17 @@ describe('account identity repositories', () => {
     } satisfies Partial<IdentityInvariantError>);
 
     const events = await listIdentitySecurityEventsForAccount(db(), accountId);
-    expect(events.some((event) => event.eventType === 'recovery_completed')).toBe(true);
+    expect(events.some((event) => event.eventType === 'recovery_completed')).toBe(false);
+
+    await appendIdentitySecurityEvent(db(), {
+      id: '26000000-0000-4000-8000-000000000001',
+      accountId,
+      eventType: 'recovery_completed',
+      occurredAt: T1,
+      metadata: { grantId: grant.id },
+    });
+    const eventsAfter = await listIdentitySecurityEventsForAccount(db(), accountId);
+    expect(eventsAfter.some((event) => event.eventType === 'recovery_completed')).toBe(true);
 
     await expect(
       appendIdentitySecurityEvent(db(), {

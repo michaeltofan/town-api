@@ -8,6 +8,8 @@ import controlledAccessPlugin from './plugins/controlled-access.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
 import openApiPlugin from './plugins/openapi.js';
 import type { EmailVerificationDeliveryAdapter } from './ceremony/email-verification/delivery.js';
+import type { AccountRecoveryDeliveryAdapter } from './ceremony/account-recovery/delivery.js';
+import { accountRecoveryRoutes } from './routes/account-recovery.js';
 import { communitiesRoutes } from './routes/communities.js';
 import { confirmationRoutes } from './routes/confirmations.js';
 import { emailVerificationRoutes } from './routes/email-verifications.js';
@@ -29,6 +31,13 @@ export type BuildAppOptions = {
     now?: () => string;
     generateCode?: () => string;
     generateSetupToken?: () => string;
+    generateId?: () => string;
+  };
+  accountRecovery?: {
+    deliveryAdapter?: AccountRecoveryDeliveryAdapter;
+    now?: () => string;
+    generateCode?: () => string;
+    generateRecoveryToken?: () => string;
     generateId?: () => string;
   };
   passkeyRegistration?: {
@@ -129,6 +138,22 @@ export async function buildApp(options: BuildAppOptions) {
       : {}),
     ...(options.emailVerification?.generateId !== undefined
       ? { generateId: options.emailVerification.generateId }
+      : {}),
+  });
+  await app.register(accountRecoveryRoutes, {
+    env: options.env,
+    ...(options.accountRecovery?.deliveryAdapter !== undefined
+      ? { deliveryAdapter: options.accountRecovery.deliveryAdapter }
+      : {}),
+    ...(options.accountRecovery?.now !== undefined ? { now: options.accountRecovery.now } : {}),
+    ...(options.accountRecovery?.generateCode !== undefined
+      ? { generateCode: options.accountRecovery.generateCode }
+      : {}),
+    ...(options.accountRecovery?.generateRecoveryToken !== undefined
+      ? { generateRecoveryToken: options.accountRecovery.generateRecoveryToken }
+      : {}),
+    ...(options.accountRecovery?.generateId !== undefined
+      ? { generateId: options.accountRecovery.generateId }
       : {}),
   });
   await app.register(passkeyRegistrationRoutes, {

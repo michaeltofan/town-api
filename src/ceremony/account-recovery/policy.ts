@@ -1,0 +1,30 @@
+/** Account recovery ceremony policy constants (Slice 5). */
+
+export const ACCOUNT_RECOVERY_CODE_LENGTH = 6;
+export const ACCOUNT_RECOVERY_CODE_TTL_MINUTES = 10;
+export const ACCOUNT_RECOVERY_MAX_ATTEMPTS = 5;
+export const ACCOUNT_RECOVERY_GRANT_TTL_MINUTES = 15;
+
+export const ACCOUNT_RECOVERY_REQUEST_EMAIL_LIMIT_24H = 3;
+export const ACCOUNT_RECOVERY_REQUEST_IP_LIMIT_24H = 10;
+export const ACCOUNT_RECOVERY_ATTEMPT_CHALLENGE_LIMIT = 5;
+export const ACCOUNT_RECOVERY_ATTEMPT_EMAIL_IP_LIMIT_30M = 10;
+
+export const RECOVERY_OPTIONS_GRANT_LIMIT = 5;
+export const RECOVERY_VERIFICATION_GRANT_LIMIT = 5;
+
+export const ACCOUNT_RECOVERY_HASH_KEY_MIN_LENGTH = 32;
+export const ACCOUNT_RECOVERY_TOKEN_HASH_KEY_MIN_LENGTH = 32;
+
+export {
+  WEBAUTHN_CHALLENGE_TTL_MINUTES,
+  WEBAUTHN_CHALLENGE_TIMEOUT_MS,
+  WEBAUTHN_SUPPORTED_ALGORITHM_IDS,
+  CIVIC_ACTOR_DISPLAY_LABEL,
+} from '../passkey-registration/policy.js';
+
+export {
+  SUPPORTED_LOCALES,
+  isSupportedLocale,
+  type SupportedLocale,
+} from '../email-verification/policy.js';
