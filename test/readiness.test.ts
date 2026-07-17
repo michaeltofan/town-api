@@ -54,7 +54,10 @@ describe('database readiness with real PostgreSQL', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toMatch(/^application\/json/);
-    expect(response.json()).toEqual({ status: 'ready' });
+    expect(response.json()).toEqual({
+      status: 'ready',
+      checks: { config: 'ok', database: 'ok', migrations: 'ok' },
+    });
   });
 
   it('GET /health/live remains exact and independent of PostgreSQL', async () => {

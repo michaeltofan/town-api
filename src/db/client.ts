@@ -2,12 +2,20 @@ import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool, type PoolConfig } from 'pg';
 import type { Env } from '../config/env.js';
 import * as schema from './schema.js';
-import { checkDatabaseReadiness, closePool } from './lifecycle.js';
+import {
+  checkDatabaseConnection,
+  checkDatabaseReadiness,
+  closePool,
+  type DatabaseConnectionStatus,
+} from './lifecycle.js';
+import { checkMigrationLedger, type MigrationLedgerResult } from './migration-ledger.js';
 
 export type Database = {
   readonly pool: Pool;
   readonly db: NodePgDatabase<typeof schema>;
   checkReadiness: () => Promise<boolean>;
+  checkConnection: () => Promise<DatabaseConnectionStatus>;
+  checkMigrations: () => Promise<MigrationLedgerResult>;
   close: () => Promise<void>;
 };
 
@@ -16,6 +24,7 @@ export type CreateDatabaseOptions = {
   poolMax: number;
   connectionTimeoutMs: number;
   idleTimeoutMs: number;
+  readinessTimeoutMs?: number;
 };
 
 export function createDatabaseFromEnv(env: Env): Database {
@@ -24,6 +33,7 @@ export function createDatabaseFromEnv(env: Env): Database {
     poolMax: env.DB_POOL_MAX,
     connectionTimeoutMs: env.DB_CONNECTION_TIMEOUT_MS,
     idleTimeoutMs: env.DB_IDLE_TIMEOUT_MS,
+    readinessTimeoutMs: env.READINESS_TIMEOUT_MS,
   });
 }
 
@@ -37,6 +47,7 @@ export function createDatabase(options: CreateDatabaseOptions): Database {
 
   const pool = new Pool(poolConfig);
   const db = drizzle(pool, { schema });
+  const readinessTimeoutMs = options.readinessTimeoutMs ?? options.connectionTimeoutMs;
 
   let closed = false;
 
@@ -45,7 +56,15 @@ export function createDatabase(options: CreateDatabaseOptions): Database {
     db,
     checkReadiness: async () =>
       checkDatabaseReadiness(pool, {
-        timeoutMs: options.connectionTimeoutMs,
+        timeoutMs: readinessTimeoutMs,
+      }),
+    checkConnection: async () =>
+      checkDatabaseConnection(pool, {
+        timeoutMs: readinessTimeoutMs,
+      }),
+    checkMigrations: async () =>
+      checkMigrationLedger(pool, {
+        timeoutMs: readinessTimeoutMs,
       }),
     close: async () => {
       if (closed) {
