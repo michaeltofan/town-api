@@ -1,6 +1,6 @@
 # town-api
 
-TOWN API shared backend foundation: Fastify 5, strict TypeScript, TypeBox, PostgreSQL 18, Drizzle ORM, canonical civic content, controlled signal confirmation, Account Identity Foundation, and Authentication Ceremony Data/Session Foundation (database + architecture contracts only).
+TOWN API shared backend foundation: Fastify 5, strict TypeScript, TypeBox, PostgreSQL 18, Drizzle ORM, canonical civic content, controlled signal confirmation, Account Identity Foundation, Authentication Ceremony Data/Session Foundation, email/passkey setup, and passkey authentication sessions.
 
 ## Requirements
 
@@ -213,7 +213,7 @@ Live `docs/openapi.v1.json` continues to list only implemented routes.
 
 ## Authentication ceremony foundation
 
-Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated email-verification runtime for account setup. Slice 3 adds first-passkey WebAuthn registration runtime (setup-grant authorized). These slices do **not** implement live login, logout, production email delivery, authentication assertions, cookies, CSRF, or JWTs.
+Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated email-verification runtime for account setup. Slice 3 adds first-passkey WebAuthn registration runtime (setup-grant authorized). Slice 4 adds passkey authentication assertions, opaque web/mobile sessions, rotation, logout, logout-all, web cookies, and CSRF checks. These slices do **not** implement production email delivery, recovery runtime, membership, or JWTs.
 
 ### Domain separation
 
@@ -232,7 +232,7 @@ Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated em
 | ----------------------- | ----------------------------------------------------------------------------------- |
 | `town.setup_grants`     | Restricted authority after email verification and before first passkey registration |
 | `town.recovery_grants`  | Restricted recovery authority; not a normal session                                 |
-| `town.account_sessions` | Opaque authenticated sessions for future web/mobile clients                         |
+| `town.account_sessions` | Opaque authenticated sessions for web/mobile clients                                |
 
 Setup grants:
 
@@ -275,13 +275,15 @@ Rules:
 - uniqueness: `(scope, subject_hash, window_started_at)`
 - no Redis
 - Slice 3 enforces `setup_options_grant` (5 / grant) and `setup_verification_grant` (5 failed verifies / grant)
+- Slice 4 enforces passkey authentication option/assertion limits by hashed IP, anonymous client key, and credential subject
 
 ### Additional identity security event types
 
-Preserved prior types, plus Slice 3:
+Preserved prior types, plus Slice 3/4:
 
 - `passkey_registration_failed`
 - `account_activated`
+- `authentication_succeeded`
 
 ### Deterministic ceremony fixtures and contract
 
@@ -386,14 +388,53 @@ When the feature is disabled, both routes return the safe `404 Not Found` shape.
 
 Controlled test actor `00000000-0000-4000-8000-000000000301` remains unlinked (`account_id` null). New civic actors are never assigned Milano/Munich by default.
 
+### Passkey authentication session runtime (Slice 4)
+
+Passkey authentication is account login for active accounts with registered passkeys. It creates opaque server-side sessions and preserves the boundary between web-cookie and mobile-header transports.
+
+| Item                          | Policy                                                                                  |
+| ----------------------------- | --------------------------------------------------------------------------------------- |
+| Feature flag                  | `PASSKEY_AUTHENTICATION_ENABLED` (default `false`)                                      |
+| Challenge hash key            | `PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY` (HMAC-SHA-256; min 32 chars)                |
+| Session token hash key        | `SESSION_TOKEN_HASH_KEY` (HMAC-SHA-256; min 32 chars)                                   |
+| RP / origin                   | same server-owned `WEBAUTHN_RP_ID` / `WEBAUTHN_ALLOWED_ORIGINS` policy as registration  |
+| Options policy                | no `allowCredentials` enumeration; `userVerification: required`; 5-minute challenge TTL |
+| Counter policy                | 0→0 accepted; increasing counters accepted; repeated/decreasing positive counters fail  |
+| Backup policy                 | `backup_eligible` retained; `backed_up` is monotonic and never downgraded               |
+| Web session transport         | `__Host-Http-town_session` Secure, HttpOnly, SameSite=Lax, Path=/, no Domain            |
+| Mobile session transport      | `Authorization: Session <opaque-token>` only                                            |
+| Mutative web-session CSRF     | allowed `Origin` or `Sec-Fetch-Site: same-origin` / `same-site`                         |
+| Sensitive operation freshness | logout-all requires a fresh authentication session                                      |
+
+Implemented routes:
+
+| Method | Path                                  | Behavior                                                                    |
+| ------ | ------------------------------------- | --------------------------------------------------------------------------- |
+| `POST` | `/v1/authentication/passkeys/options` | Issue WebAuthn request options for web or mobile authentication             |
+| `POST` | `/v1/authentication/passkeys/verify`  | Verify assertion; create web cookie session or return mobile session token  |
+| `GET`  | `/v1/authentication/session`          | Inspect current web-cookie or mobile-header session; invalid returns false  |
+| `POST` | `/v1/authentication/session/rotate`   | Atomically rotate current session token; preserves authentication freshness |
+| `POST` | `/v1/authentication/logout`           | Idempotently revoke current session; clears web cookie                      |
+| `POST` | `/v1/authentication/logout-all`       | Revoke all sessions for the authenticated account; requires freshness       |
+
+Web verify/rotate responses never include the raw session token in JSON:
+
+```json
+{
+  "data": {
+    "status": "AUTHENTICATED"
+  }
+}
+```
+
+Mobile verify/rotate responses include `sessionToken` and `sessionExpiresAt` and never set a cookie. Route logs and logger redaction avoid raw tokens, cookies, and `Authorization` values.
+
 ### Explicit exclusions
 
 Still not implemented:
 
 - production email provider (Resend/SendGrid/SES/SMTP/etc.)
-- passkey login / authentication assertions
-- session issuance / cookies / CSRF / JWTs
-- login / logout endpoints
+- JWTs
 - recovery runtime
 - second-passkey management / passkey deletion
 - membership / Stripe / local verification
@@ -401,17 +442,23 @@ Still not implemented:
 
 ## Other endpoints
 
-| Method | Path                                        | Behavior                            |
-| ------ | ------------------------------------------- | ----------------------------------- |
-| `GET`  | `/health/live`                              | `{"status":"ok"}` (no DB)           |
-| `GET`  | `/health/ready`                             | DB readiness `ready` / `not_ready`  |
-| `GET`  | `/v1/communities`                           | active communities by position      |
-| `GET`  | `/v1/communities/:communitySlug/signals`    | published signals by position       |
-| `GET`  | `/v1/signals/:signalId`                     | one published signal by UUID        |
-| `POST` | `/v1/account/email-verifications`           | gated email verification request    |
-| `POST` | `/v1/account/email-verifications/complete`  | gated email verification completion |
-| `POST` | `/v1/account/passkeys/registration/options` | gated WebAuthn registration options |
-| `POST` | `/v1/account/passkeys/registration/verify`  | gated WebAuthn registration verify  |
+| Method | Path                                        | Behavior                              |
+| ------ | ------------------------------------------- | ------------------------------------- |
+| `GET`  | `/health/live`                              | `{"status":"ok"}` (no DB)             |
+| `GET`  | `/health/ready`                             | DB readiness `ready` / `not_ready`    |
+| `GET`  | `/v1/communities`                           | active communities by position        |
+| `GET`  | `/v1/communities/:communitySlug/signals`    | published signals by position         |
+| `GET`  | `/v1/signals/:signalId`                     | one published signal by UUID          |
+| `POST` | `/v1/account/email-verifications`           | gated email verification request      |
+| `POST` | `/v1/account/email-verifications/complete`  | gated email verification completion   |
+| `POST` | `/v1/account/passkeys/registration/options` | gated WebAuthn registration options   |
+| `POST` | `/v1/account/passkeys/registration/verify`  | gated WebAuthn registration verify    |
+| `POST` | `/v1/authentication/passkeys/options`       | gated passkey authentication options  |
+| `POST` | `/v1/authentication/passkeys/verify`        | gated passkey authentication verify   |
+| `GET`  | `/v1/authentication/session`                | current authentication session state  |
+| `POST` | `/v1/authentication/session/rotate`         | rotate current authentication session |
+| `POST` | `/v1/authentication/logout`                 | logout current authentication session |
+| `POST` | `/v1/authentication/logout-all`             | logout all account sessions           |
 
 ## Local database workflow
 
@@ -455,8 +502,7 @@ CI runs format/lint/typecheck/unit tests, migration checks, foundation + control
 This slice still excludes:
 
 - production email provider
-- passkey login / authentication assertions / logout
-- session issuance / cookies / CSRF / JWTs
+- JWTs
 - recovery runtime / second-passkey management / passkey removal
 - public password or social login
 - membership / Stripe / GPS / residency / local verification

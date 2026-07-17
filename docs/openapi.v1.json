@@ -2,6 +2,18 @@
   "components": {
     "schemas": {},
     "securitySchemes": {
+      "mobileSessionAuth": {
+        "description": "Mobile-only opaque session transport. Exact header form: Authorization: Session <opaque-token>. Not a Bearer token and not accepted for web cookie sessions.",
+        "in": "header",
+        "name": "Authorization",
+        "type": "apiKey"
+      },
+      "sessionAuth": {
+        "description": "Web-only opaque session cookie. The runtime sets it as Secure, HttpOnly, SameSite=Lax, Path=/, with no Domain. Mutative cookie-authenticated routes require same-origin/same-site CSRF evidence.",
+        "in": "cookie",
+        "name": "__Host-Http-town_session",
+        "type": "apiKey"
+      },
       "setupGrantAuth": {
         "description": "Restricted setup-grant authorization for first-passkey registration. Exact header form: Authorization: SetupGrant <opaque-token>. Not an account session and not a Bearer token.",
         "in": "header",
@@ -17,7 +29,7 @@
     }
   },
   "info": {
-    "description": "TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, and first-passkey WebAuthn registration. Controlled confirmation, email verification, and setup-grant passkey registration are not public authentication or login sessions.",
+    "description": "TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, first-passkey WebAuthn registration, and passkey authentication sessions. Controlled confirmation, email verification, and setup-grant passkey registration are not public authentication or login sessions.",
     "title": "TOWN API",
     "version": "0.1.0"
   },
@@ -720,6 +732,984 @@
         "summary": "Verify WebAuthn passkey registration",
         "tags": [
           "Account"
+        ]
+      }
+    },
+    "/v1/authentication/logout": {
+      "post": {
+        "description": "Revokes the current session when present. Web cookie sessions require same-origin/same-site CSRF evidence and the response clears the configured session cookie. The operation is idempotent.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "SIGNED_OUT"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Logout the current authentication session",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/v1/authentication/logout-all": {
+      "post": {
+        "description": "Revokes all active sessions for the authenticated account. Requires a fresh authentication session. Web cookie sessions require same-origin/same-site CSRF evidence and the response clears the configured session cookie.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "SIGNED_OUT"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Logout all authentication sessions",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/v1/authentication/passkeys/options": {
+      "post": {
+        "description": "Issues PublicKeyCredentialRequestOptions for passkey authentication. Does not disclose account existence through allowCredentials; user verification is required. Disabled by default via PASSKEY_AUTHENTICATION_ENABLED.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "anonymousClientKey": {
+                    "maxLength": 128,
+                    "minLength": 16,
+                    "pattern": "^[A-Za-z0-9._~-]{16,128}$",
+                    "type": "string"
+                  },
+                  "clientType": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "web"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "mobile"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "clientType",
+                  "anonymousClientKey"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authenticationCeremonyId": {
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                          "type": "string"
+                        },
+                        "options": {
+                          "additionalProperties": true,
+                          "properties": {},
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "authenticationCeremonyId",
+                        "options"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Create WebAuthn passkey authentication options",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/v1/authentication/passkeys/verify": {
+      "post": {
+        "description": "Verifies a WebAuthn authentication assertion and creates a web or mobile session. Web sessions are returned only as a Secure HttpOnly __Host cookie. Mobile sessions are returned only in the JSON body for use as Authorization: Session <token>.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "authenticationCeremonyId": {
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  },
+                  "clientType": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "web"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "mobile"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "response": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "authenticatorAttachment": {
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "clientExtensionResults": {
+                        "additionalProperties": {},
+                        "type": "object"
+                      },
+                      "id": {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "rawId": {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "response": {
+                        "additionalProperties": true,
+                        "properties": {
+                          "authenticatorData": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "clientDataJSON": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "signature": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "userHandle": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "clientDataJSON",
+                          "authenticatorData",
+                          "signature"
+                        ],
+                        "type": "object"
+                      },
+                      "type": {
+                        "enum": [
+                          "public-key"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "rawId",
+                      "type",
+                      "response"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "authenticationCeremonyId",
+                  "clientType",
+                  "response"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "data": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "enum": [
+                                "AUTHENTICATED"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "data": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "sessionExpiresAt": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sessionToken": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "status": {
+                              "enum": [
+                                "AUTHENTICATED"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "sessionToken",
+                            "sessionExpiresAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Verify WebAuthn passkey authentication",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/v1/authentication/session": {
+      "get": {
+        "description": "Returns current session state. Web clients authenticate only with the configured session cookie; mobile clients authenticate only with Authorization: Session <token>. Invalid or missing sessions return authenticated:false.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "data": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "absoluteExpiresAt": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "authenticated": {
+                              "enum": [
+                                true
+                              ],
+                              "type": "boolean"
+                            },
+                            "clientType": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "web"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "mobile"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "idleExpiresAt": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sensitiveOperationsFresh": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "authenticated",
+                            "clientType",
+                            "sensitiveOperationsFresh",
+                            "idleExpiresAt",
+                            "absoluteExpiresAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "data": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "authenticated": {
+                              "enum": [
+                                false
+                              ],
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "authenticated"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Inspect the current authentication session",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/v1/authentication/session/rotate": {
+      "post": {
+        "description": "Replaces the current session token without refreshing authentication freshness. Web cookie sessions require same-origin/same-site CSRF evidence and receive a replacement Secure HttpOnly cookie. Mobile sessions use Authorization: Session <token> and receive the replacement token in JSON.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "data": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "enum": [
+                                "AUTHENTICATED"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "data": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "sessionExpiresAt": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "sessionToken": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "status": {
+                              "enum": [
+                                "AUTHENTICATED"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "sessionToken",
+                            "sessionExpiresAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Rotate the current authentication session",
+        "tags": [
+          "Authentication"
         ]
       }
     },
@@ -1700,6 +2690,10 @@
     {
       "description": "Account setup email verification and first-passkey WebAuthn registration. Does not create sessions or disclose account existence beyond protocol-required WebAuthn options.",
       "name": "Account"
+    },
+    {
+      "description": "Passkey authentication and opaque account sessions. Web clients use only the Secure HttpOnly session cookie; mobile clients use only Authorization: Session <token>. Sessions do not grant membership, payment, local verification, or civic entitlement.",
+      "name": "Authentication"
     }
   ]
 }

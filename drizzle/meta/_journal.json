@@ -50,6 +50,13 @@
       "when": 1784264817341,
       "tag": "0006_webauthn_registration_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784267763348,
+      "tag": "0007_passkey_authentication_session_runtime",
+      "breakpoints": true
     }
   ]
 }

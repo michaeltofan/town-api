@@ -402,7 +402,7 @@ export async function verifyPasskeyRegistration(
   const deviceType = null;
   const transports = credential.transports ?? null;
   const backedUp = credentialBackedUp;
-  void credentialDeviceType;
+  const backupEligible = credentialDeviceType === 'multiDevice';
 
   try {
     await db.transaction(async (tx) => {
@@ -481,6 +481,7 @@ export async function verifyPasskeyRegistration(
         transports,
         deviceType,
         backedUp,
+        backupEligible,
         aaguid: aaguid && aaguid !== '00000000-0000-0000-0000-000000000000' ? aaguid : null,
         label: null,
         createdAt: now,

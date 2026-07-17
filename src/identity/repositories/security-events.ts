@@ -28,6 +28,7 @@ const APPROVED_EVENT_TYPES = new Set<IdentitySecurityEventType>([
   'rate_limit_triggered',
   'passkey_registration_failed',
   'account_activated',
+  'authentication_succeeded',
 ]);
 
 export async function appendIdentitySecurityEvent(

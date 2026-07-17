@@ -9,7 +9,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
       info: {
         title: 'TOWN API',
         description:
-          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, and first-passkey WebAuthn registration. Controlled confirmation, email verification, and setup-grant passkey registration are not public authentication or login sessions.',
+          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, first-passkey WebAuthn registration, and passkey authentication sessions. Controlled confirmation, email verification, and setup-grant passkey registration are not public authentication or login sessions.',
         version: '0.1.0',
       },
       tags: [
@@ -35,6 +35,11 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
           description:
             'Account setup email verification and first-passkey WebAuthn registration. Does not create sessions or disclose account existence beyond protocol-required WebAuthn options.',
         },
+        {
+          name: 'Authentication',
+          description:
+            'Passkey authentication and opaque account sessions. Web clients use only the Secure HttpOnly session cookie; mobile clients use only Authorization: Session <token>. Sessions do not grant membership, payment, local verification, or civic entitlement.',
+        },
       ],
       components: {
         securitySchemes: {
@@ -51,6 +56,20 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
             name: 'Authorization',
             description:
               'Restricted setup-grant authorization for first-passkey registration. Exact header form: Authorization: SetupGrant <opaque-token>. Not an account session and not a Bearer token.',
+          },
+          sessionAuth: {
+            type: 'apiKey',
+            in: 'cookie',
+            name: '__Host-Http-town_session',
+            description:
+              'Web-only opaque session cookie. The runtime sets it as Secure, HttpOnly, SameSite=Lax, Path=/, with no Domain. Mutative cookie-authenticated routes require same-origin/same-site CSRF evidence.',
+          },
+          mobileSessionAuth: {
+            type: 'apiKey',
+            in: 'header',
+            name: 'Authorization',
+            description:
+              'Mobile-only opaque session transport. Exact header form: Authorization: Session <opaque-token>. Not a Bearer token and not accepted for web cookie sessions.',
           },
         },
       },

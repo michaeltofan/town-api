@@ -29,7 +29,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     contractVersion: '1.0.0',
     title: 'TOWN Authentication Ceremony Foundation V1',
     description:
-      'Architecture contract for ceremony data/session foundation, email verification runtime, and first-passkey WebAuthn registration runtime. Production email delivery, passkey login, logout, cookies, CSRF, and JWTs remain out of scope.',
+      'Architecture contract for ceremony data/session foundation, email verification runtime, first-passkey WebAuthn registration runtime, and passkey authentication session runtime. Production email delivery, recovery, membership, and JWTs remain out of scope.',
     status: 'partially_implemented',
     implementedLiveRoutes: true,
     implementedRoutes: [
@@ -37,9 +37,15 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       'POST /v1/account/email-verifications/complete',
       'POST /v1/account/passkeys/registration/options',
       'POST /v1/account/passkeys/registration/verify',
+      'POST /v1/authentication/passkeys/options',
+      'POST /v1/authentication/passkeys/verify',
+      'GET /v1/authentication/session',
+      'POST /v1/authentication/session/rotate',
+      'POST /v1/authentication/logout',
+      'POST /v1/authentication/logout-all',
     ],
     slice:
-      'ceremony_data_and_session_foundation_plus_email_verification_and_webauthn_registration_runtime',
+      'ceremony_data_and_session_foundation_plus_email_verification_webauthn_registration_and_passkey_authentication_session_runtime',
     domainSeparation: {
       accountIdentity: 'Account shell, verified email, passkeys, challenges, recovery grants',
       civicActor: 'Local civic participation identity; optionally linked 1:1 to an account',
@@ -73,7 +79,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       absoluteTimeoutHours: SESSION_ABSOLUTE_TIMEOUT_HOURS,
       sensitiveReauthFreshnessMinutes: SENSITIVE_REAUTH_FRESHNESS_MINUTES,
       semantics: [
-        'Opaque server-side sessions for future authenticated web and mobile clients',
+        'Opaque server-side sessions for authenticated web and mobile clients',
         'Do not imply membership, payment, local verification, civic entitlement, or Stripe state',
         'Creation requires active account, verified primary email, at least one active passkey, and linked civic actor',
         'Setup grants and recovery grants cannot create sessions',
@@ -107,9 +113,38 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         ],
         notes: [
           'Repeated revocation is deterministic and safe',
-          'Repository support exists for suspending/closing accounts by revoking all sessions; routes are out of scope',
+          'Logout routes revoke one current session or all active sessions for the authenticated account',
+          'Repository support exists for suspending/closing accounts by revoking all sessions; account administration routes are out of scope',
         ],
       },
+    },
+    sessionRuntimePolicy: {
+      status: 'implemented',
+      featureFlag: 'PASSKEY_AUTHENTICATION_ENABLED',
+      webCookie: {
+        name: '__Host-Http-town_session',
+        source: 'WEB_SESSION_COOKIE_NAME',
+        attributes: {
+          Secure: true,
+          HttpOnly: true,
+          SameSite: 'Lax',
+          Path: '/',
+          Domain: null,
+          MaxAge: 'derived from account_sessions.absolute_expires_at',
+        },
+        responseBody: 'web verify and web rotate return only {status:AUTHENTICATED}',
+        csrf: 'Mutative web-cookie routes require Origin in WEBAUTHN_ALLOWED_ORIGINS or Sec-Fetch-Site same-origin/same-site',
+      },
+      mobileTransport: {
+        authorization: 'Authorization: Session <opaque-token>',
+        tokenResponse:
+          'mobile verify and mobile rotate return sessionToken plus sessionExpiresAt in JSON and never Set-Cookie',
+      },
+      transportSeparation: [
+        'Web sessions are extracted only from the configured cookie name',
+        'Mobile sessions are extracted only from Authorization: Session',
+        'Raw tokens, cookies, and Authorization headers are never logged intentionally',
+      ],
     },
     ceremonyRateLimits: {
       table: 'town.ceremony_rate_limits',
@@ -157,6 +192,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         'rate_limit_triggered',
       ],
       added: ['passkey_registration_failed', 'account_activated'],
+      slice4Added: ['authentication_succeeded'],
     },
     grantVersusSessionDistinction: {
       setupGrant: 'Restricted setup authority before first passkey; not authenticated access',
@@ -164,12 +200,12 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         'Restricted recovery authority; revokes sessions; does not create a normal session',
       accountSession: 'Opaque authenticated session after eligible active account authentication',
     },
-    futureCookiePolicyArchitectureOnly: {
-      status: 'architecture_only',
+    cookiePolicy: {
+      status: 'implemented',
       notes: [
-        'Future web clients may use HttpOnly Secure SameSite cookies binding an opaque session identifier',
-        'Cookies are not implemented in this slice',
-        'CSRF protections for cookie-authenticated mutating routes are future work',
+        'Web clients use HttpOnly Secure SameSite cookies binding an opaque session token',
+        'Cookie route responses never expose raw web session tokens in JSON',
+        'CSRF protections are enforced for mutative cookie-authenticated session routes',
       ],
     },
     rpIdAndOriginPolicy: {
@@ -246,17 +282,53 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         setup_verification_grant: 5,
       },
     },
+    passkeyAuthenticationRuntime: {
+      status: 'implemented',
+      featureFlag: 'PASSKEY_AUTHENTICATION_ENABLED',
+      dependency: '@simplewebauthn/server@13.3.2',
+      routes: [
+        'POST /v1/authentication/passkeys/options',
+        'POST /v1/authentication/passkeys/verify',
+        'GET /v1/authentication/session',
+        'POST /v1/authentication/session/rotate',
+        'POST /v1/authentication/logout',
+        'POST /v1/authentication/logout-all',
+      ],
+      ceremonyReference: 'authenticationCeremonyId (non-secret challenge row id)',
+      optionsPolicy: {
+        allowCredentials: 'omitted to avoid account enumeration',
+        userVerification: 'required',
+        challengeTtlMinutes: 5,
+      },
+      challengeStorage: 'HMAC-SHA-256 challenge_hash only; raw challenge never stored',
+      assertionPolicy: {
+        expectedOrigins: 'WEBAUTHN_ALLOWED_ORIGINS',
+        expectedRpId: 'WEBAUTHN_RP_ID',
+        userVerification: 'required',
+        signCounter:
+          'counter 0->0 and increasing counters accepted; repeated or decreasing positive counters are rejected and emit counter_anomaly_detected',
+        backupState:
+          'backup_eligible is retained; backed_up is monotonic and synced/backed-up passkeys are never downgraded',
+      },
+      sessionIssuance: {
+        web: 'Secure HttpOnly SameSite=Lax cookie only; no token in JSON',
+        mobile: 'sessionToken plus sessionExpiresAt JSON only; no Set-Cookie',
+      },
+      publicErrorCode: 'AUTHENTICATION_FAILED',
+      freshnessErrorCode: 'RECENT_AUTHENTICATION_REQUIRED',
+      rateLimits: {
+        optionsIp15m: 20,
+        optionsIp24h: 100,
+        optionsAnonymousClient15m: 10,
+        assertionCredential30m: 10,
+        assertionIp30m: 30,
+      },
+    },
     explicitExclusions: [
       'production email provider',
-      'passkey login / authentication assertions',
-      'session issuance',
-      'login routes',
-      'logout endpoints',
       'recovery runtime',
       'second-passkey management',
       'passkey deletion',
-      'cookies',
-      'CSRF',
       'JWTs',
       'membership',
       'Stripe',
