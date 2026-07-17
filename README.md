@@ -213,7 +213,7 @@ Live `docs/openapi.v1.json` continues to list only implemented routes.
 
 ## Authentication ceremony foundation
 
-Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated email-verification runtime for account setup. Neither slice implements live login, logout, production email delivery, WebAuthn, cookies, CSRF, or JWTs.
+Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated email-verification runtime for account setup. Slice 3 adds first-passkey WebAuthn registration runtime (setup-grant authorized). These slices do **not** implement live login, logout, production email delivery, authentication assertions, cookies, CSRF, or JWTs.
 
 ### Domain separation
 
@@ -273,18 +273,15 @@ Rules:
 
 - subjects are **pre-hashed** only (no raw email, IP, credential id, or token storage)
 - uniqueness: `(scope, subject_hash, window_started_at)`
-- no Redis and no live enforcement middleware in this slice
+- no Redis
+- Slice 3 enforces `setup_options_grant` (5 / grant) and `setup_verification_grant` (5 failed verifies / grant)
 
 ### Additional identity security event types
 
-Preserved prior types, plus:
+Preserved prior types, plus Slice 3:
 
-- `authentication_failed`
-- `session_created`
-- `session_rotated`
-- `session_revoked`
-- `counter_anomaly_detected`
-- `rate_limit_triggered`
+- `passkey_registration_failed`
+- `account_activated`
 
 ### Deterministic ceremony fixtures and contract
 
@@ -333,29 +330,88 @@ Rate limits (persistent `town.ceremony_rate_limits`):
 - delivery cooldown: 60 seconds per normalized email
 - failed attempts: 5 / challenge; 10 email+IP / 30 minutes
 
+### WebAuthn registration runtime (Slice 3)
+
+First-passkey registration for accounts that already have a verified primary email, status `pending_passkey`, and a valid restricted setup grant.
+
+| Item                     | Policy                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------ |
+| Dependency               | `@simplewebauthn/server` pinned exactly to **13.3.2** (no browser package; no second library)    |
+| Feature flag             | `WEBAUTHN_REGISTRATION_ENABLED` (default `false`)                                                |
+| RP / origin              | server-owned `WEBAUTHN_RP_ID`, `WEBAUTHN_ALLOWED_ORIGINS` (explicit list; no wildcards)          |
+| RP name                  | `WEBAUTHN_RP_NAME` default `TOWN`                                                                |
+| Challenge hash key       | `WEBAUTHN_CHALLENGE_HASH_KEY` (HMAC-SHA-256; min 32 chars)                                       |
+| Setup-grant hash key     | `EMAIL_VERIFICATION_HASH_KEY` (same keyed hash contract as Slice 2 issuance)                     |
+| Rate-limit subject key   | `CEREMONY_RATE_LIMIT_HASH_KEY`                                                                   |
+| Authorization            | `Authorization: SetupGrant <opaque-token>` only                                                  |
+| Discoverable credentials | required (`residentKey: required`, `requireResidentKey: true`)                                   |
+| User verification        | required                                                                                         |
+| Attestation              | `none`                                                                                           |
+| Algorithms               | ES256 (`-7`), RS256 (`-257`)                                                                     |
+| User handle              | opaque 32-byte `town.accounts.webauthn_user_handle` (unique, immutable, crypto-random)           |
+| Challenge TTL            | **5 minutes**; one active `register` challenge per account; hash-only storage                    |
+| Ceremony reference       | non-secret `registrationCeremonyId` locates the challenge row; setup grant remains authorization |
+| Credential storage       | `town.passkey_credentials` (credential id + public key bytes; never private keys / biometrics)   |
+| Activation               | atomic: credential + civic actor (`community_id` null) + link + `pending_passkey` → `active`     |
+| Concurrency              | exactly one concurrent verify may succeed                                                        |
+| Session issuance         | **none**                                                                                         |
+
+Production RP/origin policy (when `NODE_ENV=production`):
+
+- RP ID exactly `towncivic.org`
+- allowed origin exactly `https://towncivic.org`
+- localhost, Railway, GitHub Pages, www, API, HTTP, and wildcard origins rejected
+
+Staging / development profiles remain isolated (`staging.towncivic.org` / `localhost`).
+
+Implemented routes:
+
+| Method | Path                                        | Behavior                                                                 |
+| ------ | ------------------------------------------- | ------------------------------------------------------------------------ |
+| `POST` | `/v1/account/passkeys/registration/options` | Issue WebAuthn creation options; revoke prior active register challenges |
+| `POST` | `/v1/account/passkeys/registration/verify`  | Verify response; persist credential; activate account; consume grant     |
+
+Public ceremony failures use one generic error:
+
+```json
+{
+  "error": {
+    "code": "PASSKEY_REGISTRATION_FAILED",
+    "message": "Passkey registration could not be completed."
+  }
+}
+```
+
+When the feature is disabled, both routes return the safe `404 Not Found` shape.
+
+Controlled test actor `00000000-0000-4000-8000-000000000301` remains unlinked (`account_id` null). New civic actors are never assigned Milano/Munich by default.
+
 ### Explicit exclusions
 
 Still not implemented:
 
 - production email provider (Resend/SendGrid/SES/SMTP/etc.)
-- WebAuthn options or verification / passkey registration runtime
+- passkey login / authentication assertions
+- session issuance / cookies / CSRF / JWTs
 - login / logout endpoints
-- normal session cookies / CSRF / JWTs
 - recovery runtime
+- second-passkey management / passkey deletion
 - membership / Stripe / local verification
 - Railway / web integration / mobile integration / deployment
 
 ## Other endpoints
 
-| Method | Path                                       | Behavior                            |
-| ------ | ------------------------------------------ | ----------------------------------- |
-| `GET`  | `/health/live`                             | `{"status":"ok"}` (no DB)           |
-| `GET`  | `/health/ready`                            | DB readiness `ready` / `not_ready`  |
-| `GET`  | `/v1/communities`                          | active communities by position      |
-| `GET`  | `/v1/communities/:communitySlug/signals`   | published signals by position       |
-| `GET`  | `/v1/signals/:signalId`                    | one published signal by UUID        |
-| `POST` | `/v1/account/email-verifications`          | gated email verification request    |
-| `POST` | `/v1/account/email-verifications/complete` | gated email verification completion |
+| Method | Path                                        | Behavior                            |
+| ------ | ------------------------------------------- | ----------------------------------- |
+| `GET`  | `/health/live`                              | `{"status":"ok"}` (no DB)           |
+| `GET`  | `/health/ready`                             | DB readiness `ready` / `not_ready`  |
+| `GET`  | `/v1/communities`                           | active communities by position      |
+| `GET`  | `/v1/communities/:communitySlug/signals`    | published signals by position       |
+| `GET`  | `/v1/signals/:signalId`                     | one published signal by UUID        |
+| `POST` | `/v1/account/email-verifications`           | gated email verification request    |
+| `POST` | `/v1/account/email-verifications/complete`  | gated email verification completion |
+| `POST` | `/v1/account/passkeys/registration/options` | gated WebAuthn registration options |
+| `POST` | `/v1/account/passkeys/registration/verify`  | gated WebAuthn registration verify  |
 
 ## Local database workflow
 
@@ -398,13 +454,12 @@ CI runs format/lint/typecheck/unit tests, migration checks, foundation + control
 
 This slice still excludes:
 
-- real email delivery / email verification runtime
-- WebAuthn ceremonies / live passkey login / logout endpoints
-- public account authentication endpoints
-- passwords / social login / cookies / CSRF / JWTs
-- membership
-- Stripe
-- GPS / residency verification
+- production email provider
+- passkey login / authentication assertions / logout
+- session issuance / cookies / CSRF / JWTs
+- recovery runtime / second-passkey management / passkey removal
+- public password or social login
+- membership / Stripe / GPS / residency / local verification
 - confirmation removal / confirmation totals / comments / moderation
 - notifications / admin tooling
 - Redis / queues / workers / GraphQL

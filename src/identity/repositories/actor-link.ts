@@ -74,7 +74,7 @@ export async function createCivicActor(
   input: {
     id: string;
     displayLabel: string;
-    communityId: string;
+    communityId: string | null;
     createdAt: string;
     updatedAt: string;
   },

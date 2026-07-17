@@ -1,6 +1,10 @@
 import type { Database } from '../../db/client.js';
 import { createCivicActor, linkActorToAccount } from '../repositories/actor-link.js';
-import { createAccountShell, transitionAccountState } from '../repositories/accounts.js';
+import {
+  createAccountShell,
+  ensureWebAuthnUserHandle,
+  transitionAccountState,
+} from '../repositories/accounts.js';
 import {
   createEmailChallenge,
   createWebAuthnChallenge,
@@ -12,6 +16,7 @@ import { addPasskeyCredential } from '../repositories/passkeys.js';
 import { createRecoveryGrant } from '../repositories/recovery-grants.js';
 import { appendIdentitySecurityEvent } from '../repositories/security-events.js';
 import { normalizeEmail } from '../email-normalize.js';
+import { deterministicSha256 } from '../hashing.js';
 import {
   IDENTITY_ACCOUNT_IDS,
   IDENTITY_ACTOR_IDS,
@@ -89,6 +94,11 @@ async function bootstrapAccountWithEmailPasskeyActor(
     actorId: options.actorId,
     accountId: options.accountId,
     at: t3,
+  });
+  await ensureWebAuthnUserHandle(db, {
+    accountId: options.accountId,
+    handle: Buffer.from(deterministicSha256(`fixture-webauthn-handle-${options.accountId}`)),
+    now: t3,
   });
   await transitionAccountState(db, {
     accountId: options.accountId,

@@ -21,6 +21,7 @@ describe('loadEnv', () => {
       DB_IDLE_TIMEOUT_MS: 30000,
       CONTROLLED_CONFIRMATION_ENABLED: false,
       EMAIL_VERIFICATION_ENABLED: false,
+      WEBAUTHN_REGISTRATION_ENABLED: false,
       TRUST_PROXY: false,
     });
   });
@@ -51,6 +52,7 @@ describe('loadEnv', () => {
       DB_IDLE_TIMEOUT_MS: 12000,
       CONTROLLED_CONFIRMATION_ENABLED: false,
       EMAIL_VERIFICATION_ENABLED: false,
+      WEBAUTHN_REGISTRATION_ENABLED: false,
       TRUST_PROXY: true,
     });
   });

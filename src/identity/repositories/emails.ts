@@ -88,6 +88,30 @@ export async function findActiveEmailByNormalized(
   return rows[0] ?? null;
 }
 
+export async function findVerifiedPrimaryEmailForAccount(
+  db: Db,
+  accountId: string,
+  options?: { forUpdate?: boolean },
+): Promise<AccountEmailRow | null> {
+  const query = db
+    .select()
+    .from(accountEmails)
+    .where(
+      and(
+        eq(accountEmails.accountId, accountId),
+        eq(accountEmails.isPrimary, true),
+        isNull(accountEmails.revokedAt),
+      ),
+    )
+    .limit(1);
+  const rows = options?.forUpdate ? await query.for('update') : await query;
+  const row = rows[0];
+  if (row?.verifiedAt == null) {
+    return null;
+  }
+  return row;
+}
+
 export async function verifyEmail(
   db: Db,
   input: { emailId: string; verifiedAt: string },

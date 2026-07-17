@@ -43,11 +43,11 @@ import {
   setupGrants,
 } from '../src/db/schema.js';
 import { FOUNDATION_COMMUNITY_IDS } from '../src/db/seeds/foundation-content.js';
-import { IdentityInvariantError } from '../src/identity/errors.js';
 import { deterministicSha256 } from '../src/identity/hashing.js';
 import { createCivicActor, linkActorToAccount } from '../src/identity/repositories/actor-link.js';
 import {
   createAccountShell,
+  ensureWebAuthnUserHandle,
   transitionAccountState,
 } from '../src/identity/repositories/accounts.js';
 import { addAccountEmail, verifyEmail } from '../src/identity/repositories/emails.js';
@@ -165,6 +165,11 @@ describe('authentication ceremony repositories', () => {
       updatedAt: T2,
     });
     await linkActorToAccount(db(), { actorId, accountId, at: T3 });
+    await ensureWebAuthnUserHandle(db(), {
+      accountId,
+      handle: deterministicSha256(`ceremony-webauthn-handle-${accountId}`),
+      now: T3,
+    });
     await transitionAccountState(db(), { accountId, to: 'active', at: T3 });
     return { emailId, passkeyId, actorId };
   }
@@ -411,9 +416,14 @@ describe('authentication ceremony repositories', () => {
         updatedAt: T2,
       });
       await linkActorToAccount(db(), { actorId, accountId: noPasskey, at: T3 });
+      await ensureWebAuthnUserHandle(db(), {
+        accountId: noPasskey,
+        handle: deterministicSha256(`ceremony-webauthn-handle-${noPasskey}`),
+        now: T3,
+      });
       await expect(
         transitionAccountState(db(), { accountId: noPasskey, to: 'active', at: T3 }),
-      ).rejects.toBeInstanceOf(IdentityInvariantError);
+      ).rejects.toMatchObject({ code: 'ACTIVE_REQUIRES_ACTIVE_PASSKEY' });
 
       const noActor = '30000000-0000-4000-8000-000000000017';
       await preparePendingPasskeyAccount(noActor);
@@ -424,6 +434,11 @@ describe('authentication ceremony repositories', () => {
         publicKey: Buffer.from('pub-no-actor', 'utf8'),
         signCount: 0,
         createdAt: T2,
+      });
+      await ensureWebAuthnUserHandle(db(), {
+        accountId: noActor,
+        handle: deterministicSha256(`ceremony-webauthn-handle-${noActor}`),
+        now: T3,
       });
       await expect(
         transitionAccountState(db(), { accountId: noActor, to: 'active', at: T3 }),

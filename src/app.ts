@@ -11,6 +11,7 @@ import { communitiesRoutes } from './routes/communities.js';
 import { confirmationRoutes } from './routes/confirmations.js';
 import { emailVerificationRoutes } from './routes/email-verifications.js';
 import { healthRoutes } from './routes/health.js';
+import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { signalsRoutes } from './routes/signals.js';
 
 export type BuildAppOptions = {
@@ -28,13 +29,22 @@ export type BuildAppOptions = {
     generateSetupToken?: () => string;
     generateId?: () => string;
   };
+  passkeyRegistration?: {
+    now?: () => string;
+    generateId?: () => string;
+    generateUserHandle?: () => Buffer;
+  };
 };
 
-const CONTROL_KEY_REDACT = {
+const SENSITIVE_HEADER_REDACT = {
   paths: [
     'req.headers["x-town-control-key"]',
     'req.headers["X-TOWN-Control-Key"]',
     'req.headers.x-town-control-key',
+    'req.headers.authorization',
+    'req.headers.Authorization',
+    'req.headers["authorization"]',
+    'req.headers["Authorization"]',
   ],
   censor: '[Redacted]',
 };
@@ -51,14 +61,14 @@ function resolveLoggerOption(
     return {
       level: env.LOG_LEVEL,
       ...logger,
-      // Never serialize the temporary control key from request headers.
-      redact: CONTROL_KEY_REDACT,
+      // Never serialize control keys or SetupGrant Authorization headers.
+      redact: SENSITIVE_HEADER_REDACT,
     };
   }
 
   return {
     level: env.LOG_LEVEL,
-    redact: CONTROL_KEY_REDACT,
+    redact: SENSITIVE_HEADER_REDACT,
   };
 }
 
@@ -106,6 +116,18 @@ export async function buildApp(options: BuildAppOptions) {
       : {}),
     ...(options.emailVerification?.generateId !== undefined
       ? { generateId: options.emailVerification.generateId }
+      : {}),
+  });
+  await app.register(passkeyRegistrationRoutes, {
+    env: options.env,
+    ...(options.passkeyRegistration?.now !== undefined
+      ? { now: options.passkeyRegistration.now }
+      : {}),
+    ...(options.passkeyRegistration?.generateId !== undefined
+      ? { generateId: options.passkeyRegistration.generateId }
+      : {}),
+    ...(options.passkeyRegistration?.generateUserHandle !== undefined
+      ? { generateUserHandle: options.passkeyRegistration.generateUserHandle }
       : {}),
   });
 

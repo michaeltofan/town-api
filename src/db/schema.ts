@@ -60,6 +60,7 @@ export const accounts = town.table(
   {
     id: uuid('id').primaryKey(),
     status: text('status').notNull(),
+    webauthnUserHandle: bytea('webauthn_user_handle'),
     accountReadyAt: timestamp('account_ready_at', { withTimezone: true, mode: 'string' }),
     suspendedAt: timestamp('suspended_at', { withTimezone: true, mode: 'string' }),
     closedAt: timestamp('closed_at', { withTimezone: true, mode: 'string' }),
@@ -95,6 +96,17 @@ export const accounts = town.table(
           and ${table.closedAt} is not null)
       )`,
     ),
+    check(
+      'accounts_webauthn_user_handle_length',
+      sql`${table.webauthnUserHandle} is null or octet_length(${table.webauthnUserHandle}) = 32`,
+    ),
+    check(
+      'accounts_webauthn_user_handle_required_after_setup',
+      sql`${table.status} in ('pending_email', 'pending_passkey') or ${table.webauthnUserHandle} is not null`,
+    ),
+    uniqueIndex('accounts_webauthn_user_handle_unique')
+      .on(table.webauthnUserHandle)
+      .where(sql`${table.webauthnUserHandle} is not null`),
   ],
 );
 
@@ -162,7 +174,7 @@ export const actors = town.table(
     kind: text('kind').notNull(),
     status: text('status').notNull(),
     displayLabel: text('display_label').notNull(),
-    communityId: uuid('community_id').notNull(),
+    communityId: uuid('community_id'),
     accountId: uuid('account_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
@@ -186,6 +198,10 @@ export const actors = town.table(
     check(
       'actors_controlled_test_unlinked',
       sql`${table.kind} <> 'controlled_test' or ${table.accountId} is null`,
+    ),
+    check(
+      'actors_controlled_test_requires_community',
+      sql`${table.kind} <> 'controlled_test' or ${table.communityId} is not null`,
     ),
   ],
 );
@@ -358,6 +374,7 @@ export const webauthnChallenges = town.table(
     challengeHash: bytea('challenge_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
     consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -375,6 +392,19 @@ export const webauthnChallenges = town.table(
       'webauthn_challenges_expires_after_created',
       sql`${table.expiresAt} > ${table.createdAt}`,
     ),
+    check(
+      'webauthn_challenges_consumed_not_before_created',
+      sql`${table.consumedAt} is null or ${table.consumedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      'webauthn_challenges_revoked_not_before_created',
+      sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt}`,
+    ),
+    index('webauthn_challenges_active_register_idx')
+      .on(table.accountId, table.purpose)
+      .where(
+        sql`${table.consumedAt} is null and ${table.revokedAt} is null and ${table.purpose} = 'register'`,
+      ),
   ],
 );
 
@@ -411,7 +441,9 @@ export const identitySecurityEvents = town.table(
         'session_rotated',
         'session_revoked',
         'counter_anomaly_detected',
-        'rate_limit_triggered'
+        'rate_limit_triggered',
+        'passkey_registration_failed',
+        'account_activated'
       )`,
     ),
     index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
@@ -671,4 +703,6 @@ export type IdentitySecurityEventType =
   | 'session_rotated'
   | 'session_revoked'
   | 'counter_anomaly_detected'
-  | 'rate_limit_triggered';
+  | 'rate_limit_triggered'
+  | 'passkey_registration_failed'
+  | 'account_activated';

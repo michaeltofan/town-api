@@ -39,6 +39,12 @@ jobs:
       EMAIL_VERIFICATION_HASH_KEY: town-ci-email-verification-hash-key-32b
       CEREMONY_RATE_LIMIT_HASH_KEY: town-ci-ceremony-rate-limit-hash-key-32b
       EMAIL_VERIFICATION_DELIVERY_MODE: test
+      # CI-only localhost WebAuthn placeholders for passkey registration tests.
+      WEBAUTHN_REGISTRATION_ENABLED: 'true'
+      WEBAUTHN_RP_ID: localhost
+      WEBAUTHN_RP_NAME: TOWN
+      WEBAUTHN_ALLOWED_ORIGINS: http://localhost:3000
+      WEBAUTHN_CHALLENGE_HASH_KEY: town-ci-webauthn-challenge-hash-key-32by
       TRUST_PROXY: 'false'
 
     steps:

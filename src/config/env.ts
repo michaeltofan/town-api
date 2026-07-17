@@ -4,6 +4,14 @@ import {
   CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH,
   EMAIL_VERIFICATION_HASH_KEY_MIN_LENGTH,
 } from '../ceremony/email-verification/policy.js';
+import {
+  assertProductionWebAuthnPolicy,
+  parseAllowedOrigins,
+} from '../ceremony/passkey-registration/config.js';
+import {
+  DEFAULT_WEBAUTHN_RP_NAME,
+  WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH,
+} from '../ceremony/passkey-registration/policy.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -44,6 +52,13 @@ const EnvSchema = Type.Object(
     ),
     CEREMONY_RATE_LIMIT_HASH_KEY: Type.Optional(
       Type.String({ minLength: CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH }),
+    ),
+    WEBAUTHN_REGISTRATION_ENABLED: Type.Boolean({ default: false }),
+    WEBAUTHN_RP_ID: Type.Optional(Type.String({ minLength: 1 })),
+    WEBAUTHN_RP_NAME: Type.Optional(Type.String({ minLength: 1 })),
+    WEBAUTHN_ALLOWED_ORIGINS: Type.Optional(Type.String({ minLength: 1 })),
+    WEBAUTHN_CHALLENGE_HASH_KEY: Type.Optional(
+      Type.String({ minLength: WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH }),
     ),
     TRUST_PROXY: Type.Boolean({ default: false }),
   },
@@ -97,13 +112,22 @@ function sanitizeEnvErrorPath(path: string, message: string): string {
     return `${path}: must be a valid UUID when controlled confirmation is enabled`;
   }
   if (path.includes('EMAIL_VERIFICATION_HASH_KEY')) {
-    return `${path}: must meet minimum length when email verification is enabled`;
+    return `${path}: must meet minimum length when email verification or WebAuthn registration is enabled`;
   }
   if (path.includes('CEREMONY_RATE_LIMIT_HASH_KEY')) {
-    return `${path}: must meet minimum length when email verification is enabled`;
+    return `${path}: must meet minimum length when email verification or WebAuthn registration is enabled`;
   }
   if (path.includes('EMAIL_VERIFICATION_DELIVERY_MODE')) {
     return `${path}: must be test or development when email verification is enabled`;
+  }
+  if (path.includes('WEBAUTHN_CHALLENGE_HASH_KEY')) {
+    return `${path}: must meet minimum length when WebAuthn registration is enabled`;
+  }
+  if (path.includes('WEBAUTHN_ALLOWED_ORIGINS')) {
+    return `${path}: must be an explicit comma-separated origin allowlist when WebAuthn registration is enabled`;
+  }
+  if (path.includes('WEBAUTHN_RP_ID')) {
+    return `${path}: must be configured when WebAuthn registration is enabled`;
   }
   return `${path}: ${message}`;
 }
@@ -116,6 +140,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const emailVerificationEnabled = parseBooleanFlag(
     source.EMAIL_VERIFICATION_ENABLED,
     'EMAIL_VERIFICATION_ENABLED',
+  );
+  const webauthnRegistrationEnabled = parseBooleanFlag(
+    source.WEBAUTHN_REGISTRATION_ENABLED,
+    'WEBAUTHN_REGISTRATION_ENABLED',
   );
   const trustProxy = parseBooleanFlag(source.TRUST_PROXY, 'TRUST_PROXY');
   const nodeEnv = source.NODE_ENV ?? 'development';
@@ -135,6 +163,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       source.DB_IDLE_TIMEOUT_MS === undefined ? 30_000 : parseInteger(source.DB_IDLE_TIMEOUT_MS),
     CONTROLLED_CONFIRMATION_ENABLED: controlledEnabled,
     EMAIL_VERIFICATION_ENABLED: emailVerificationEnabled,
+    WEBAUTHN_REGISTRATION_ENABLED: webauthnRegistrationEnabled,
     TRUST_PROXY: trustProxy,
   };
 
@@ -193,6 +222,76 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     candidate.EMAIL_VERIFICATION_HASH_KEY = source.EMAIL_VERIFICATION_HASH_KEY;
     candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
     candidate.EMAIL_VERIFICATION_DELIVERY_MODE = deliveryMode;
+  }
+
+  if (webauthnRegistrationEnabled) {
+    if (!isNonEmptyString(source.WEBAUTHN_RP_ID)) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_RP_ID is required when WEBAUTHN_REGISTRATION_ENABLED is true',
+      );
+    }
+    if (source.WEBAUTHN_RP_ID.includes('*')) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_RP_ID must not contain wildcards',
+      );
+    }
+    const rpName =
+      isNonEmptyString(source.WEBAUTHN_RP_NAME) && source.WEBAUTHN_RP_NAME.trim().length > 0
+        ? source.WEBAUTHN_RP_NAME.trim()
+        : DEFAULT_WEBAUTHN_RP_NAME;
+    if (!isNonEmptyString(source.WEBAUTHN_ALLOWED_ORIGINS)) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_ALLOWED_ORIGINS is required when WEBAUTHN_REGISTRATION_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(source.WEBAUTHN_CHALLENGE_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_CHALLENGE_HASH_KEY is required when WEBAUTHN_REGISTRATION_ENABLED is true',
+      );
+    }
+    if (source.WEBAUTHN_CHALLENGE_HASH_KEY.length < WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: WEBAUTHN_CHALLENGE_HASH_KEY must be at least ${String(WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+    // Setup-grant token hashing must match Slice 2 issuance (EMAIL_VERIFICATION_HASH_KEY).
+    if (!isNonEmptyString(source.EMAIL_VERIFICATION_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: EMAIL_VERIFICATION_HASH_KEY is required when WEBAUTHN_REGISTRATION_ENABLED is true',
+      );
+    }
+    if (source.EMAIL_VERIFICATION_HASH_KEY.length < EMAIL_VERIFICATION_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: EMAIL_VERIFICATION_HASH_KEY must be at least ${String(EMAIL_VERIFICATION_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+    if (!isNonEmptyString(source.CEREMONY_RATE_LIMIT_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: CEREMONY_RATE_LIMIT_HASH_KEY is required when WEBAUTHN_REGISTRATION_ENABLED is true',
+      );
+    }
+    if (source.CEREMONY_RATE_LIMIT_HASH_KEY.length < CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: CEREMONY_RATE_LIMIT_HASH_KEY must be at least ${String(CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+
+    const allowedOrigins = parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, nodeEnv);
+    if (nodeEnv === 'production') {
+      assertProductionWebAuthnPolicy(source.WEBAUTHN_RP_ID, allowedOrigins);
+      if (source.WEBAUTHN_RP_ID === 'localhost') {
+        throw new Error(
+          'Invalid environment configuration: production WEBAUTHN_RP_ID cannot be localhost',
+        );
+      }
+    }
+
+    candidate.WEBAUTHN_RP_ID = source.WEBAUTHN_RP_ID;
+    candidate.WEBAUTHN_RP_NAME = rpName;
+    candidate.WEBAUTHN_ALLOWED_ORIGINS = source.WEBAUTHN_ALLOWED_ORIGINS;
+    candidate.WEBAUTHN_CHALLENGE_HASH_KEY = source.WEBAUTHN_CHALLENGE_HASH_KEY;
+    candidate.EMAIL_VERIFICATION_HASH_KEY = source.EMAIL_VERIFICATION_HASH_KEY;
+    candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
   }
 
   if (!isNonEmptyString(candidate.DATABASE_URL)) {

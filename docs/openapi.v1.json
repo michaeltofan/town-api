@@ -2,6 +2,12 @@
   "components": {
     "schemas": {},
     "securitySchemes": {
+      "setupGrantAuth": {
+        "description": "Restricted setup-grant authorization for first-passkey registration. Exact header form: Authorization: SetupGrant <opaque-token>. Not an account session and not a Bearer token.",
+        "in": "header",
+        "name": "Authorization",
+        "type": "apiKey"
+      },
       "TownControlKey": {
         "description": "Temporary controlled test mechanism for confirmation routes. Not public authentication. Do not treat this as a user session, OAuth token, or production identity system. Example secret values are intentionally omitted.",
         "in": "header",
@@ -11,7 +17,7 @@
     }
   },
   "info": {
-    "description": "TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, and gated email verification for account setup. Controlled confirmation and email verification are not public authentication.",
+    "description": "TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, and first-passkey WebAuthn registration. Controlled confirmation, email verification, and setup-grant passkey registration are not public authentication or login sessions.",
     "title": "TOWN API",
     "version": "0.1.0"
   },
@@ -380,6 +386,338 @@
           }
         },
         "summary": "Complete account email verification",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/v1/account/passkeys/registration/options": {
+      "post": {
+        "description": "Issues PublicKeyCredentialCreationOptions for first-passkey registration. Requires Authorization: SetupGrant <token>. Account is derived exclusively from the setup grant. Disabled by default via WEBAUTHN_REGISTRATION_ENABLED. Does not create a session.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "options": {
+                          "additionalProperties": true,
+                          "properties": {},
+                          "type": "object"
+                        },
+                        "registrationCeremonyId": {
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "registrationCeremonyId",
+                        "options"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "setupGrantAuth": []
+          }
+        ],
+        "summary": "Create WebAuthn passkey registration options",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/v1/account/passkeys/registration/verify": {
+      "post": {
+        "description": "Verifies a WebAuthn registration response, persists the passkey, creates an unassigned civic actor, activates the account, and consumes the setup grant. Requires Authorization: SetupGrant <token>. Failures return PASSKEY_REGISTRATION_FAILED. Does not create a session.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "registrationCeremonyId": {
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  },
+                  "response": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "authenticatorAttachment": {
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "clientExtensionResults": {
+                        "additionalProperties": {},
+                        "type": "object"
+                      },
+                      "id": {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "rawId": {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "response": {
+                        "additionalProperties": true,
+                        "properties": {
+                          "attestationObject": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "clientDataJSON": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "transports": {
+                            "items": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "clientDataJSON",
+                          "attestationObject"
+                        ],
+                        "type": "object"
+                      },
+                      "type": {
+                        "enum": [
+                          "public-key"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "rawId",
+                      "type",
+                      "response"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "registrationCeremonyId",
+                  "response"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "ACCOUNT_READY"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "setupGrantAuth": []
+          }
+        ],
+        "summary": "Verify WebAuthn passkey registration",
         "tags": [
           "Account"
         ]
@@ -1360,7 +1698,7 @@
       "name": "Confirmations"
     },
     {
-      "description": "Account setup email verification. Does not create sessions, activate accounts, or disclose account existence.",
+      "description": "Account setup email verification and first-passkey WebAuthn registration. Does not create sessions or disclose account existence beyond protocol-required WebAuthn options.",
       "name": "Account"
     }
   ]
