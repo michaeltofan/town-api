@@ -31,8 +31,8 @@ production deployment.
 - [ ] Image published (Amsterdam region).
 - [ ] `npm run db:migrate` run from a controlled release step (advisory
       lock acquired).
-- [ ] `npm run db:migrate:verify` returns `status: ok` and `applied`
-      equals the expected count.
+- [ ] `npm run db:migrate:verify` returns `status: ok`, `detail: ok`, and
+      applied/expected counts match the journal (ordered hash+timestamp).
 - [ ] New container rolled; `/health/live` returns `200`.
 - [ ] `/health/ready` returns `200` with all three components `ok`.
 - [ ] `/health/build` returns the expected `environment` and `commitSha`.

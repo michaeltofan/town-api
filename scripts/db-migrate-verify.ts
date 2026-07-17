@@ -19,17 +19,18 @@ async function main(): Promise<void> {
       status: result.status,
       expected: result.expected,
       applied: result.applied,
+      detail: result.detail,
     };
     process.stdout.write(`${JSON.stringify(payload)}\n`);
     if (result.status !== 'ok') {
       process.stderr.write(
-        `Migration verify failed: status=${result.status} expected=${String(result.expected)} applied=${String(result.applied)}\n`,
+        `Migration verify failed: status=${result.status} detail=${result.detail} expected=${String(result.expected)} applied=${String(result.applied)}\n`,
       );
       process.exit(1);
     }
-    if (result.applied !== EXPECTED_MIGRATION_COUNT) {
+    if (result.applied !== EXPECTED_MIGRATION_COUNT || result.expected !== EXPECTED_MIGRATION_COUNT) {
       process.stderr.write(
-        `Migration verify failed: applied count does not match expected constant\n`,
+        `Migration verify failed: applied/expected count does not match journal constant\n`,
       );
       process.exit(1);
     }

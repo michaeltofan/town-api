@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
+import cors from '@fastify/cors';
 import { runSmoke } from '../src/ops/smoke-runner.js';
 import { EXPECTED_MIGRATION_COUNT } from '../src/db/migration-ledger.js';
+import {
+  CORS_ALLOWED_HEADERS,
+  CORS_ALLOWED_METHODS,
+  CORS_MAX_AGE_SECONDS,
+} from '../src/ops/cors-origins.js';
 
 type FakeState = {
   ready: 'ready' | 'not_ready';
@@ -9,6 +15,7 @@ type FakeState = {
   buildEnvironment: string;
   webhookMounted: boolean;
   membershipStatus: number;
+  allowedOrigin?: string;
 };
 
 async function buildFakeApp(state: FakeState): Promise<{
@@ -17,6 +24,26 @@ async function buildFakeApp(state: FakeState): Promise<{
   baseUrl: string;
 }> {
   const app = Fastify({ logger: false });
+  const allowed = new Set(state.allowedOrigin !== undefined ? [state.allowedOrigin] : []);
+
+  await app.register(cors, {
+    credentials: true,
+    methods: [...CORS_ALLOWED_METHODS],
+    allowedHeaders: [...CORS_ALLOWED_HEADERS],
+    maxAge: CORS_MAX_AGE_SECONDS,
+    strictPreflight: true,
+    origin: (requestOrigin, callback) => {
+      if (requestOrigin === undefined || requestOrigin === '') {
+        callback(null, false);
+        return;
+      }
+      if (requestOrigin === 'null' || !allowed.has(requestOrigin)) {
+        callback(null, false);
+        return;
+      }
+      callback(null, true);
+    },
+  });
 
   app.get('/health/live', () => ({ status: 'ok' }));
   app.get('/health/ready', (_req, reply) => {
@@ -60,13 +87,15 @@ async function buildFakeApp(state: FakeState): Promise<{
 }
 
 describe('runSmoke', () => {
-  it('passes when everything is healthy', async () => {
+  it('passes when everything is healthy including CORS positives', async () => {
+    const authorizedOrigin = 'https://staging.towncivic.org';
     const { app, fetchImpl, baseUrl } = await buildFakeApp({
       ready: 'ready',
       buildCommit: 'abc',
       buildEnvironment: 'staging',
       webhookMounted: true,
       membershipStatus: 401,
+      allowedOrigin: authorizedOrigin,
     });
     try {
       const result = await runSmoke({
@@ -75,11 +104,19 @@ describe('runSmoke', () => {
         expectCommitSha: 'abc',
         timeoutMs: 5000,
         unauthorizedOrigin: 'https://evil.example',
+        authorizedOrigin,
         fetchImpl,
       });
       expect(result.ok).toBe(true);
       const failed = result.checks.filter((c) => c.status === 'failed');
       expect(failed).toEqual([]);
+      expect(result.checks.find((c) => c.name === 'cors-authorized-origin')?.status).toBe('passed');
+      expect(result.checks.find((c) => c.name === 'cors-preflight')?.status).toBe('passed');
+      expect(result.checks.find((c) => c.name === 'cors-null-origin')?.status).toBe('passed');
+      expect(result.checks.find((c) => c.name === 'cors-no-origin')?.status).toBe('passed');
+      expect(result.checks.find((c) => c.name === 'cors-unauthorized-origin')?.status).toBe(
+        'passed',
+      );
     } finally {
       await app.close();
     }
@@ -173,7 +210,7 @@ describe('runSmoke', () => {
     expect(transport?.status).toBe('failed');
   });
 
-  it('skips CORS check when no unauthorized origin is provided', async () => {
+  it('skips optional CORS origin checks when origins are not provided', async () => {
     const { app, fetchImpl, baseUrl } = await buildFakeApp({
       ready: 'ready',
       buildCommit: 'abc',
@@ -183,8 +220,15 @@ describe('runSmoke', () => {
     });
     try {
       const result = await runSmoke({ baseUrl, environment: 'staging', fetchImpl });
-      const cors = result.checks.find((c) => c.name === 'cors-unauthorized-origin');
-      expect(cors?.status).toBe('skipped');
+      expect(result.checks.find((c) => c.name === 'cors-unauthorized-origin')?.status).toBe(
+        'skipped',
+      );
+      expect(result.checks.find((c) => c.name === 'cors-authorized-origin')?.status).toBe(
+        'skipped',
+      );
+      expect(result.checks.find((c) => c.name === 'cors-preflight')?.status).toBe('skipped');
+      expect(result.checks.find((c) => c.name === 'cors-null-origin')?.status).toBe('passed');
+      expect(result.checks.find((c) => c.name === 'cors-no-origin')?.status).toBe('passed');
     } finally {
       await app.close();
     }

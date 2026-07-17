@@ -7,6 +7,7 @@ import databasePlugin from './db/plugin.js';
 import { buildIdentityFromEnv } from './ops/build-identity.js';
 import { resolveRequestId } from './ops/request-id.js';
 import controlledAccessPlugin from './plugins/controlled-access.js';
+import corsPlugin from './plugins/cors.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
 import openApiPlugin from './plugins/openapi.js';
 import type { EmailVerificationDeliveryAdapter } from './ceremony/email-verification/delivery.js';
@@ -177,6 +178,7 @@ export async function buildApp(options: BuildAppOptions) {
   const database = options.database ?? createDatabaseFromEnv(options.env);
 
   await app.register(errorHandlerPlugin);
+  await app.register(corsPlugin, { env: options.env });
   await app.register(cookie);
   await app.register(openApiPlugin);
   await app.register(controlledAccessPlugin, { env: options.env });

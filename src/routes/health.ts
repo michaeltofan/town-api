@@ -44,7 +44,7 @@ const healthRoutesPlugin = (
         tags: ['Health'],
         summary: 'Readiness probe',
         description:
-          'Returns ready when configuration is accepted, PostgreSQL is reachable within the bounded readiness timeout, and the drizzle migration ledger matches the expected count. Returns not_ready with safe component checks otherwise. Never exposes migration names, SQL, connection strings, or secrets.',
+          'Returns ready when configuration is accepted, PostgreSQL is reachable within the bounded readiness timeout, and the drizzle migration ledger matches the repository-expected ordered hash and timestamp sequence. Returns not_ready with safe component checks otherwise. Never exposes migration names, hashes, SQL, connection strings, or secrets.',
         response: {
           200: ReadyResponseSchema,
           503: NotReadyResponseSchema,
@@ -85,6 +85,7 @@ const healthRoutesPlugin = (
           {
             event: 'readiness_migrations_failed',
             migrationStatus: migrationResult.status,
+            migrationDetail: migrationResult.detail,
             expected: migrationResult.expected,
             applied: migrationResult.applied,
           },

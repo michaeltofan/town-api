@@ -6,9 +6,9 @@
  * The runner performs a fixed, safe set of checks against a running instance:
  * transport (https unless localhost), /health/live shape, /health/ready
  * component shape, /health/build identity match, an unauthorized route
- * expecting 401, a rejected CORS origin, and an invalid Stripe webhook
- * signature. It never prints request/response bodies verbatim; leaked secret
- * sentinels short-circuit to failure.
+ * expecting 401, CORS unauthorized/authorized/null/preflight/no-origin,
+ * and an invalid Stripe webhook signature. It never prints request/response
+ * bodies verbatim; leaked secret sentinels short-circuit to failure.
  */
 
 export type SmokeCheckStatus = 'passed' | 'failed' | 'skipped';
@@ -78,6 +78,15 @@ async function readBounded(response: Response): Promise<string> {
   const bounded = text.slice(0, 4096);
   assertNoSecretLeakage(bounded);
   return bounded;
+}
+
+function assertOriginRejected(allow: string | null, origin: string, label: string): void {
+  if (allow !== null && allow === origin) {
+    throw new Error(`${label}: CORS allowed a rejected origin`);
+  }
+  if (allow === '*') {
+    throw new Error(`${label}: CORS must not use wildcard origins`);
+  }
 }
 
 export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
@@ -214,6 +223,36 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
     return '401';
   });
 
+  await runCheck('cors-no-origin', async () => {
+    const response = await withTimeout(
+      fetchImpl(`${baseUrl}/health/live`, { method: 'GET' }),
+      timeoutMs,
+      'cors-no-origin',
+    );
+    if (response.status !== 200) {
+      throw new Error(`unexpected status ${String(response.status)}`);
+    }
+    const allow = response.headers.get('access-control-allow-origin');
+    if (allow !== null) {
+      throw new Error('no-Origin request must not receive Access-Control-Allow-Origin');
+    }
+    await readBounded(response);
+    return 'ok';
+  });
+
+  await runCheck('cors-null-origin', async () => {
+    const response = await withTimeout(
+      fetchImpl(`${baseUrl}/health/live`, {
+        method: 'GET',
+        headers: { Origin: 'null' },
+      }),
+      timeoutMs,
+      'cors-null-origin',
+    );
+    assertOriginRejected(response.headers.get('access-control-allow-origin'), 'null', 'null');
+    return 'rejected';
+  });
+
   await runCheck(
     'cors-unauthorized-origin',
     async () => {
@@ -229,11 +268,82 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
         timeoutMs,
         'cors-unauthorized-origin',
       );
-      const allow = response.headers.get('access-control-allow-origin');
-      if (allow !== null && allow === origin) {
-        throw new Error('CORS allowed an unauthorized origin');
-      }
+      assertOriginRejected(response.headers.get('access-control-allow-origin'), origin, 'unauthorized');
       return 'rejected';
+    },
+    true,
+  );
+
+  await runCheck(
+    'cors-authorized-origin',
+    async () => {
+      const origin = options.authorizedOrigin;
+      if (origin === undefined || origin.length === 0) {
+        throw new Error('no authorized origin provided');
+      }
+      const response = await withTimeout(
+        fetchImpl(`${baseUrl}/health/live`, {
+          method: 'GET',
+          headers: { Origin: origin },
+        }),
+        timeoutMs,
+        'cors-authorized-origin',
+      );
+      if (response.status !== 200) {
+        throw new Error(`unexpected status ${String(response.status)}`);
+      }
+      const allow = response.headers.get('access-control-allow-origin');
+      if (allow !== origin) {
+        throw new Error(`expected Access-Control-Allow-Origin ${origin}, got ${String(allow)}`);
+      }
+      if (allow === '*') {
+        throw new Error('CORS must not use wildcard origins');
+      }
+      const credentials = response.headers.get('access-control-allow-credentials');
+      if (credentials !== 'true') {
+        throw new Error('expected Access-Control-Allow-Credentials true');
+      }
+      await readBounded(response);
+      return 'accepted';
+    },
+    true,
+  );
+
+  await runCheck(
+    'cors-preflight',
+    async () => {
+      const origin = options.authorizedOrigin;
+      if (origin === undefined || origin.length === 0) {
+        throw new Error('no authorized origin provided for preflight');
+      }
+      const response = await withTimeout(
+        fetchImpl(`${baseUrl}/health/live`, {
+          method: 'OPTIONS',
+          headers: {
+            Origin: origin,
+            'Access-Control-Request-Method': 'GET',
+            'Access-Control-Request-Headers': 'content-type,authorization',
+          },
+        }),
+        timeoutMs,
+        'cors-preflight',
+      );
+      if (response.status !== 204 && response.status !== 200) {
+        throw new Error(`unexpected preflight status ${String(response.status)}`);
+      }
+      const allow = response.headers.get('access-control-allow-origin');
+      if (allow !== origin) {
+        throw new Error(`preflight ACAO mismatch: ${String(allow)}`);
+      }
+      const methods = response.headers.get('access-control-allow-methods');
+      if (methods === null || !methods.toUpperCase().includes('GET')) {
+        throw new Error('preflight missing Allow-Methods');
+      }
+      const maxAge = response.headers.get('access-control-max-age');
+      if (maxAge === null || Number.parseInt(maxAge, 10) <= 0) {
+        throw new Error('preflight missing bounded Max-Age');
+      }
+      return 'ok';
     },
     true,
   );

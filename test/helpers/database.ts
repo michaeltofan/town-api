@@ -28,6 +28,8 @@ export function createFakeDatabase(options?: {
     status: migrationStatus,
     expected: EXPECTED_MIGRATION_COUNT,
     applied: migrationStatus === 'ok' ? EXPECTED_MIGRATION_COUNT : 0,
+    detail:
+      migrationStatus === 'ok' ? 'ok' : migrationStatus === 'unknown' ? 'unknown' : 'hash_mismatch',
   };
 
   const database: FakeDatabase = {

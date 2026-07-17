@@ -94,9 +94,11 @@ Ordering and bounded behaviour:
    error, `database: fail`. On success, `database: ok`.
 3. If `database` is not `ok`, respond `503` with `migrations: unknown`.
 4. Otherwise, run the migration ledger check bounded by the same timeout.
-   `ok` when applied count equals expected count. `fail` when the counts
-   differ. `unknown` when the `drizzle.__drizzle_migrations` table does not
-   yet exist.
+   `ok` when the applied ordered `(hash, created_at)` sequence exactly matches
+   the repository journal+SQL expected sequence. `fail` on missing, extra,
+   hash mismatch, timestamp mismatch, order mismatch, or malformed ledger
+   rows. `unknown` when the `drizzle.__drizzle_migrations` table does not
+   yet exist. Same-count/different-history is detected via hash comparison.
 5. `config` is `ok` whenever the process has successfully loaded
    configuration at boot (a fail-closed validation happens in
    `src/config/env.ts`). Any misconfiguration prevents the process from
@@ -158,10 +160,31 @@ production while only test/development delivery adapters exist.
 
 `npm run db:migrate:verify` (`scripts/db-migrate-verify.ts`):
 
-- Non-mutating. Reads `drizzle.__drizzle_migrations` and compares the applied
-  count to the expected count from `drizzle/meta/_journal.json`.
+- Non-mutating. Reads `drizzle.__drizzle_migrations` (`id`, `hash`,
+  `created_at`) ordered by `id` and compares to the repository-expected
+  sequence derived from `drizzle/meta/_journal.json` plus SHA-256 hashes of
+  each `${tag}.sql` file (same algorithm as `drizzle-orm/migrator`).
+- Detects missing, extra, hash mismatch (including same-count/different-
+  history), timestamp mismatch, order permutation, and malformed rows.
 - Exit code `0` on match, `1` on mismatch or incomplete.
 - Shares logic with `/health/ready` via `src/db/migration-ledger.ts`.
+
+### Runtime CORS
+
+`@fastify/cors@11.3.0` is registered in `buildApp` with an exact allowlist
+from `WEBAUTHN_ALLOWED_ORIGINS` (`src/ops/cors-origins.ts`,
+`src/plugins/cors.ts`):
+
+- No wildcard origins.
+- Rejects unauthorized, `null`, and malformed Origins (no ACAO reflection).
+- Accepts only exact configured origins; credentials enabled for cookie
+  sessions.
+- Methods: GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS.
+- Headers: Content-Type, Authorization, X-Request-Id, X-TOWN-Control-Key,
+  Stripe-Signature.
+- Preflight `maxAge`: 600 seconds.
+- Requests without an `Origin` header remain functional (native/server).
+- CORS is not authentication or authorization.
 
 `buildApp()` and `src/server.ts` intentionally do NOT run migrations at
 startup. Migration is a deploy-time step.
@@ -199,8 +222,10 @@ bounded set of read-only checks:
 - `/health/build` matches `--environment`; when `--expect-commit` is given,
   `commitSha` must match.
 - An unauthorized route (e.g. `GET /v1/account/membership`) returns `401`.
-- An unauthorized CORS `Origin` is rejected (`Access-Control-Allow-Origin`
-  is either absent or not equal to the supplied origin).
+- CORS: no-Origin remains valid; literal `null` Origin is rejected;
+  unauthorized Origin is rejected; configured authorized Origin is accepted
+  with credentials; authorized preflight returns methods and bounded max-age
+  (`--authorized-origin` / `--unauthorized-origin`).
 - The Stripe webhook endpoint rejects an invalid signature with `400`
   (skipped harmlessly if the webhook route is not mounted).
 - No response body includes a known secret sentinel (`sk_live_`, `whsec_`,
