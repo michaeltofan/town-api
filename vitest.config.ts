@@ -28,6 +28,8 @@ export default defineConfig({
       'test/email-verification.migration.test.ts',
       'test/passkey-registration.api.test.ts',
       'test/passkey-registration.migration.test.ts',
+      'test/passkey-authentication.api.test.ts',
+      'test/passkey-authentication.migration.test.ts',
     ],
     coverage: {
       provider: 'v8',

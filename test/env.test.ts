@@ -22,6 +22,7 @@ describe('loadEnv', () => {
       CONTROLLED_CONFIRMATION_ENABLED: false,
       EMAIL_VERIFICATION_ENABLED: false,
       WEBAUTHN_REGISTRATION_ENABLED: false,
+      PASSKEY_AUTHENTICATION_ENABLED: false,
       TRUST_PROXY: false,
     });
   });
@@ -53,6 +54,7 @@ describe('loadEnv', () => {
       CONTROLLED_CONFIRMATION_ENABLED: false,
       EMAIL_VERIFICATION_ENABLED: false,
       WEBAUTHN_REGISTRATION_ENABLED: false,
+      PASSKEY_AUTHENTICATION_ENABLED: false,
       TRUST_PROXY: true,
     });
   });

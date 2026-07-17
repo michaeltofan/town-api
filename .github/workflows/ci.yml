@@ -45,6 +45,11 @@ jobs:
       WEBAUTHN_RP_NAME: TOWN
       WEBAUTHN_ALLOWED_ORIGINS: http://localhost:3000
       WEBAUTHN_CHALLENGE_HASH_KEY: town-ci-webauthn-challenge-hash-key-32by
+      # CI-only localhost passkey authentication/session placeholders.
+      PASSKEY_AUTHENTICATION_ENABLED: 'true'
+      PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY: town-ci-passkey-auth-challenge-hash-key32
+      SESSION_TOKEN_HASH_KEY: town-ci-session-token-hash-key-32bytesxx
+      WEB_SESSION_COOKIE_NAME: __Host-Http-town_session
       TRUST_PROXY: 'false'
 
     steps:

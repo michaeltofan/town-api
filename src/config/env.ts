@@ -9,6 +9,11 @@ import {
   parseAllowedOrigins,
 } from '../ceremony/passkey-registration/config.js';
 import {
+  DEFAULT_WEB_SESSION_COOKIE_NAME,
+  PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY_MIN_LENGTH,
+  SESSION_TOKEN_HASH_KEY_MIN_LENGTH,
+} from '../ceremony/passkey-authentication/policy.js';
+import {
   DEFAULT_WEBAUTHN_RP_NAME,
   WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH,
 } from '../ceremony/passkey-registration/policy.js';
@@ -60,6 +65,14 @@ const EnvSchema = Type.Object(
     WEBAUTHN_CHALLENGE_HASH_KEY: Type.Optional(
       Type.String({ minLength: WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH }),
     ),
+    PASSKEY_AUTHENTICATION_ENABLED: Type.Boolean({ default: false }),
+    PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY: Type.Optional(
+      Type.String({ minLength: PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY_MIN_LENGTH }),
+    ),
+    SESSION_TOKEN_HASH_KEY: Type.Optional(
+      Type.String({ minLength: SESSION_TOKEN_HASH_KEY_MIN_LENGTH }),
+    ),
+    WEB_SESSION_COOKIE_NAME: Type.Optional(Type.String({ minLength: 1 })),
     TRUST_PROXY: Type.Boolean({ default: false }),
   },
   { additionalProperties: false },
@@ -127,7 +140,13 @@ function sanitizeEnvErrorPath(path: string, message: string): string {
     return `${path}: must be an explicit comma-separated origin allowlist when WebAuthn registration is enabled`;
   }
   if (path.includes('WEBAUTHN_RP_ID')) {
-    return `${path}: must be configured when WebAuthn registration is enabled`;
+    return `${path}: must be configured when WebAuthn registration or passkey authentication is enabled`;
+  }
+  if (path.includes('PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY')) {
+    return `${path}: must meet minimum length when passkey authentication is enabled`;
+  }
+  if (path.includes('SESSION_TOKEN_HASH_KEY')) {
+    return `${path}: must meet minimum length when passkey authentication is enabled`;
   }
   return `${path}: ${message}`;
 }
@@ -144,6 +163,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const webauthnRegistrationEnabled = parseBooleanFlag(
     source.WEBAUTHN_REGISTRATION_ENABLED,
     'WEBAUTHN_REGISTRATION_ENABLED',
+  );
+  const passkeyAuthenticationEnabled = parseBooleanFlag(
+    source.PASSKEY_AUTHENTICATION_ENABLED,
+    'PASSKEY_AUTHENTICATION_ENABLED',
   );
   const trustProxy = parseBooleanFlag(source.TRUST_PROXY, 'TRUST_PROXY');
   const nodeEnv = source.NODE_ENV ?? 'development';
@@ -164,6 +187,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     CONTROLLED_CONFIRMATION_ENABLED: controlledEnabled,
     EMAIL_VERIFICATION_ENABLED: emailVerificationEnabled,
     WEBAUTHN_REGISTRATION_ENABLED: webauthnRegistrationEnabled,
+    PASSKEY_AUTHENTICATION_ENABLED: passkeyAuthenticationEnabled,
     TRUST_PROXY: trustProxy,
   };
 
@@ -292,6 +316,84 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     candidate.WEBAUTHN_CHALLENGE_HASH_KEY = source.WEBAUTHN_CHALLENGE_HASH_KEY;
     candidate.EMAIL_VERIFICATION_HASH_KEY = source.EMAIL_VERIFICATION_HASH_KEY;
     candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
+  }
+
+  if (passkeyAuthenticationEnabled) {
+    if (!isNonEmptyString(source.WEBAUTHN_RP_ID)) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_RP_ID is required when PASSKEY_AUTHENTICATION_ENABLED is true',
+      );
+    }
+    if (source.WEBAUTHN_RP_ID.includes('*')) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_RP_ID must not contain wildcards',
+      );
+    }
+    const rpName =
+      isNonEmptyString(source.WEBAUTHN_RP_NAME) && source.WEBAUTHN_RP_NAME.trim().length > 0
+        ? source.WEBAUTHN_RP_NAME.trim()
+        : DEFAULT_WEBAUTHN_RP_NAME;
+    if (!isNonEmptyString(source.WEBAUTHN_ALLOWED_ORIGINS)) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_ALLOWED_ORIGINS is required when PASSKEY_AUTHENTICATION_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(source.PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY is required when PASSKEY_AUTHENTICATION_ENABLED is true',
+      );
+    }
+    if (
+      source.PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY.length <
+      PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY_MIN_LENGTH
+    ) {
+      throw new Error(
+        `Invalid environment configuration: PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY must be at least ${String(PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+    if (!isNonEmptyString(source.SESSION_TOKEN_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: SESSION_TOKEN_HASH_KEY is required when PASSKEY_AUTHENTICATION_ENABLED is true',
+      );
+    }
+    if (source.SESSION_TOKEN_HASH_KEY.length < SESSION_TOKEN_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: SESSION_TOKEN_HASH_KEY must be at least ${String(SESSION_TOKEN_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+    if (!isNonEmptyString(source.CEREMONY_RATE_LIMIT_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: CEREMONY_RATE_LIMIT_HASH_KEY is required when PASSKEY_AUTHENTICATION_ENABLED is true',
+      );
+    }
+    if (source.CEREMONY_RATE_LIMIT_HASH_KEY.length < CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: CEREMONY_RATE_LIMIT_HASH_KEY must be at least ${String(CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+
+    const allowedOrigins = parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, nodeEnv);
+    if (nodeEnv === 'production') {
+      assertProductionWebAuthnPolicy(source.WEBAUTHN_RP_ID, allowedOrigins);
+      if (source.WEBAUTHN_RP_ID === 'localhost') {
+        throw new Error(
+          'Invalid environment configuration: production WEBAUTHN_RP_ID cannot be localhost',
+        );
+      }
+    }
+
+    const cookieName = isNonEmptyString(source.WEB_SESSION_COOKIE_NAME)
+      ? source.WEB_SESSION_COOKIE_NAME
+      : DEFAULT_WEB_SESSION_COOKIE_NAME;
+
+    candidate.WEBAUTHN_RP_ID = source.WEBAUTHN_RP_ID;
+    candidate.WEBAUTHN_RP_NAME = rpName;
+    candidate.WEBAUTHN_ALLOWED_ORIGINS = source.WEBAUTHN_ALLOWED_ORIGINS;
+    candidate.PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY =
+      source.PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY;
+    candidate.SESSION_TOKEN_HASH_KEY = source.SESSION_TOKEN_HASH_KEY;
+    candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
+    candidate.WEB_SESSION_COOKIE_NAME = cookieName;
   }
 
   if (!isNonEmptyString(candidate.DATABASE_URL)) {

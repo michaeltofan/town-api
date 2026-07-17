@@ -16,6 +16,7 @@ export async function addPasskeyCredential(
     transports?: string[] | null;
     deviceType?: 'platform' | 'cross_platform' | null;
     backedUp?: boolean | null;
+    backupEligible?: boolean | null;
     aaguid?: string | null;
     label?: string | null;
     createdAt: string;
@@ -37,6 +38,7 @@ export async function addPasskeyCredential(
         transports: input.transports ?? null,
         deviceType: input.deviceType ?? null,
         backedUp: input.backedUp ?? null,
+        backupEligible: input.backupEligible ?? null,
         aaguid: input.aaguid ?? null,
         label: input.label ?? null,
         lastUsedAt: null,
@@ -74,6 +76,62 @@ export async function listActivePasskeys(
     .select()
     .from(passkeyCredentials)
     .where(and(eq(passkeyCredentials.accountId, accountId), isNull(passkeyCredentials.revokedAt)));
+}
+
+export async function findActivePasskeyByCredentialId(
+  db: Db,
+  credentialId: Buffer,
+): Promise<PasskeyCredentialRow | null> {
+  const rows = await db
+    .select()
+    .from(passkeyCredentials)
+    .where(
+      and(eq(passkeyCredentials.credentialId, credentialId), isNull(passkeyCredentials.revokedAt)),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updatePasskeyAuthenticationState(
+  db: Db,
+  input: {
+    credentialRowId: string;
+    signCount: number;
+    backedUp: boolean | null;
+    backupEligible: boolean | null;
+    lastUsedAt: string;
+  },
+): Promise<PasskeyCredentialRow> {
+  if (input.signCount < 0) {
+    throw new IdentityInvariantError('INVALID_SIGN_COUNT', 'Passkey sign count cannot be negative');
+  }
+
+  const existing = await db
+    .select()
+    .from(passkeyCredentials)
+    .where(eq(passkeyCredentials.id, input.credentialRowId))
+    .limit(1)
+    .for('update');
+  const credential = existing[0];
+  if (!credential || credential.revokedAt != null) {
+    throw new IdentityInvariantError('PASSKEY_NOT_ACTIVE', 'Passkey is not active');
+  }
+
+  const updated = await db
+    .update(passkeyCredentials)
+    .set({
+      signCount: input.signCount,
+      backedUp: input.backedUp,
+      backupEligible: input.backupEligible,
+      lastUsedAt: input.lastUsedAt,
+    })
+    .where(eq(passkeyCredentials.id, input.credentialRowId))
+    .returning();
+  const row = updated[0];
+  if (!row) {
+    throw new Error('Failed to update passkey authentication state');
+  }
+  return row;
 }
 
 export async function revokePasskey(

@@ -1,4 +1,5 @@
 import { type TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import cookie from '@fastify/cookie';
 import Fastify from 'fastify';
 import type { Env } from './config/env.js';
 import { createDatabaseFromEnv, type Database } from './db/client.js';
@@ -11,6 +12,7 @@ import { communitiesRoutes } from './routes/communities.js';
 import { confirmationRoutes } from './routes/confirmations.js';
 import { emailVerificationRoutes } from './routes/email-verifications.js';
 import { healthRoutes } from './routes/health.js';
+import { passkeyAuthenticationRoutes } from './routes/passkey-authentication.js';
 import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { signalsRoutes } from './routes/signals.js';
 
@@ -34,6 +36,11 @@ export type BuildAppOptions = {
     generateId?: () => string;
     generateUserHandle?: () => Buffer;
   };
+  passkeyAuthentication?: {
+    now?: () => string;
+    generateId?: () => string;
+    generateToken?: () => string;
+  };
 };
 
 const SENSITIVE_HEADER_REDACT = {
@@ -45,6 +52,11 @@ const SENSITIVE_HEADER_REDACT = {
     'req.headers.Authorization',
     'req.headers["authorization"]',
     'req.headers["Authorization"]',
+    'req.headers.cookie',
+    'req.headers.Cookie',
+    'req.headers["cookie"]',
+    'req.headers["Cookie"]',
+    'req.cookies.*',
   ],
   censor: '[Redacted]',
 };
@@ -95,6 +107,7 @@ export async function buildApp(options: BuildAppOptions) {
   const database = options.database ?? createDatabaseFromEnv(options.env);
 
   await app.register(errorHandlerPlugin);
+  await app.register(cookie);
   await app.register(openApiPlugin);
   await app.register(controlledAccessPlugin, { env: options.env });
   await app.register(databasePlugin, { database });
@@ -128,6 +141,18 @@ export async function buildApp(options: BuildAppOptions) {
       : {}),
     ...(options.passkeyRegistration?.generateUserHandle !== undefined
       ? { generateUserHandle: options.passkeyRegistration.generateUserHandle }
+      : {}),
+  });
+  await app.register(passkeyAuthenticationRoutes, {
+    env: options.env,
+    ...(options.passkeyAuthentication?.now !== undefined
+      ? { now: options.passkeyAuthentication.now }
+      : {}),
+    ...(options.passkeyAuthentication?.generateId !== undefined
+      ? { generateId: options.passkeyAuthentication.generateId }
+      : {}),
+    ...(options.passkeyAuthentication?.generateToken !== undefined
+      ? { generateToken: options.passkeyAuthentication.generateToken }
       : {}),
   });
 

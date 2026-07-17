@@ -18,7 +18,7 @@ const openApiPath = path.resolve(
 );
 
 describe('authentication ceremony architecture contract', () => {
-  it('documents ceremony semantics and implemented email + WebAuthn registration routes', () => {
+  it('documents ceremony semantics and implemented email, WebAuthn registration, and authentication routes', () => {
     const document = generateAuthenticationCeremonyContractDocument() as {
       implementedLiveRoutes: boolean;
       status: string;
@@ -31,6 +31,7 @@ describe('authentication ceremony architecture contract', () => {
       setupGrants: { purpose: string[] };
       explicitExclusions: string[];
       webauthnRegistrationRuntime: { status: string; dependency: string };
+      passkeyAuthenticationRuntime: { status: string; featureFlag: string };
     };
 
     expect(document.implementedLiveRoutes).toBe(true);
@@ -41,6 +42,12 @@ describe('authentication ceremony architecture contract', () => {
         'POST /v1/account/email-verifications/complete',
         'POST /v1/account/passkeys/registration/options',
         'POST /v1/account/passkeys/registration/verify',
+        'POST /v1/authentication/passkeys/options',
+        'POST /v1/authentication/passkeys/verify',
+        'GET /v1/authentication/session',
+        'POST /v1/authentication/session/rotate',
+        'POST /v1/authentication/logout',
+        'POST /v1/authentication/logout-all',
       ]),
     );
     expect(document.accountSessions.idleTimeoutMinutes).toBe(60);
@@ -49,14 +56,20 @@ describe('authentication ceremony architecture contract', () => {
     expect(document.setupGrants.purpose).toEqual(['initial_passkey_registration']);
     expect(document.webauthnRegistrationRuntime.status).toBe('implemented');
     expect(document.webauthnRegistrationRuntime.dependency).toBe('@simplewebauthn/server@13.3.2');
+    expect(document.passkeyAuthenticationRuntime.status).toBe('implemented');
+    expect(document.passkeyAuthenticationRuntime.featureFlag).toBe(
+      'PASSKEY_AUTHENTICATION_ENABLED',
+    );
     expect(document.explicitExclusions).toEqual(
       expect.arrayContaining([
-        'cookies',
         'JWTs',
-        'passkey login / authentication assertions',
-        'session issuance',
         'production email provider',
+        'recovery runtime',
+        'membership',
       ]),
+    );
+    expect(document.explicitExclusions).not.toEqual(
+      expect.arrayContaining(['cookies', 'passkey login / authentication assertions']),
     );
   });
 
@@ -91,6 +104,12 @@ describe('authentication ceremony architecture contract', () => {
         '/v1/account/email-verifications/complete',
         '/v1/account/passkeys/registration/options',
         '/v1/account/passkeys/registration/verify',
+        '/v1/authentication/passkeys/options',
+        '/v1/authentication/passkeys/verify',
+        '/v1/authentication/session',
+        '/v1/authentication/session/rotate',
+        '/v1/authentication/logout',
+        '/v1/authentication/logout-all',
       ]),
     );
   });

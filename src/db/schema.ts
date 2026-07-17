@@ -274,6 +274,7 @@ export const passkeyCredentials = town.table(
     transports: text('transports').array(),
     deviceType: text('device_type'),
     backedUp: boolean('backed_up'),
+    backupEligible: boolean('backup_eligible'),
     aaguid: uuid('aaguid'),
     label: text('label'),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'string' }),
@@ -405,6 +406,11 @@ export const webauthnChallenges = town.table(
       .where(
         sql`${table.consumedAt} is null and ${table.revokedAt} is null and ${table.purpose} = 'register'`,
       ),
+    index('webauthn_challenges_active_authenticate_idx')
+      .on(table.purpose, table.expiresAt)
+      .where(
+        sql`${table.consumedAt} is null and ${table.revokedAt} is null and ${table.purpose} = 'authenticate'`,
+      ),
   ],
 );
 
@@ -443,7 +449,8 @@ export const identitySecurityEvents = town.table(
         'counter_anomaly_detected',
         'rate_limit_triggered',
         'passkey_registration_failed',
-        'account_activated'
+        'account_activated',
+        'authentication_succeeded'
       )`,
     ),
     index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
@@ -705,4 +712,5 @@ export type IdentitySecurityEventType =
   | 'counter_anomaly_detected'
   | 'rate_limit_triggered'
   | 'passkey_registration_failed'
-  | 'account_activated';
+  | 'account_activated'
+  | 'authentication_succeeded';
