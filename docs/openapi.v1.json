@@ -8,6 +8,12 @@
         "name": "Authorization",
         "type": "apiKey"
       },
+      "recoveryGrantAuth": {
+        "description": "Restricted recovery-grant authorization for recovery passkey registration. Exact header form: Authorization: RecoveryGrant <opaque-token>. Not an account session and not a Bearer token.",
+        "in": "header",
+        "name": "Authorization",
+        "type": "apiKey"
+      },
       "sessionAuth": {
         "description": "Web-only opaque session cookie. The runtime sets it as Secure, HttpOnly, SameSite=Lax, Path=/, with no Domain. Mutative cookie-authenticated routes require same-origin/same-site CSRF evidence.",
         "in": "cookie",
@@ -29,7 +35,7 @@
     }
   },
   "info": {
-    "description": "TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, first-passkey WebAuthn registration, and passkey authentication sessions. Controlled confirmation, email verification, and setup-grant passkey registration are not public authentication or login sessions.",
+    "description": "TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, first-passkey WebAuthn registration, passkey authentication sessions, and bounded account recovery. Controlled confirmation, email verification, setup-grant passkey registration, and recovery grants are not public authentication or login sessions.",
     "title": "TOWN API",
     "version": "0.1.0"
   },
@@ -730,6 +736,618 @@
           }
         ],
         "summary": "Verify WebAuthn passkey registration",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/v1/account/recovery": {
+      "post": {
+        "description": "Requests account recovery for an active account with a verified primary email. Always returns a generic accepted response and never discloses account existence or challenge identifiers. Does not create a session. Disabled by default via ACCOUNT_RECOVERY_ENABLED.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "email": {
+                    "maxLength": 320,
+                    "minLength": 3,
+                    "type": "string"
+                  },
+                  "locale": {
+                    "maxLength": 16,
+                    "minLength": 2,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "RECOVERY_REQUEST_ACCEPTED"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Request account recovery",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/v1/account/recovery/passkeys/registration/options": {
+      "post": {
+        "description": "Issues PublicKeyCredentialCreationOptions for recovery passkey registration. Requires Authorization: RecoveryGrant <token>. Reuses the existing WebAuthn user handle and excludes active passkeys. Does not create a session.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "options": {
+                          "additionalProperties": true,
+                          "properties": {},
+                          "type": "object"
+                        },
+                        "recoveryCeremonyId": {
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "recoveryCeremonyId",
+                        "options"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "recoveryGrantAuth": []
+          }
+        ],
+        "summary": "Create recovery WebAuthn passkey registration options",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/v1/account/recovery/passkeys/registration/verify": {
+      "post": {
+        "description": "Verifies a recovery WebAuthn registration response, adds a passkey while keeping existing passkeys active, consumes the recovery grant, revokes all sessions, and marks recovery completed. Requires Authorization: RecoveryGrant <token>. Does not create a session.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "recoveryCeremonyId": {
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  },
+                  "response": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "authenticatorAttachment": {
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "clientExtensionResults": {
+                        "additionalProperties": {},
+                        "type": "object"
+                      },
+                      "id": {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "rawId": {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "response": {
+                        "additionalProperties": true,
+                        "properties": {
+                          "attestationObject": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "clientDataJSON": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "transports": {
+                            "items": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "clientDataJSON",
+                          "attestationObject"
+                        ],
+                        "type": "object"
+                      },
+                      "type": {
+                        "enum": [
+                          "public-key"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "rawId",
+                      "type",
+                      "response"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "recoveryCeremonyId",
+                  "response"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "RECOVERY_COMPLETE"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "recoveryGrantAuth": []
+          }
+        ],
+        "summary": "Verify recovery WebAuthn passkey registration",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/v1/account/recovery/verify-email": {
+      "post": {
+        "description": "Completes recovery email verification with a six-digit code. On success returns a one-time restricted recovery grant. Failures return a generic invalid/expired challenge error. Does not create a session.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "pattern": "^[0-9]{6}$",
+                    "type": "string"
+                  },
+                  "recoveryVerificationId": {
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "recoveryVerificationId",
+                  "code"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "recoveryGrant": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "recoveryGrantExpiresAt": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "status": {
+                          "enum": [
+                            "RECOVERY_EMAIL_VERIFIED"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "recoveryGrant",
+                        "recoveryGrantExpiresAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Verify account recovery email challenge",
         "tags": [
           "Account"
         ]
@@ -2688,7 +3306,7 @@
       "name": "Confirmations"
     },
     {
-      "description": "Account setup email verification and first-passkey WebAuthn registration. Does not create sessions or disclose account existence beyond protocol-required WebAuthn options.",
+      "description": "Account setup email verification, first-passkey WebAuthn registration, and bounded account recovery. Recovery grants are restricted authorization, not sessions. Routes do not create login sessions or disclose account existence beyond protocol-required WebAuthn options.",
       "name": "Account"
     },
     {

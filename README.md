@@ -213,7 +213,7 @@ Live `docs/openapi.v1.json` continues to list only implemented routes.
 
 ## Authentication ceremony foundation
 
-Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated email-verification runtime for account setup. Slice 3 adds first-passkey WebAuthn registration runtime (setup-grant authorized). Slice 4 adds passkey authentication assertions, opaque web/mobile sessions, rotation, logout, logout-all, web cookies, and CSRF checks. These slices do **not** implement production email delivery, recovery runtime, membership, or JWTs.
+Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated email-verification runtime for account setup. Slice 3 adds first-passkey WebAuthn registration runtime (setup-grant authorized). Slice 4 adds passkey authentication assertions, opaque web/mobile sessions, rotation, logout, logout-all, web cookies, and CSRF checks. Slice 5 adds bounded account recovery (email challenge → recovery grant → recovery passkey registration) without issuing a normal login session. These slices do **not** implement production email delivery, recovery login sessions, membership, or JWTs.
 
 ### Domain separation
 
@@ -276,14 +276,17 @@ Rules:
 - no Redis
 - Slice 3 enforces `setup_options_grant` (5 / grant) and `setup_verification_grant` (5 failed verifies / grant)
 - Slice 4 enforces passkey authentication option/assertion limits by hashed IP, anonymous client key, and credential subject
+- Slice 5 enforces recovery request, email-attempt, options-grant, and verification-grant limits
 
 ### Additional identity security event types
 
-Preserved prior types, plus Slice 3/4:
+Preserved prior types, plus Slice 3/4/5:
 
 - `passkey_registration_failed`
 - `account_activated`
 - `authentication_succeeded`
+- `recovery_email_verified`
+- `recovery_registration_failed`
 
 ### Deterministic ceremony fixtures and contract
 
@@ -429,14 +432,42 @@ Web verify/rotate responses never include the raw session token in JSON:
 
 Mobile verify/rotate responses include `sessionToken` and `sessionExpiresAt` and never set a cookie. Route logs and logger redaction avoid raw tokens, cookies, and `Authorization` values.
 
+### Account recovery runtime (Slice 5)
+
+Bounded account recovery for **active** accounts with a verified primary email. Recovery issues a restricted recovery grant and may register an additional passkey; it does **not** create a login session.
+
+| Item                  | Policy                                                                                                      |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Feature flag          | `ACCOUNT_RECOVERY_ENABLED` (default `false`)                                                                |
+| Code hash key         | `ACCOUNT_RECOVERY_HASH_KEY` (HMAC-SHA-256; min 32 chars; binds challenge+purpose+account+code)              |
+| Grant token hash key  | `ACCOUNT_RECOVERY_TOKEN_HASH_KEY` (HMAC-SHA-256; min 32 chars)                                              |
+| Delivery mode         | `ACCOUNT_RECOVERY_DELIVERY_MODE` = `test` \| `development`                                                  |
+| Also required         | `CEREMONY_RATE_LIMIT_HASH_KEY`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ALLOWED_ORIGINS`, `WEBAUTHN_CHALLENGE_HASH_KEY` |
+| Code policy           | 6 digits; 10-minute TTL; max 5 attempts; hash-only storage                                                  |
+| Grant policy          | 15-minute TTL; `Authorization: RecoveryGrant <token>`; not a session                                        |
+| Eligibility           | `status=active` with verified primary email matching the request                                            |
+| Anti-enumeration      | always `202` `RECOVERY_REQUEST_ACCEPTED`; never returns challenge IDs                                       |
+| Completion            | adds passkey (existing remain active); revokes all sessions; sets `recovery_completed_at`                   |
+| Production constraint | cannot enable while only test/development delivery adapters exist                                           |
+
+Implemented routes:
+
+| Method | Path                                                 | Behavior                                                                   |
+| ------ | ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| `POST` | `/v1/account/recovery`                               | Request recovery; generic accepted response                                |
+| `POST` | `/v1/account/recovery/verify-email`                  | Verify code; issue one-time recovery grant                                 |
+| `POST` | `/v1/account/recovery/passkeys/registration/options` | Recovery WebAuthn options (reuses user handle; excludes active passkeys)   |
+| `POST` | `/v1/account/recovery/passkeys/registration/verify`  | Verify recovery registration; complete recovery without creating a session |
+
 ### Explicit exclusions
 
 Still not implemented:
 
 - production email provider (Resend/SendGrid/SES/SMTP/etc.)
 - JWTs
-- recovery runtime
-- second-passkey management / passkey deletion
+- recovery login / session issuance from recovery
+- production recovery email delivery
+- second-passkey management outside recovery / passkey deletion
 - membership / Stripe / local verification
 - Railway / web integration / mobile integration / deployment
 
@@ -503,7 +534,7 @@ This slice still excludes:
 
 - production email provider
 - JWTs
-- recovery runtime / second-passkey management / passkey removal
+- recovery login sessions / production recovery email / second-passkey management outside recovery / passkey removal
 - public password or social login
 - membership / Stripe / GPS / residency / local verification
 - confirmation removal / confirmation totals / comments / moderation

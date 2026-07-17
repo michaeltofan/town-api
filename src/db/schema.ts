@@ -62,6 +62,10 @@ export const accounts = town.table(
     status: text('status').notNull(),
     webauthnUserHandle: bytea('webauthn_user_handle'),
     accountReadyAt: timestamp('account_ready_at', { withTimezone: true, mode: 'string' }),
+    recoveryCompletedAt: timestamp('recovery_completed_at', {
+      withTimezone: true,
+      mode: 'string',
+    }),
     suspendedAt: timestamp('suspended_at', { withTimezone: true, mode: 'string' }),
     closedAt: timestamp('closed_at', { withTimezone: true, mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
@@ -342,6 +346,11 @@ export const emailChallenges = town.table(
       .where(
         sql`${table.consumedAt} is null and ${table.revokedAt} is null and ${table.purpose} = 'verify_email'`,
       ),
+    index('email_challenges_active_recover_account_idx')
+      .on(table.accountId, table.emailNormalized, table.purpose)
+      .where(
+        sql`${table.consumedAt} is null and ${table.revokedAt} is null and ${table.purpose} = 'recover_account'`,
+      ),
   ],
 );
 
@@ -353,6 +362,7 @@ export const recoveryGrants = town.table(
     tokenHash: bytea('token_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
     consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -363,6 +373,13 @@ export const recoveryGrants = town.table(
     }).onDelete('restrict'),
     unique('recovery_grants_token_hash_unique').on(table.tokenHash),
     check('recovery_grants_expires_after_created', sql`${table.expiresAt} > ${table.createdAt}`),
+    check(
+      'recovery_grants_revoked_not_before_created',
+      sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt}`,
+    ),
+    index('recovery_grants_account_active_idx')
+      .on(table.accountId)
+      .where(sql`${table.consumedAt} is null and ${table.revokedAt} is null`),
   ],
 );
 
@@ -411,6 +428,11 @@ export const webauthnChallenges = town.table(
       .where(
         sql`${table.consumedAt} is null and ${table.revokedAt} is null and ${table.purpose} = 'authenticate'`,
       ),
+    index('webauthn_challenges_active_recover_register_idx')
+      .on(table.accountId, table.purpose)
+      .where(
+        sql`${table.consumedAt} is null and ${table.revokedAt} is null and ${table.purpose} = 'recover_register'`,
+      ),
   ],
 );
 
@@ -450,7 +472,9 @@ export const identitySecurityEvents = town.table(
         'rate_limit_triggered',
         'passkey_registration_failed',
         'account_activated',
-        'authentication_succeeded'
+        'authentication_succeeded',
+        'recovery_email_verified',
+        'recovery_registration_failed'
       )`,
     ),
     index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
@@ -627,7 +651,9 @@ export const ceremonyRateLimits = town.table(
         'setup_options_grant',
         'setup_verification_grant',
         'recovery_options_grant',
-        'recovery_verification_grant'
+        'recovery_verification_grant',
+        'recovery_email_attempt_challenge',
+        'recovery_email_attempt_email_ip'
       )`,
     ),
     check('ceremony_rate_limits_attempt_count_nonnegative', sql`${table.attemptCount} >= 0`),
@@ -694,7 +720,9 @@ export type CeremonyRateLimitScope =
   | 'setup_options_grant'
   | 'setup_verification_grant'
   | 'recovery_options_grant'
-  | 'recovery_verification_grant';
+  | 'recovery_verification_grant'
+  | 'recovery_email_attempt_challenge'
+  | 'recovery_email_attempt_email_ip';
 export type IdentitySecurityEventType =
   | 'email_verification_requested'
   | 'email_verified'
@@ -713,4 +741,6 @@ export type IdentitySecurityEventType =
   | 'rate_limit_triggered'
   | 'passkey_registration_failed'
   | 'account_activated'
-  | 'authentication_succeeded';
+  | 'authentication_succeeded'
+  | 'recovery_email_verified'
+  | 'recovery_registration_failed';

@@ -1,4 +1,61 @@
 {
+  "accountRecoveryRuntime": {
+    "antiEnumeration": true,
+    "codePolicy": {
+      "length": 6,
+      "maxAttempts": 5,
+      "storage": "HMAC-SHA-256 secret_hash only; binds challengeId+purpose+accountId+code",
+      "ttlMinutes": 10
+    },
+    "completion": {
+      "accountRemainsActive": true,
+      "atomic": true,
+      "createsSession": false,
+      "revokesAllSessionsReason": "recovery_completed",
+      "setsRecoveryCompletedAt": true
+    },
+    "deliveryModes": [
+      "test",
+      "development"
+    ],
+    "eligibility": "active account with verified primary email matching the request",
+    "featureFlag": "ACCOUNT_RECOVERY_ENABLED",
+    "grantPolicy": {
+      "authorization": "Authorization: RecoveryGrant <opaque-token>",
+      "createsSession": false,
+      "storage": "token_hash only; raw tokens never stored",
+      "ttlMinutes": 15
+    },
+    "passkeyRegistration": {
+      "attestationType": "none",
+      "ceremonyReference": "recoveryCeremonyId (non-secret challenge row id)",
+      "excludeCredentials": "all active passkeys",
+      "existingPasskeysRemainActive": true,
+      "purpose": "recover_register",
+      "residentKey": "required",
+      "reuseExistingUserHandle": true,
+      "userVerification": "required"
+    },
+    "publicErrorCodes": [
+      "INVALID_OR_EXPIRED_CHALLENGE",
+      "RECOVERY_NOT_AUTHORIZED"
+    ],
+    "rateLimits": {
+      "attemptChallenge": 5,
+      "attemptEmailIp30m": 10,
+      "recovery_options_grant": 5,
+      "recovery_verification_grant": 5,
+      "requestEmail24h": 3,
+      "requestIp24h": 10
+    },
+    "routes": [
+      "POST /v1/account/recovery",
+      "POST /v1/account/recovery/verify-email",
+      "POST /v1/account/recovery/passkeys/registration/options",
+      "POST /v1/account/recovery/passkeys/registration/verify"
+    ],
+    "status": "implemented"
+  },
   "accountSessions": {
     "absoluteTimeoutHours": 24,
     "clientTypes": [
@@ -64,11 +121,14 @@
       "setup_options_grant",
       "setup_verification_grant",
       "recovery_options_grant",
-      "recovery_verification_grant"
+      "recovery_verification_grant",
+      "recovery_email_attempt_challenge",
+      "recovery_email_attempt_email_ip"
     ],
     "semantics": [
       "Persistent atomic counters for ceremony-specific abuse controls",
       "setup_options_grant and setup_verification_grant are enforced for WebAuthn registration",
+      "recovery_request_*, recovery_email_attempt_*, recovery_options_grant, and recovery_verification_grant are enforced for account recovery",
       "No Redis",
       "Subjects are pre-hashed only"
     ],
@@ -89,7 +149,7 @@
     ],
     "status": "implemented"
   },
-  "description": "Architecture contract for ceremony data/session foundation, email verification runtime, first-passkey WebAuthn registration runtime, and passkey authentication session runtime. Production email delivery, recovery, membership, and JWTs remain out of scope.",
+  "description": "Architecture contract for ceremony data/session foundation, email verification runtime, first-passkey WebAuthn registration runtime, passkey authentication session runtime, and bounded account recovery runtime. Production email delivery, recovery login sessions, membership, and JWTs remain out of scope.",
   "domainSeparation": {
     "accountIdentity": "Account shell, verified email, passkeys, challenges, recovery grants",
     "authenticatedSession": "Opaque server-side account_sessions; not membership or civic entitlement",
@@ -127,8 +187,9 @@
   },
   "explicitExclusions": [
     "production email provider",
-    "recovery runtime",
-    "second-passkey management",
+    "recovery login / session issuance from recovery",
+    "production recovery email delivery",
+    "second-passkey management outside recovery",
     "passkey deletion",
     "JWTs",
     "membership",
@@ -169,6 +230,10 @@
     ],
     "slice4Added": [
       "authentication_succeeded"
+    ],
+    "slice5Added": [
+      "recovery_email_verified",
+      "recovery_registration_failed"
     ]
   },
   "implementedLiveRoutes": true,
@@ -182,7 +247,11 @@
     "GET /v1/authentication/session",
     "POST /v1/authentication/session/rotate",
     "POST /v1/authentication/logout",
-    "POST /v1/authentication/logout-all"
+    "POST /v1/authentication/logout-all",
+    "POST /v1/account/recovery",
+    "POST /v1/account/recovery/verify-email",
+    "POST /v1/account/recovery/passkeys/registration/options",
+    "POST /v1/account/recovery/passkeys/registration/verify"
   ],
   "passkeyAuthenticationRuntime": {
     "assertionPolicy": {
@@ -285,7 +354,7 @@
     "table": "town.setup_grants",
     "ttlMinutes": 15
   },
-  "slice": "ceremony_data_and_session_foundation_plus_email_verification_webauthn_registration_and_passkey_authentication_session_runtime",
+  "slice": "ceremony_data_and_session_foundation_plus_email_verification_webauthn_registration_passkey_authentication_and_account_recovery_runtime",
   "status": "partially_implemented",
   "title": "TOWN Authentication Ceremony Foundation V1",
   "webauthnRegistrationRuntime": {

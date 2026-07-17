@@ -9,7 +9,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
       info: {
         title: 'TOWN API',
         description:
-          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, first-passkey WebAuthn registration, and passkey authentication sessions. Controlled confirmation, email verification, and setup-grant passkey registration are not public authentication or login sessions.',
+          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, first-passkey WebAuthn registration, passkey authentication sessions, and bounded account recovery. Controlled confirmation, email verification, setup-grant passkey registration, and recovery grants are not public authentication or login sessions.',
         version: '0.1.0',
       },
       tags: [
@@ -33,7 +33,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Account',
           description:
-            'Account setup email verification and first-passkey WebAuthn registration. Does not create sessions or disclose account existence beyond protocol-required WebAuthn options.',
+            'Account setup email verification, first-passkey WebAuthn registration, and bounded account recovery. Recovery grants are restricted authorization, not sessions. Routes do not create login sessions or disclose account existence beyond protocol-required WebAuthn options.',
         },
         {
           name: 'Authentication',
@@ -56,6 +56,13 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
             name: 'Authorization',
             description:
               'Restricted setup-grant authorization for first-passkey registration. Exact header form: Authorization: SetupGrant <opaque-token>. Not an account session and not a Bearer token.',
+          },
+          recoveryGrantAuth: {
+            type: 'apiKey',
+            in: 'header',
+            name: 'Authorization',
+            description:
+              'Restricted recovery-grant authorization for recovery passkey registration. Exact header form: Authorization: RecoveryGrant <opaque-token>. Not an account session and not a Bearer token.',
           },
           sessionAuth: {
             type: 'apiKey',

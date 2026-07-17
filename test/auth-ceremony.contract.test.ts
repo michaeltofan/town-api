@@ -18,7 +18,7 @@ const openApiPath = path.resolve(
 );
 
 describe('authentication ceremony architecture contract', () => {
-  it('documents ceremony semantics and implemented email, WebAuthn registration, and authentication routes', () => {
+  it('documents ceremony semantics and implemented email, WebAuthn registration, authentication, and recovery routes', () => {
     const document = generateAuthenticationCeremonyContractDocument() as {
       implementedLiveRoutes: boolean;
       status: string;
@@ -32,6 +32,7 @@ describe('authentication ceremony architecture contract', () => {
       explicitExclusions: string[];
       webauthnRegistrationRuntime: { status: string; dependency: string };
       passkeyAuthenticationRuntime: { status: string; featureFlag: string };
+      accountRecoveryRuntime: { status: string; featureFlag: string; routes: string[] };
     };
 
     expect(document.implementedLiveRoutes).toBe(true);
@@ -48,6 +49,10 @@ describe('authentication ceremony architecture contract', () => {
         'POST /v1/authentication/session/rotate',
         'POST /v1/authentication/logout',
         'POST /v1/authentication/logout-all',
+        'POST /v1/account/recovery',
+        'POST /v1/account/recovery/verify-email',
+        'POST /v1/account/recovery/passkeys/registration/options',
+        'POST /v1/account/recovery/passkeys/registration/verify',
       ]),
     );
     expect(document.accountSessions.idleTimeoutMinutes).toBe(60);
@@ -60,16 +65,23 @@ describe('authentication ceremony architecture contract', () => {
     expect(document.passkeyAuthenticationRuntime.featureFlag).toBe(
       'PASSKEY_AUTHENTICATION_ENABLED',
     );
+    expect(document.accountRecoveryRuntime.status).toBe('implemented');
+    expect(document.accountRecoveryRuntime.featureFlag).toBe('ACCOUNT_RECOVERY_ENABLED');
+    expect(document.accountRecoveryRuntime.routes).toHaveLength(4);
     expect(document.explicitExclusions).toEqual(
       expect.arrayContaining([
         'JWTs',
         'production email provider',
-        'recovery runtime',
+        'recovery login / session issuance from recovery',
         'membership',
       ]),
     );
     expect(document.explicitExclusions).not.toEqual(
-      expect.arrayContaining(['cookies', 'passkey login / authentication assertions']),
+      expect.arrayContaining([
+        'cookies',
+        'passkey login / authentication assertions',
+        'recovery runtime',
+      ]),
     );
   });
 
@@ -110,6 +122,10 @@ describe('authentication ceremony architecture contract', () => {
         '/v1/authentication/session/rotate',
         '/v1/authentication/logout',
         '/v1/authentication/logout-all',
+        '/v1/account/recovery',
+        '/v1/account/recovery/verify-email',
+        '/v1/account/recovery/passkeys/registration/options',
+        '/v1/account/recovery/passkeys/registration/verify',
       ]),
     );
   });
