@@ -53,6 +53,13 @@ describe('authentication ceremony architecture contract', () => {
         'POST /v1/account/recovery/verify-email',
         'POST /v1/account/recovery/passkeys/registration/options',
         'POST /v1/account/recovery/passkeys/registration/verify',
+        'GET /v1/account/passkeys',
+        'POST /v1/account/security/reauthentication/passkeys/options',
+        'POST /v1/account/security/reauthentication/passkeys/verify',
+        'POST /v1/account/passkeys/add/options',
+        'POST /v1/account/passkeys/add/verify',
+        'PATCH /v1/account/passkeys/:passkeyId',
+        'DELETE /v1/account/passkeys/:passkeyId',
       ]),
     );
     expect(document.accountSessions.idleTimeoutMinutes).toBe(60);
@@ -116,6 +123,8 @@ describe('authentication ceremony architecture contract', () => {
         '/v1/account/email-verifications/complete',
         '/v1/account/passkeys/registration/options',
         '/v1/account/passkeys/registration/verify',
+        '/v1/account/passkeys/add/options',
+        '/v1/account/passkeys/add/verify',
         '/v1/authentication/passkeys/options',
         '/v1/authentication/passkeys/verify',
         '/v1/authentication/session',

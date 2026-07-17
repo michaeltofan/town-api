@@ -32,6 +32,8 @@ export default defineConfig({
       'test/passkey-authentication.migration.test.ts',
       'test/account-recovery.api.test.ts',
       'test/account-recovery.migration.test.ts',
+      'test/passkey-management.api.test.ts',
+      'test/passkey-management.migration.test.ts',
     ],
     coverage: {
       provider: 'v8',

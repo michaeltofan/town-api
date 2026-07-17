@@ -64,6 +64,13 @@
       "when": 1784271454701,
       "tag": "0008_account_recovery_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784276400000,
+      "tag": "0009_passkey_management_security_runtime",
+      "breakpoints": true
     }
   ]
 }

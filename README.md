@@ -459,6 +459,39 @@ Implemented routes:
 | `POST` | `/v1/account/recovery/passkeys/registration/options` | Recovery WebAuthn options (reuses user handle; excludes active passkeys)   |
 | `POST` | `/v1/account/recovery/passkeys/registration/verify`  | Verify recovery registration; complete recovery without creating a session |
 
+### Passkey management / security runtime (Slice 6)
+
+Session-authenticated passkey inventory, security reauthentication, add/rename/revoke. All seven management routes require an active normal session. SetupGrant and RecoveryGrant cannot authorize any Slice 6 route. Initial first-passkey registration remains on separate SetupGrant-only Slice 3 paths.
+
+| Item                          | Policy                                                                          |
+| ----------------------------- | ------------------------------------------------------------------------------- |
+| Feature gate                  | `PASSKEY_AUTHENTICATION_ENABLED`                                                |
+| Freshness                     | `fresh_authenticated_at` within 10 minutes; required for add and revoke         |
+| Reauth purpose                | `manage_passkeys_authenticate` (session-bound; UV required; 5-minute challenge) |
+| Add purpose                   | `manage_passkeys_register` (reuses user handle; excludes active credentials)    |
+| Public ids                    | Opaque `passkey_credentials.public_id` only; never credential material          |
+| Last-passkey protection       | Cannot revoke the final active passkey                                          |
+| Current-credential protection | Cannot revoke `authenticated_passkey_id` of the current session                 |
+
+Implemented routes:
+
+| Method   | Path                                                     | Behavior                                  |
+| -------- | -------------------------------------------------------- | ----------------------------------------- |
+| `GET`    | `/v1/account/passkeys`                                   | Inventory of active passkeys              |
+| `POST`   | `/v1/account/security/reauthentication/passkeys/options` | Security reauthentication options         |
+| `POST`   | `/v1/account/security/reauthentication/passkeys/verify`  | Confirm freshness; rotate session token   |
+| `POST`   | `/v1/account/passkeys/add/options`                       | Add-passkey options (session + freshness) |
+| `POST`   | `/v1/account/passkeys/add/verify`                        | Add-passkey verify (session + freshness)  |
+| `PATCH`  | `/v1/account/passkeys/:passkeyId`                        | Rename (no freshness)                     |
+| `DELETE` | `/v1/account/passkeys/:passkeyId`                        | Soft revoke (freshness required)          |
+
+Distinct from Slice 3 initial registration (`SetupGrant` only):
+
+| Method | Path                                        | Behavior                                          |
+| ------ | ------------------------------------------- | ------------------------------------------------- |
+| `POST` | `/v1/account/passkeys/registration/options` | First-passkey registration options (`SetupGrant`) |
+| `POST` | `/v1/account/passkeys/registration/verify`  | First-passkey registration verify (`SetupGrant`)  |
+
 ### Explicit exclusions
 
 Still not implemented:
@@ -467,29 +500,35 @@ Still not implemented:
 - JWTs
 - recovery login / session issuance from recovery
 - production recovery email delivery
-- second-passkey management outside recovery / passkey deletion
 - membership / Stripe / local verification
 - Railway / web integration / mobile integration / deployment
 
 ## Other endpoints
 
-| Method | Path                                        | Behavior                              |
-| ------ | ------------------------------------------- | ------------------------------------- |
-| `GET`  | `/health/live`                              | `{"status":"ok"}` (no DB)             |
-| `GET`  | `/health/ready`                             | DB readiness `ready` / `not_ready`    |
-| `GET`  | `/v1/communities`                           | active communities by position        |
-| `GET`  | `/v1/communities/:communitySlug/signals`    | published signals by position         |
-| `GET`  | `/v1/signals/:signalId`                     | one published signal by UUID          |
-| `POST` | `/v1/account/email-verifications`           | gated email verification request      |
-| `POST` | `/v1/account/email-verifications/complete`  | gated email verification completion   |
-| `POST` | `/v1/account/passkeys/registration/options` | gated WebAuthn registration options   |
-| `POST` | `/v1/account/passkeys/registration/verify`  | gated WebAuthn registration verify    |
-| `POST` | `/v1/authentication/passkeys/options`       | gated passkey authentication options  |
-| `POST` | `/v1/authentication/passkeys/verify`        | gated passkey authentication verify   |
-| `GET`  | `/v1/authentication/session`                | current authentication session state  |
-| `POST` | `/v1/authentication/session/rotate`         | rotate current authentication session |
-| `POST` | `/v1/authentication/logout`                 | logout current authentication session |
-| `POST` | `/v1/authentication/logout-all`             | logout all account sessions           |
+| Method   | Path                                                     | Behavior                                        |
+| -------- | -------------------------------------------------------- | ----------------------------------------------- |
+| `GET`    | `/health/live`                                           | `{"status":"ok"}` (no DB)                       |
+| `GET`    | `/health/ready`                                          | DB readiness `ready` / `not_ready`              |
+| `GET`    | `/v1/communities`                                        | active communities by position                  |
+| `GET`    | `/v1/communities/:communitySlug/signals`                 | published signals by position                   |
+| `GET`    | `/v1/signals/:signalId`                                  | one published signal by UUID                    |
+| `POST`   | `/v1/account/email-verifications`                        | gated email verification request                |
+| `POST`   | `/v1/account/email-verifications/complete`               | gated email verification completion             |
+| `POST`   | `/v1/account/passkeys/registration/options`              | first-passkey registration options (SetupGrant) |
+| `POST`   | `/v1/account/passkeys/registration/verify`               | first-passkey registration verify (SetupGrant)  |
+| `POST`   | `/v1/authentication/passkeys/options`                    | gated passkey authentication options            |
+| `POST`   | `/v1/authentication/passkeys/verify`                     | gated passkey authentication verify             |
+| `GET`    | `/v1/authentication/session`                             | current authentication session state            |
+| `POST`   | `/v1/authentication/session/rotate`                      | rotate current authentication session           |
+| `POST`   | `/v1/authentication/logout`                              | logout current authentication session           |
+| `POST`   | `/v1/authentication/logout-all`                          | logout all account sessions                     |
+| `GET`    | `/v1/account/passkeys`                                   | list active passkeys                            |
+| `POST`   | `/v1/account/security/reauthentication/passkeys/options` | security reauthentication options               |
+| `POST`   | `/v1/account/security/reauthentication/passkeys/verify`  | security reauthentication verify                |
+| `POST`   | `/v1/account/passkeys/add/options`                       | add-passkey options (session + freshness)       |
+| `POST`   | `/v1/account/passkeys/add/verify`                        | add-passkey verify (session + freshness)        |
+| `PATCH`  | `/v1/account/passkeys/:passkeyId`                        | rename passkey                                  |
+| `DELETE` | `/v1/account/passkeys/:passkeyId`                        | revoke passkey                                  |
 
 ## Local database workflow
 
@@ -534,7 +573,7 @@ This slice still excludes:
 
 - production email provider
 - JWTs
-- recovery login sessions / production recovery email / second-passkey management outside recovery / passkey removal
+- recovery login sessions / production recovery email
 - public password or social login
 - membership / Stripe / GPS / residency / local verification
 - confirmation removal / confirmation totals / comments / moderation

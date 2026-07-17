@@ -463,6 +463,7 @@ export async function verifyPasskeyAuthentication(
         tokenHash,
         clientType: input.clientType,
         createdAt: now,
+        authenticatedPasskeyId: lockedCredential.id,
         eventId: generateId(),
         requestId: input.requestId ?? null,
       });

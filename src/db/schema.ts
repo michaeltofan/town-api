@@ -271,6 +271,7 @@ export const passkeyCredentials = town.table(
   'passkey_credentials',
   {
     id: uuid('id').primaryKey(),
+    publicId: uuid('public_id').notNull(),
     accountId: uuid('account_id').notNull(),
     credentialId: bytea('credential_id').notNull(),
     publicKey: bytea('public_key').notNull(),
@@ -284,6 +285,7 @@ export const passkeyCredentials = town.table(
     lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
     revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
+    revocationReason: text('revocation_reason'),
   },
   (table) => [
     foreignKey({
@@ -292,14 +294,19 @@ export const passkeyCredentials = town.table(
       name: 'passkey_credentials_account_id_fkey',
     }).onDelete('restrict'),
     unique('passkey_credentials_credential_id_unique').on(table.credentialId),
+    unique('passkey_credentials_public_id_unique').on(table.publicId),
     check('passkey_credentials_sign_count_nonnegative', sql`${table.signCount} >= 0`),
     check(
       'passkey_credentials_label_length',
-      sql`${table.label} is null or char_length(${table.label}) <= 128`,
+      sql`${table.label} is null or char_length(${table.label}) <= 64`,
     ),
     check(
       'passkey_credentials_device_type_valid',
       sql`${table.deviceType} is null or ${table.deviceType} in ('platform', 'cross_platform')`,
+    ),
+    check(
+      'passkey_credentials_revocation_reason_valid',
+      sql`${table.revocationReason} is null or ${table.revocationReason} in ('user_requested')`,
     ),
     index('passkey_credentials_account_active_idx')
       .on(table.accountId)
@@ -388,6 +395,7 @@ export const webauthnChallenges = town.table(
   {
     id: uuid('id').primaryKey(),
     accountId: uuid('account_id'),
+    sessionId: uuid('session_id'),
     purpose: text('purpose').notNull(),
     challengeHash: bytea('challenge_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
@@ -401,10 +409,11 @@ export const webauthnChallenges = town.table(
       foreignColumns: [accounts.id],
       name: 'webauthn_challenges_account_id_fkey',
     }).onDelete('restrict'),
+    // session_id FK is enforced in SQL (account_sessions is defined later in this module).
     unique('webauthn_challenges_challenge_hash_unique').on(table.challengeHash),
     check(
       'webauthn_challenges_purpose_valid',
-      sql`${table.purpose} in ('register', 'authenticate', 'recover_register')`,
+      sql`${table.purpose} in ('register', 'authenticate', 'recover_register', 'manage_passkeys_authenticate', 'manage_passkeys_register')`,
     ),
     check(
       'webauthn_challenges_expires_after_created',
@@ -432,6 +441,11 @@ export const webauthnChallenges = town.table(
       .on(table.accountId, table.purpose)
       .where(
         sql`${table.consumedAt} is null and ${table.revokedAt} is null and ${table.purpose} = 'recover_register'`,
+      ),
+    index('webauthn_challenges_active_manage_session_idx')
+      .on(table.sessionId, table.purpose)
+      .where(
+        sql`${table.consumedAt} is null and ${table.revokedAt} is null and ${table.purpose} in ('manage_passkeys_authenticate', 'manage_passkeys_register')`,
       ),
   ],
 );
@@ -474,7 +488,13 @@ export const identitySecurityEvents = town.table(
         'account_activated',
         'authentication_succeeded',
         'recovery_email_verified',
-        'recovery_registration_failed'
+        'recovery_registration_failed',
+        'passkey_inventory_viewed',
+        'passkey_management_changed',
+        'passkey_reauthentication_started',
+        'passkey_reauthentication_succeeded',
+        'passkey_reauthentication_failed',
+        'passkey_renamed'
       )`,
     ),
     index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
@@ -548,6 +568,11 @@ export const accountSessions = town.table(
       withTimezone: true,
       mode: 'string',
     }),
+    authenticatedPasskeyId: uuid('authenticated_passkey_id'),
+    freshAuthenticatedAt: timestamp('fresh_authenticated_at', {
+      withTimezone: true,
+      mode: 'string',
+    }),
     securityVersion: smallint('security_version').notNull(),
   },
   (table) => [
@@ -555,6 +580,11 @@ export const accountSessions = town.table(
       columns: [table.accountId],
       foreignColumns: [accounts.id],
       name: 'account_sessions_account_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.authenticatedPasskeyId],
+      foreignColumns: [passkeyCredentials.id],
+      name: 'account_sessions_authenticated_passkey_id_fkey',
     }).onDelete('restrict'),
     unique('account_sessions_token_hash_unique').on(table.tokenHash),
     check('account_sessions_client_type_valid', sql`${table.clientType} in ('web', 'mobile')`),
@@ -597,7 +627,9 @@ export const accountSessions = town.table(
         'account_closed',
         'recovery_completed',
         'credential_compromised',
-        'security_version_changed'
+        'security_version_changed',
+        'passkey_added',
+        'passkey_revoked'
       )`,
     ),
     index('account_sessions_account_active_idx')
@@ -653,7 +685,14 @@ export const ceremonyRateLimits = town.table(
         'recovery_options_grant',
         'recovery_verification_grant',
         'recovery_email_attempt_challenge',
-        'recovery_email_attempt_email_ip'
+        'recovery_email_attempt_email_ip',
+        'passkey_inventory_account',
+        'passkey_reauthentication_options_session',
+        'passkey_reauthentication_verify_session',
+        'passkey_registration_options_session',
+        'passkey_registration_verify_session',
+        'passkey_rename_account',
+        'passkey_revoke_account'
       )`,
     ),
     check('ceremony_rate_limits_attempt_count_nonnegative', sql`${table.attemptCount} >= 0`),
@@ -694,7 +733,12 @@ export type CeremonyRateLimitRow = typeof ceremonyRateLimits.$inferSelect;
 export type AccountStatus = 'pending_email' | 'pending_passkey' | 'active' | 'suspended' | 'closed';
 
 export type EmailChallengePurpose = 'verify_email' | 'recover_account';
-export type WebAuthnChallengePurpose = 'register' | 'authenticate' | 'recover_register';
+export type WebAuthnChallengePurpose =
+  | 'register'
+  | 'authenticate'
+  | 'recover_register'
+  | 'manage_passkeys_authenticate'
+  | 'manage_passkeys_register';
 export type SetupGrantPurpose = 'initial_passkey_registration';
 export type AccountSessionClientType = 'web' | 'mobile';
 export type AccountSessionRevocationReason =
@@ -705,7 +749,10 @@ export type AccountSessionRevocationReason =
   | 'account_closed'
   | 'recovery_completed'
   | 'credential_compromised'
-  | 'security_version_changed';
+  | 'security_version_changed'
+  | 'passkey_added'
+  | 'passkey_revoked';
+export type PasskeyRevocationReason = 'user_requested';
 export type CeremonyRateLimitScope =
   | 'email_verification_request_email'
   | 'email_verification_request_ip'
@@ -722,7 +769,14 @@ export type CeremonyRateLimitScope =
   | 'recovery_options_grant'
   | 'recovery_verification_grant'
   | 'recovery_email_attempt_challenge'
-  | 'recovery_email_attempt_email_ip';
+  | 'recovery_email_attempt_email_ip'
+  | 'passkey_inventory_account'
+  | 'passkey_reauthentication_options_session'
+  | 'passkey_reauthentication_verify_session'
+  | 'passkey_registration_options_session'
+  | 'passkey_registration_verify_session'
+  | 'passkey_rename_account'
+  | 'passkey_revoke_account';
 export type IdentitySecurityEventType =
   | 'email_verification_requested'
   | 'email_verified'
@@ -743,4 +797,10 @@ export type IdentitySecurityEventType =
   | 'account_activated'
   | 'authentication_succeeded'
   | 'recovery_email_verified'
-  | 'recovery_registration_failed';
+  | 'recovery_registration_failed'
+  | 'passkey_inventory_viewed'
+  | 'passkey_management_changed'
+  | 'passkey_reauthentication_started'
+  | 'passkey_reauthentication_succeeded'
+  | 'passkey_reauthentication_failed'
+  | 'passkey_renamed';

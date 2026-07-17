@@ -82,7 +82,9 @@
         "account_closed",
         "recovery_completed",
         "credential_compromised",
-        "security_version_changed"
+        "security_version_changed",
+        "passkey_added",
+        "passkey_revoked"
       ]
     },
     "rotation": [
@@ -123,12 +125,20 @@
       "recovery_options_grant",
       "recovery_verification_grant",
       "recovery_email_attempt_challenge",
-      "recovery_email_attempt_email_ip"
+      "recovery_email_attempt_email_ip",
+      "passkey_inventory_account",
+      "passkey_reauthentication_options_session",
+      "passkey_reauthentication_verify_session",
+      "passkey_registration_options_session",
+      "passkey_registration_verify_session",
+      "passkey_rename_account",
+      "passkey_revoke_account"
     ],
     "semantics": [
       "Persistent atomic counters for ceremony-specific abuse controls",
       "setup_options_grant and setup_verification_grant are enforced for WebAuthn registration",
       "recovery_request_*, recovery_email_attempt_*, recovery_options_grant, and recovery_verification_grant are enforced for account recovery",
+      "passkey_inventory_account and manage_* / passkey_rename_account / passkey_revoke_account are enforced for passkey management",
       "No Redis",
       "Subjects are pre-hashed only"
     ],
@@ -149,7 +159,7 @@
     ],
     "status": "implemented"
   },
-  "description": "Architecture contract for ceremony data/session foundation, email verification runtime, first-passkey WebAuthn registration runtime, passkey authentication session runtime, and bounded account recovery runtime. Production email delivery, recovery login sessions, membership, and JWTs remain out of scope.",
+  "description": "Architecture contract for ceremony data/session foundation, email verification runtime, first-passkey WebAuthn registration runtime, passkey authentication session runtime, bounded account recovery runtime, and session-authenticated passkey management / security reauthentication runtime. Production email delivery, recovery login sessions, membership, and JWTs remain out of scope.",
   "domainSeparation": {
     "accountIdentity": "Account shell, verified email, passkeys, challenges, recovery grants",
     "authenticatedSession": "Opaque server-side account_sessions; not membership or civic entitlement",
@@ -189,8 +199,6 @@
     "production email provider",
     "recovery login / session issuance from recovery",
     "production recovery email delivery",
-    "second-passkey management outside recovery",
-    "passkey deletion",
     "JWTs",
     "membership",
     "Stripe",
@@ -234,6 +242,14 @@
     "slice5Added": [
       "recovery_email_verified",
       "recovery_registration_failed"
+    ],
+    "slice6Added": [
+      "passkey_inventory_viewed",
+      "passkey_management_changed",
+      "passkey_reauthentication_started",
+      "passkey_reauthentication_succeeded",
+      "passkey_reauthentication_failed",
+      "passkey_renamed"
     ]
   },
   "implementedLiveRoutes": true,
@@ -251,7 +267,14 @@
     "POST /v1/account/recovery",
     "POST /v1/account/recovery/verify-email",
     "POST /v1/account/recovery/passkeys/registration/options",
-    "POST /v1/account/recovery/passkeys/registration/verify"
+    "POST /v1/account/recovery/passkeys/registration/verify",
+    "GET /v1/account/passkeys",
+    "POST /v1/account/security/reauthentication/passkeys/options",
+    "POST /v1/account/security/reauthentication/passkeys/verify",
+    "POST /v1/account/passkeys/add/options",
+    "POST /v1/account/passkeys/add/verify",
+    "PATCH /v1/account/passkeys/:passkeyId",
+    "DELETE /v1/account/passkeys/:passkeyId"
   ],
   "passkeyAuthenticationRuntime": {
     "assertionPolicy": {
@@ -291,6 +314,98 @@
       "mobile": "sessionToken plus sessionExpiresAt JSON only; no Set-Cookie",
       "web": "Secure HttpOnly SameSite=Lax cookie only; no token in JSON"
     },
+    "status": "implemented"
+  },
+  "passkeyManagementRuntime": {
+    "addPasskey": {
+      "excludeCredentials": "all active passkeys",
+      "preserveFreshnessOnRotation": true,
+      "purpose": "manage_passkeys_register",
+      "reuseExistingUserHandle": true,
+      "revokeOtherSessionsReason": "passkey_added"
+    },
+    "authorization": [
+      "active Session (cookie or Authorization: Session) required for all management routes",
+      "SetupGrant cannot authorize any passkey management route",
+      "RecoveryGrant cannot authorize any passkey management route",
+      "Bearer rejected"
+    ],
+    "distinctFromInitialRegistration": {
+      "addPasskeyAuthorization": "active Session plus fresh authentication only",
+      "addPasskeyRoutes": [
+        "POST /v1/account/passkeys/add/options",
+        "POST /v1/account/passkeys/add/verify"
+      ],
+      "initialSetupAuthorization": "SetupGrant only",
+      "initialSetupRoutes": [
+        "POST /v1/account/passkeys/registration/options",
+        "POST /v1/account/passkeys/registration/verify"
+      ]
+    },
+    "featureFlag": "PASSKEY_AUTHENTICATION_ENABLED",
+    "freshness": {
+      "field": "account_sessions.fresh_authenticated_at",
+      "notRequiredFor": [
+        "inventory",
+        "rename"
+      ],
+      "requiredFor": [
+        "add passkey",
+        "revoke passkey"
+      ],
+      "windowMinutes": 10
+    },
+    "inventory": {
+      "neverExposes": [
+        "credentialId",
+        "publicKey",
+        "aaguid",
+        "signCount",
+        "userHandle",
+        "internal id"
+      ],
+      "opaquePublicId": true
+    },
+    "publicErrorCodes": [
+      "SESSION_NOT_AUTHORIZED",
+      "FRESH_AUTHENTICATION_REQUIRED",
+      "PASSKEY_NOT_FOUND",
+      "PASSKEY_REGISTRATION_FAILED",
+      "PASSKEY_REAUTHENTICATION_FAILED",
+      "LAST_ACTIVE_PASSKEY_REQUIRED",
+      "RATE_LIMITED"
+    ],
+    "rateLimits": {
+      "passkey_inventory_account_15m": 60,
+      "passkey_reauthentication_options_session_15m": 10,
+      "passkey_reauthentication_verify_session_15m": 5,
+      "passkey_registration_options_session_15m": 5,
+      "passkey_registration_verify_session_15m": 5,
+      "passkey_rename_account_24h": 20,
+      "passkey_revoke_account_24h": 10
+    },
+    "reauthentication": {
+      "allowCredentials": "all active passkeys",
+      "challengeTtlMinutes": 5,
+      "purpose": "manage_passkeys_authenticate",
+      "sessionBound": true,
+      "successStatus": "FRESH_AUTHENTICATION_CONFIRMED",
+      "userVerification": "required"
+    },
+    "revoke": {
+      "cannotRevokeCurrentAuthenticatedCredential": true,
+      "lastActiveProtection": true,
+      "revokeOtherSessionsReason": "passkey_revoked"
+    },
+    "routes": [
+      "GET /v1/account/passkeys",
+      "POST /v1/account/security/reauthentication/passkeys/options",
+      "POST /v1/account/security/reauthentication/passkeys/verify",
+      "POST /v1/account/passkeys/add/options",
+      "POST /v1/account/passkeys/add/verify",
+      "PATCH /v1/account/passkeys/:passkeyId",
+      "DELETE /v1/account/passkeys/:passkeyId"
+    ],
     "status": "implemented"
   },
   "rpIdAndOriginPolicy": {
@@ -354,7 +469,7 @@
     "table": "town.setup_grants",
     "ttlMinutes": 15
   },
-  "slice": "ceremony_data_and_session_foundation_plus_email_verification_webauthn_registration_passkey_authentication_and_account_recovery_runtime",
+  "slice": "ceremony_data_and_session_foundation_plus_email_verification_webauthn_registration_passkey_authentication_account_recovery_and_passkey_management_runtime",
   "status": "partially_implemented",
   "title": "TOWN Authentication Ceremony Foundation V1",
   "webauthnRegistrationRuntime": {

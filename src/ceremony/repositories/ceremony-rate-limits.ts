@@ -27,6 +27,13 @@ const APPROVED_SCOPES = new Set<CeremonyRateLimitScope>([
   'recovery_verification_grant',
   'recovery_email_attempt_challenge',
   'recovery_email_attempt_email_ip',
+  'passkey_inventory_account',
+  'passkey_reauthentication_options_session',
+  'passkey_reauthentication_verify_session',
+  'passkey_registration_options_session',
+  'passkey_registration_verify_session',
+  'passkey_rename_account',
+  'passkey_revoke_account',
 ]);
 
 function assertApprovedScope(scope: CeremonyRateLimitScope): CeremonyRateLimitScope {
