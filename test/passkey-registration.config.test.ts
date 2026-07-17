@@ -6,17 +6,25 @@ const DATABASE_URL = 'postgres://town:town@127.0.0.1:5432/town';
 const EMAIL_HASH_KEY = 'town-ci-email-verification-hash-key-32b';
 const RATE_LIMIT_HASH_KEY = 'town-ci-ceremony-rate-limit-hash-key-32b';
 const CHALLENGE_HASH_KEY = 'town-ci-webauthn-challenge-hash-key-32by';
+const PROD_EMAIL_HASH_KEY = 'production-email-verification-hash-key-not-a-placeholder';
+const PROD_RATE_LIMIT_HASH_KEY = 'production-ceremony-rate-limit-hash-key-not-placeholder';
+const PROD_CHALLENGE_HASH_KEY = 'production-webauthn-challenge-hash-key-not-a-placeholder';
+
+const PROD_DATABASE_URL = 'postgres://town-prod:prod-secret@db.internal:5432/town';
+const PROD_COMMIT_SHA = '1234567890abcdef1234567890abcdef12345678';
 
 function webauthnEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): NodeJS.ProcessEnv {
+  const isProduction = overrides.NODE_ENV === 'production' || overrides.APP_ENV === 'production';
   return {
-    DATABASE_URL,
+    DATABASE_URL: isProduction ? PROD_DATABASE_URL : DATABASE_URL,
     NODE_ENV: 'test',
+    ...(isProduction ? { APP_COMMIT_SHA: PROD_COMMIT_SHA } : {}),
     WEBAUTHN_REGISTRATION_ENABLED: 'true',
     WEBAUTHN_RP_ID: 'localhost',
     WEBAUTHN_ALLOWED_ORIGINS: 'http://localhost:3000',
-    WEBAUTHN_CHALLENGE_HASH_KEY: CHALLENGE_HASH_KEY,
-    EMAIL_VERIFICATION_HASH_KEY: EMAIL_HASH_KEY,
-    CEREMONY_RATE_LIMIT_HASH_KEY: RATE_LIMIT_HASH_KEY,
+    WEBAUTHN_CHALLENGE_HASH_KEY: isProduction ? PROD_CHALLENGE_HASH_KEY : CHALLENGE_HASH_KEY,
+    EMAIL_VERIFICATION_HASH_KEY: isProduction ? PROD_EMAIL_HASH_KEY : EMAIL_HASH_KEY,
+    CEREMONY_RATE_LIMIT_HASH_KEY: isProduction ? PROD_RATE_LIMIT_HASH_KEY : RATE_LIMIT_HASH_KEY,
     ...overrides,
   };
 }

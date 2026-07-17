@@ -12,6 +12,9 @@ describe('loadEnv', () => {
 
     expect(env).toEqual({
       NODE_ENV: 'development',
+      APP_ENV: 'development',
+      READINESS_TIMEOUT_MS: 3000,
+      GRACEFUL_SHUTDOWN_TIMEOUT_MS: 10000,
       HOST: '0.0.0.0',
       PORT: 3000,
       LOG_LEVEL: 'info',
@@ -32,10 +35,15 @@ describe('loadEnv', () => {
   it('parses provided values', () => {
     const env = loadEnv({
       NODE_ENV: 'production',
+      APP_ENV: 'production',
+      APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+      APP_BUILD_TIMESTAMP: '2026-07-17T00:00:00Z',
+      READINESS_TIMEOUT_MS: '2500',
+      GRACEFUL_SHUTDOWN_TIMEOUT_MS: '15000',
       HOST: '127.0.0.1',
       PORT: '8080',
       LOG_LEVEL: 'warn',
-      DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+      DATABASE_URL: 'postgres://town-prod:prod-secret@db.internal:5432/town',
       DB_POOL_MAX: '3',
       DB_CONNECTION_TIMEOUT_MS: '1500',
       DB_IDLE_TIMEOUT_MS: '12000',
@@ -46,10 +54,15 @@ describe('loadEnv', () => {
 
     expect(env).toEqual({
       NODE_ENV: 'production',
+      APP_ENV: 'production',
+      APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+      APP_BUILD_TIMESTAMP: '2026-07-17T00:00:00Z',
+      READINESS_TIMEOUT_MS: 2500,
+      GRACEFUL_SHUTDOWN_TIMEOUT_MS: 15000,
       HOST: '127.0.0.1',
       PORT: 8080,
       LOG_LEVEL: 'warn',
-      DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+      DATABASE_URL: 'postgres://town-prod:prod-secret@db.internal:5432/town',
       DB_POOL_MAX: 3,
       DB_CONNECTION_TIMEOUT_MS: 1500,
       DB_IDLE_TIMEOUT_MS: 12000,
