@@ -83,6 +83,37 @@ describe('OpenAPI contract', () => {
     expect(membership.patch).toBeUndefined();
     expect(membership.delete).toBeUndefined();
 
+    // Billing foundation: exactly three public billing routes.
+    const billingPaths = Object.keys(document.paths)
+      .filter((p) => p.includes('/v1/billing'))
+      .sort();
+    expect(billingPaths).toEqual([
+      '/v1/billing/checkout-session',
+      '/v1/billing/customer-portal-session',
+      '/v1/billing/stripe/webhook',
+    ]);
+    const checkout = document.paths['/v1/billing/checkout-session'] as Record<string, unknown>;
+    expect(checkout.post).toBeDefined();
+    expect(checkout.get).toBeUndefined();
+    const portal = document.paths['/v1/billing/customer-portal-session'] as Record<string, unknown>;
+    expect(portal.post).toBeDefined();
+    expect(portal.get).toBeUndefined();
+    const webhook = document.paths['/v1/billing/stripe/webhook'] as Record<string, unknown>;
+    expect(webhook.post).toBeDefined();
+    expect(webhook.get).toBeUndefined();
+
+    // Billing security: session-authenticated for checkout/portal, no security for webhook (signature verified inline).
+    const checkoutPost = checkout.post as { security?: unknown[] };
+    const checkoutSecurity = JSON.stringify(checkoutPost.security ?? []);
+    expect(checkoutSecurity).toContain('sessionAuth');
+    expect(checkoutSecurity).toContain('mobileSessionAuth');
+    expect(checkoutSecurity).not.toContain('TownControlKey');
+    const portalPost = portal.post as { security?: unknown[] };
+    const portalSecurity = JSON.stringify(portalPost.security ?? []);
+    expect(portalSecurity).toContain('sessionAuth');
+    expect(portalSecurity).toContain('mobileSessionAuth');
+    expect(portalSecurity).not.toContain('TownControlKey');
+
     // Confirmation PUT is now session-authenticated (not TownControlKey).
     const confirmationSecurity = JSON.stringify(confirmationPath.put.security ?? []);
     expect(confirmationSecurity).toContain('sessionAuth');

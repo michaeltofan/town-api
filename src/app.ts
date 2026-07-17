@@ -19,7 +19,9 @@ import { membershipRoutes } from './routes/membership.js';
 import { passkeyManagementRoutes } from './routes/passkey-management.js';
 import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { signalsRoutes } from './routes/signals.js';
+import { billingRoutes } from './routes/billing.js';
 import type { LocalParticipationEligibilityResolver } from './membership/local-eligibility.js';
+import type { TownStripeAdapter } from './billing/stripe-adapter.js';
 
 export type BuildAppOptions = {
   env: Env;
@@ -63,6 +65,11 @@ export type BuildAppOptions = {
     generateId?: () => string;
     localEligibilityResolver?: LocalParticipationEligibilityResolver;
   };
+  billing?: {
+    now?: () => string;
+    generateId?: () => string;
+  };
+  stripeAdapter?: TownStripeAdapter;
 };
 
 const SENSITIVE_HEADER_REDACT = {
@@ -229,6 +236,14 @@ export async function buildApp(options: BuildAppOptions) {
     ...(options.membership?.localEligibilityResolver !== undefined
       ? { localEligibilityResolver: options.membership.localEligibilityResolver }
       : {}),
+  });
+  await app.register(billingRoutes, {
+    env: options.env,
+    ...(options.billing?.now !== undefined ? { now: options.billing.now } : {}),
+    ...(options.billing?.generateId !== undefined
+      ? { generateId: options.billing.generateId }
+      : {}),
+    ...(options.stripeAdapter !== undefined ? { stripeAdapter: options.stripeAdapter } : {}),
   });
 
   return app;
