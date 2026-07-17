@@ -34,7 +34,9 @@
     "auth:contract:check": "tsx scripts/auth-contract.ts check",
     "membership:contract:generate": "tsx scripts/membership-contract.ts generate",
     "membership:contract:check": "tsx scripts/membership-contract.ts check",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run openapi:check && npm run identity:contract:check && npm run auth:contract:check && npm run membership:contract:check && npm run build"
+    "billing:contract:generate": "tsx scripts/billing-contract.ts generate",
+    "billing:contract:check": "tsx scripts/billing-contract.ts check",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run openapi:check && npm run identity:contract:check && npm run auth:contract:check && npm run membership:contract:check && npm run billing:contract:check && npm run build"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.2",
@@ -45,7 +47,8 @@
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.4.0",
     "fastify-plugin": "^5.0.1",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "stripe": "22.3.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.31.0",

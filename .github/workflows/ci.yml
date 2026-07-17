@@ -55,6 +55,17 @@ jobs:
       ACCOUNT_RECOVERY_HASH_KEY: town-ci-account-recovery-hash-key-32byt
       ACCOUNT_RECOVERY_TOKEN_HASH_KEY: town-ci-account-recovery-token-key-32b
       ACCOUNT_RECOVERY_DELIVERY_MODE: test
+      # CI-only isolated Stripe billing placeholders (never Stripe live secrets; fake adapter drives tests).
+      STRIPE_BILLING_ENABLED: 'true'
+      STRIPE_SECRET_KEY: sk_test_town_ci_fake_stripe_secret_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_town_ci_fake_stripe_webhook_secret_placeholder
+      STRIPE_ANNUAL_PRICE_ID: price_town_ci_annual_placeholder
+      STRIPE_PORTAL_CONFIGURATION_ID: bpc_town_ci_portal_configuration_placeholder
+      STRIPE_CHECKOUT_SUCCESS_URL: https://example.test/checkout/success
+      STRIPE_CHECKOUT_CANCEL_URL: https://example.test/checkout/cancel
+      STRIPE_PORTAL_RETURN_URL: https://example.test/portal/return
+      STRIPE_API_VERSION: 2026-06-24.dahlia
+      STRIPE_EXPECTED_LIVEMODE: 'false'
       TRUST_PROXY: 'false'
 
     steps:
@@ -166,6 +177,9 @@ jobs:
 
       - name: Membership contract check
         run: npm run membership:contract:check
+
+      - name: Billing contract check
+        run: npm run billing:contract:check
 
       - name: Build
         run: npm run build

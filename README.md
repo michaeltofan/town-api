@@ -615,14 +615,175 @@ Suites include: payload-hash determinism, civic-access matrix (including tempora
 
 ### Exclusions
 
-Explicitly out of scope for this slice:
+Explicitly out of scope for Slice 1:
 
-- No Stripe SDK, webhook route, or Stripe identifiers in public responses.
 - No public membership mutation routes; no public reconcile endpoint.
 - No production local eligibility source (defaults fail-closed).
 - No modification to identity/auth contracts' domain separation.
 - No linking of the controlled test actor to an account or session.
 - No reassignment of pre-existing confirmation history.
+
+## Membership Foundation V1 — Slice 2 (Stripe Billing Integration Runtime)
+
+Slice 2 adds the Stripe integration runtime that starts Checkout Sessions, opens
+Billing Portal Sessions, and processes signature-verified Stripe webhooks. All
+membership state changes still flow through the Slice 1 transitions (with
+`source='stripe'`); the billing runtime does not add new membership statuses,
+does not expose Stripe identifiers in public API responses, and never persists
+raw Stripe payloads, card data, or checkout/portal URLs beyond the immediate
+response body.
+
+### Stripe SDK version pinning
+
+- SDK package: `stripe@22.3.2` (exact)
+- API version: `2026-06-24.dahlia` (pinned via `TOWN_STRIPE_API_VERSION`)
+- The environment loader enforces `STRIPE_API_VERSION=2026-06-24.dahlia` when
+  Stripe billing is enabled; other values are rejected.
+
+### Environment
+
+| Variable                         | Rules                                                                        |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| `STRIPE_BILLING_ENABLED`         | boolean; default `false`; invalid values fail startup validation             |
+| `STRIPE_SECRET_KEY`              | required when enabled; must start with `sk_` and be at least 20 chars        |
+| `STRIPE_WEBHOOK_SECRET`          | required when enabled; must start with `whsec_` and be at least 20 chars     |
+| `STRIPE_ANNUAL_PRICE_ID`         | required when enabled; must start with `price_`                              |
+| `STRIPE_PORTAL_CONFIGURATION_ID` | required when enabled; must start with `bpc_`                                |
+| `STRIPE_CHECKOUT_SUCCESS_URL`    | absolute https URL when enabled; `https://example.test/...` allowed in tests |
+| `STRIPE_CHECKOUT_CANCEL_URL`     | absolute https URL when enabled; `https://example.test/...` allowed in tests |
+| `STRIPE_PORTAL_RETURN_URL`       | absolute https URL when enabled; `https://example.test/...` allowed in tests |
+| `STRIPE_API_VERSION`             | `2026-06-24.dahlia` (exact)                                                  |
+| `STRIPE_EXPECTED_LIVEMODE`       | `true` in production; `false` otherwise; validated against `NODE_ENV`        |
+| `CEREMONY_RATE_LIMIT_HASH_KEY`   | required when enabled; drives `billing_*` rate-limit subject hashing         |
+
+Environment validation errors never include secret values.
+
+Billing routes require an active passkey-authenticated session, so
+`PASSKEY_AUTHENTICATION_ENABLED=true` and its associated hash keys/cookie name
+must also be configured. When `STRIPE_BILLING_ENABLED=false`, all three billing
+routes return the safe `404 Not Found` shape.
+
+### Fixed price contract
+
+| Field          | Value          |
+| -------------- | -------------- |
+| Currency       | `eur`          |
+| Unit amount    | `1200` (cents) |
+| Interval       | `year`         |
+| Interval count | `1`            |
+| Quantity       | `1`            |
+
+`assertAnnualPrice(price, expectedPriceId)` rejects any Stripe price that does
+not match this contract with a bounded reason (`unknown_price_id`, `inactive`,
+`currency_mismatch`, `unit_amount_mismatch`, `interval_mismatch`,
+`interval_count_mismatch`, `not_recurring`).
+
+### Tables
+
+- `town.stripe_customer_links` — one Stripe Customer per TOWN account.
+  Unique per `account_id`, `stripe_customer_id`, and `billing_reference`.
+  Never exposed in public API responses.
+- `town.stripe_checkout_attempts` — bounded ledger for Checkout attempts and
+  Stripe idempotency keys. Statuses: `creating`, `open`, `completed`, `expired`,
+  `failed`. Partial-unique on `stripe_checkout_session_id` when set. Never
+  stores Checkout URLs or raw Stripe payloads.
+
+### Routes
+
+| Method | Path                                  | Behavior                                                                |
+| ------ | ------------------------------------- | ----------------------------------------------------------------------- |
+| `POST` | `/v1/billing/checkout-session`        | Create a Stripe Checkout Session for the caller (returns `checkoutUrl`) |
+| `POST` | `/v1/billing/customer-portal-session` | Open a Stripe Customer Portal Session (returns `portalUrl`)             |
+| `POST` | `/v1/billing/stripe/webhook`          | Signature-verified Stripe webhook (raw body Buffer parser, 1 MB limit)  |
+
+Checkout and portal require an active web or mobile session. `SetupGrant`,
+`RecoveryGrant`, and `Bearer` are rejected. Bodies are strictly empty objects
+(`additionalProperties: false`). Response bodies only ever expose the Stripe
+Checkout / Portal URL for the current call.
+
+### Idempotency
+
+- `town:create-customer:<billing-reference>` — Stripe Customer creation.
+- `town:checkout:<billing-reference>:<attempt-id>` — Stripe Checkout Session
+  creation. Duplicate calls with the same key surface the same Session.
+
+### Webhook processor
+
+Signature verification uses the official Stripe SDK (`webhooks.constructEvent`).
+The webhook route registers a raw-body Buffer content type parser in an
+encapsulated Fastify plugin so signature verification runs against the exact
+bytes Stripe signed. Signature-mismatch requests return `400 Bad Request`
+without invoking the processor.
+
+Handled event types:
+
+- `checkout.session.completed` — links the subscription reference to the
+  entitlement without activating. Never returns URLs to the client.
+- `invoice.paid` — validates the price policy against the pinned annual price,
+  derives `accessUntil` from the subscription's current period end (ISO), and
+  activates membership via `activateMembership(source='stripe')`.
+- `customer.subscription.updated` — when `cancel_at_period_end=true` schedules
+  cancellation; when `cancel_at_period_end=false` reactivates a cancelling
+  membership. Unsupported changes (multi-line, price/quantity mismatch, pause,
+  trial) are rejected without mutation.
+- `customer.subscription.deleted` — if `now >= access_until` expires the
+  entitlement; otherwise preserves access and appends an audit event.
+- `invoice.payment_failed` — audit only; no entitlement mutation.
+
+All other event types return 2xx with no state mutation. Events with
+`livemode !== STRIPE_EXPECTED_LIVEMODE` or an `api_version` that does not match
+the pinned value are rejected without mutation.
+
+Transition-invoking events use the Slice 1 `membership_source_events` ledger,
+keyed by `(source='stripe', source_event_id=event.id)`, for full replay/reject
+semantics via the canonical payload hash.
+
+### Rate limits
+
+Persistent `town.ceremony_rate_limits` with hashed account subjects:
+
+- `billing_checkout_account` — 5 attempts / 30 minutes
+- `billing_portal_account` — 10 attempts / 30 minutes
+
+### Identity security events
+
+New bounded event types (never contain Stripe identifiers, checkout/portal URLs,
+raw bodies, or signature headers):
+
+- `stripe_checkout_session_created`
+- `stripe_customer_linked`
+- `stripe_webhook_received`
+- `stripe_webhook_verified`
+- `stripe_webhook_replayed`
+- `stripe_webhook_rejected`
+- `stripe_subscription_linked`
+- `stripe_invoice_paid`
+- `stripe_cancellation_scheduled`
+- `stripe_cancellation_removed`
+- `stripe_subscription_deleted`
+- `stripe_payment_failed`
+- `stripe_price_mismatch`
+
+### Architecture contract
+
+Slice 2 contract lives in `docs/billing-foundation.v1.json`:
+
+```bash
+npm run billing:contract:generate
+npm run billing:contract:check
+```
+
+### Slice 2 exclusions
+
+Explicitly out of scope for this slice:
+
+- Public exposure of Stripe customer, subscription, invoice, or payment IDs.
+- Storing Checkout or Portal URLs beyond the immediate response body.
+- Direct membership entitlement mutation from routes (Slice 1 transitions only).
+- Additional webhook event types beyond those enumerated.
+- Trial subscriptions, paused subscriptions, non-annual pricing, or multi-line
+  subscriptions.
+- Worker-based webhook processing, Redis, or queues.
 
 ### Explicit exclusions
 
@@ -632,7 +793,7 @@ Still not implemented:
 - JWTs
 - recovery login / session issuance from recovery
 - production recovery email delivery
-- membership / Stripe / local verification
+- local verification
 - Railway / web integration / mobile integration / deployment
 
 ## Other endpoints
@@ -662,6 +823,9 @@ Still not implemented:
 | `PATCH`  | `/v1/account/passkeys/:passkeyId`                        | rename passkey                                  |
 | `DELETE` | `/v1/account/passkeys/:passkeyId`                        | revoke passkey                                  |
 | `GET`    | `/v1/account/membership`                                 | membership entitlement + civic access view      |
+| `POST`   | `/v1/billing/checkout-session`                           | create a Stripe Checkout Session                |
+| `POST`   | `/v1/billing/customer-portal-session`                    | open a Stripe Customer Portal Session           |
+| `POST`   | `/v1/billing/stripe/webhook`                             | signature-verified Stripe webhook               |
 
 ## Local database workflow
 
@@ -692,6 +856,8 @@ Useful scripts:
 | `npm run auth:contract:check`          | verify committed ceremony contract               |
 | `npm run membership:contract:generate` | write membership foundation contract             |
 | `npm run membership:contract:check`    | verify committed membership contract             |
+| `npm run billing:contract:generate`    | write billing foundation contract                |
+| `npm run billing:contract:check`       | verify committed billing contract                |
 | `npm test`                             | unit tests (no PostgreSQL required)              |
 | `npm run test:integration`             | PostgreSQL 18 integration suite                  |
 | `npm run check`                        | non-destructive quality gate                     |
