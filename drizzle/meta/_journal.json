@@ -78,6 +78,13 @@
       "when": 1784284423080,
       "tag": "0010_membership_entitlement_access_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784295489554,
+      "tag": "0011_stripe_billing_integration_runtime",
+      "breakpoints": true
     }
   ]
 }

@@ -503,7 +503,20 @@ export const identitySecurityEvents = town.table(
         'membership_expired',
         'membership_event_replayed',
         'membership_event_rejected',
-        'civic_participation_denied'
+        'civic_participation_denied',
+        'stripe_checkout_session_created',
+        'stripe_customer_linked',
+        'stripe_webhook_received',
+        'stripe_webhook_verified',
+        'stripe_webhook_replayed',
+        'stripe_webhook_rejected',
+        'stripe_subscription_linked',
+        'stripe_invoice_paid',
+        'stripe_cancellation_scheduled',
+        'stripe_cancellation_removed',
+        'stripe_subscription_deleted',
+        'stripe_payment_failed',
+        'stripe_price_mismatch'
       )`,
     ),
     index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
@@ -625,6 +638,72 @@ export const membershipSourceEvents = town.table(
       sql`char_length(${table.payloadHash}) = 64`,
     ),
     index('membership_source_events_account_processed_idx').on(table.accountId, table.processedAt),
+  ],
+);
+
+/**
+ * One Stripe Customer per TOWN account. Provider IDs are never exposed publicly.
+ */
+export const stripeCustomerLinks = town.table(
+  'stripe_customer_links',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    stripeCustomerId: text('stripe_customer_id').notNull(),
+    billingReference: uuid('billing_reference').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'stripe_customer_links_account_id_fkey',
+    }).onDelete('restrict'),
+    unique('stripe_customer_links_account_id_unique').on(table.accountId),
+    unique('stripe_customer_links_stripe_customer_id_unique').on(table.stripeCustomerId),
+    unique('stripe_customer_links_billing_reference_unique').on(table.billingReference),
+    check(
+      'stripe_customer_links_updated_after_created',
+      sql`${table.updatedAt} >= ${table.createdAt}`,
+    ),
+    index('stripe_customer_links_stripe_customer_id_idx').on(table.stripeCustomerId),
+  ],
+);
+
+/**
+ * Bounded Checkout Session attempt ledger for concurrency and Stripe idempotency keys.
+ * Does not store Checkout URLs, raw Stripe payloads, or payment data.
+ */
+export const stripeCheckoutAttempts = town.table(
+  'stripe_checkout_attempts',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    stripeCheckoutSessionId: text('stripe_checkout_session_id'),
+    status: text('status').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true, mode: 'string' }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'stripe_checkout_attempts_account_id_fkey',
+    }).onDelete('restrict'),
+    uniqueIndex('stripe_checkout_attempts_session_id_unique')
+      .on(table.stripeCheckoutSessionId)
+      .where(sql`${table.stripeCheckoutSessionId} is not null`),
+    check(
+      'stripe_checkout_attempts_status_valid',
+      sql`${table.status} in ('creating', 'open', 'completed', 'expired', 'failed')`,
+    ),
+    check(
+      'stripe_checkout_attempts_expires_after_created',
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    index('stripe_checkout_attempts_account_created_idx').on(table.accountId, table.createdAt),
   ],
 );
 
@@ -820,7 +899,9 @@ export const ceremonyRateLimits = town.table(
         'passkey_registration_verify_session',
         'passkey_rename_account',
         'passkey_revoke_account',
-        'membership_inventory_account'
+        'membership_inventory_account',
+        'billing_checkout_account',
+        'billing_portal_account'
       )`,
     ),
     check('ceremony_rate_limits_attempt_count_nonnegative', sql`${table.attemptCount} >= 0`),
@@ -857,6 +938,8 @@ export type IdentitySecurityEventRow = typeof identitySecurityEvents.$inferSelec
 export type SetupGrantRow = typeof setupGrants.$inferSelect;
 export type AccountSessionRow = typeof accountSessions.$inferSelect;
 export type CeremonyRateLimitRow = typeof ceremonyRateLimits.$inferSelect;
+export type StripeCustomerLinkRow = typeof stripeCustomerLinks.$inferSelect;
+export type StripeCheckoutAttemptRow = typeof stripeCheckoutAttempts.$inferSelect;
 export type MembershipEntitlementRow = typeof membershipEntitlements.$inferSelect;
 export type MembershipSourceEventRow = typeof membershipSourceEvents.$inferSelect;
 
@@ -907,7 +990,9 @@ export type CeremonyRateLimitScope =
   | 'passkey_registration_verify_session'
   | 'passkey_rename_account'
   | 'passkey_revoke_account'
-  | 'membership_inventory_account';
+  | 'membership_inventory_account'
+  | 'billing_checkout_account'
+  | 'billing_portal_account';
 export type IdentitySecurityEventType =
   | 'email_verification_requested'
   | 'email_verified'
@@ -942,7 +1027,20 @@ export type IdentitySecurityEventType =
   | 'membership_expired'
   | 'membership_event_replayed'
   | 'membership_event_rejected'
-  | 'civic_participation_denied';
+  | 'civic_participation_denied'
+  | 'stripe_checkout_session_created'
+  | 'stripe_customer_linked'
+  | 'stripe_webhook_received'
+  | 'stripe_webhook_verified'
+  | 'stripe_webhook_replayed'
+  | 'stripe_webhook_rejected'
+  | 'stripe_subscription_linked'
+  | 'stripe_invoice_paid'
+  | 'stripe_cancellation_scheduled'
+  | 'stripe_cancellation_removed'
+  | 'stripe_subscription_deleted'
+  | 'stripe_payment_failed'
+  | 'stripe_price_mismatch';
 
 export type MembershipStatus = 'inactive' | 'active' | 'cancelling' | 'expired';
 export type MembershipSource = 'test_fixture' | 'stripe';
@@ -952,3 +1050,4 @@ export type MembershipSourceEventResult = 'applied' | 'replayed' | 'rejected' | 
 export type CivicAccessLevel = 'visitor' | 'read_only' | 'participant';
 export type LocalParticipationEligibility =
   'eligible' | 'not_verified' | 'expired' | 'mismatched_community' | 'unavailable';
+export type StripeCheckoutAttemptStatus = 'creating' | 'open' | 'completed' | 'expired' | 'failed';

@@ -40,6 +40,8 @@ describe('actors and signal_confirmations migration', () => {
       'setup_grants',
       'signal_confirmations',
       'signals',
+      'stripe_checkout_attempts',
+      'stripe_customer_links',
       'webauthn_challenges',
     ]);
 
@@ -129,6 +131,8 @@ describe('actors and signal_confirmations migration', () => {
       'setup_grants',
       'signal_confirmations',
       'signals',
+      'stripe_checkout_attempts',
+      'stripe_customer_links',
       'webauthn_challenges',
     ]);
   });

@@ -40,6 +40,8 @@ describe('communities and signals migration', () => {
       'setup_grants',
       'signal_confirmations',
       'signals',
+      'stripe_checkout_attempts',
+      'stripe_customer_links',
       'webauthn_challenges',
     ]);
 
@@ -125,6 +127,8 @@ describe('communities and signals migration', () => {
       'setup_grants',
       'signal_confirmations',
       'signals',
+      'stripe_checkout_attempts',
+      'stripe_customer_links',
       'webauthn_challenges',
     ]);
   });

@@ -166,7 +166,9 @@ describe('membership migration 0010', () => {
     expect(events.rows[0]?.definition).toContain("'civic_participation_denied'");
   });
 
-  it('does not create any Stripe-branded tables', async () => {
+  it('does not create legacy Stripe-branded tables', async () => {
+    // Slice 2 introduces the approved stripe_customer_links and stripe_checkout_attempts
+    // tables; the legacy singular 'stripe_customers' and payment table names remain forbidden.
     const forbidden = await pool.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables
        WHERE table_schema = 'town'
@@ -175,10 +177,10 @@ describe('membership migration 0010', () => {
     expect(forbidden.rows).toHaveLength(0);
   });
 
-  it('keeps the drizzle migration history at exactly 11 entries (prior 10 + 0010)', async () => {
+  it('keeps the drizzle migration history at least at 11 entries (prior 10 + 0010)', async () => {
     const count = await pool.query<{ count: string }>(
       'SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations',
     );
-    expect(Number(count.rows[0]?.count ?? 0)).toBe(11);
+    expect(Number(count.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(11);
   });
 });

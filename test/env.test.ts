@@ -24,6 +24,7 @@ describe('loadEnv', () => {
       WEBAUTHN_REGISTRATION_ENABLED: false,
       PASSKEY_AUTHENTICATION_ENABLED: false,
       ACCOUNT_RECOVERY_ENABLED: false,
+      STRIPE_BILLING_ENABLED: false,
       TRUST_PROXY: false,
     });
   });
@@ -57,6 +58,7 @@ describe('loadEnv', () => {
       WEBAUTHN_REGISTRATION_ENABLED: false,
       PASSKEY_AUTHENTICATION_ENABLED: false,
       ACCOUNT_RECOVERY_ENABLED: false,
+      STRIPE_BILLING_ENABLED: false,
       TRUST_PROXY: true,
     });
   });

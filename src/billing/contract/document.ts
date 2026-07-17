@@ -1,0 +1,258 @@
+import { STRIPE_API_VERSION } from '../../config/env.js';
+import {
+  TOWN_BILLING_CURRENCY,
+  TOWN_BILLING_INTERVAL,
+  TOWN_BILLING_INTERVAL_COUNT,
+  TOWN_BILLING_QUANTITY,
+  TOWN_BILLING_UNIT_AMOUNT,
+} from '../price-policy.js';
+
+function sortValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortValue);
+  }
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(record).sort((a, b) => a.localeCompare(b))) {
+      sorted[key] = sortValue(record[key]);
+    }
+    return sorted;
+  }
+  return value;
+}
+
+export function serializeBillingContract(document: unknown): string {
+  return `${JSON.stringify(sortValue(document), null, 2)}\n`;
+}
+
+export function generateBillingContractDocument(): unknown {
+  return {
+    contractVersion: '1.0.0',
+    title: 'TOWN Membership Foundation V1 — Slice 2: Stripe Billing Integration Runtime',
+    description:
+      'Contract for the Stripe billing runtime that starts Checkout Sessions, opens Billing Portal Sessions, and processes signature-verified webhooks. All membership state changes flow through the Slice 1 membership transitions; Stripe identifiers are never exposed in public API responses.',
+    status: 'implemented',
+    implementedLiveRoutes: true,
+    slice: 'stripe_billing_integration_runtime',
+    stripe: {
+      sdkPackage: 'stripe',
+      sdkVersion: '22.3.2',
+      apiVersion: STRIPE_API_VERSION,
+      livemodeContract: {
+        production:
+          'STRIPE_EXPECTED_LIVEMODE must be true; webhook events and prices must be livemode=true',
+        nonProduction:
+          'STRIPE_EXPECTED_LIVEMODE must be false; webhook events and prices must be livemode=false',
+      },
+    },
+    price: {
+      currency: TOWN_BILLING_CURRENCY,
+      unitAmount: TOWN_BILLING_UNIT_AMOUNT,
+      interval: TOWN_BILLING_INTERVAL,
+      intervalCount: TOWN_BILLING_INTERVAL_COUNT,
+      quantity: TOWN_BILLING_QUANTITY,
+      priceId: 'STRIPE_ANNUAL_PRICE_ID',
+      mismatchReasons: [
+        'unknown_price_id',
+        'inactive',
+        'currency_mismatch',
+        'unit_amount_mismatch',
+        'interval_mismatch',
+        'interval_count_mismatch',
+        'not_recurring',
+      ],
+    },
+    tables: {
+      stripeCustomerLinks: {
+        table: 'town.stripe_customer_links',
+        uniques: ['account_id', 'stripe_customer_id', 'billing_reference'],
+        publicExposure: 'never exposed in public API responses',
+      },
+      stripeCheckoutAttempts: {
+        table: 'town.stripe_checkout_attempts',
+        statuses: ['creating', 'open', 'completed', 'expired', 'failed'],
+        uniqueOnSessionId: 'partial unique index when stripe_checkout_session_id is set',
+      },
+      identitySecurityEvents: {
+        table: 'town.identity_security_events',
+        addedEventTypes: [
+          'stripe_checkout_session_created',
+          'stripe_customer_linked',
+          'stripe_webhook_received',
+          'stripe_webhook_verified',
+          'stripe_webhook_replayed',
+          'stripe_webhook_rejected',
+          'stripe_subscription_linked',
+          'stripe_invoice_paid',
+          'stripe_cancellation_scheduled',
+          'stripe_cancellation_removed',
+          'stripe_subscription_deleted',
+          'stripe_payment_failed',
+          'stripe_price_mismatch',
+        ],
+        metadataPolicy: [
+          'Never contains Stripe secret keys, webhook secrets, or raw signature headers',
+          'Never contains Stripe customer, subscription, invoice, or checkout session identifiers',
+          'Never contains card, payment method, checkoutUrl, portalUrl, email, or IP values',
+          'Bounded scalar categories only',
+        ],
+      },
+      ceremonyRateLimits: {
+        table: 'town.ceremony_rate_limits',
+        addedScopes: ['billing_checkout_account', 'billing_portal_account'],
+      },
+    },
+    rateLimits: {
+      billingCheckoutAccount: { limit: 5, windowMinutes: 30 },
+      billingPortalAccount: { limit: 10, windowMinutes: 30 },
+    },
+    routes: {
+      publicBillingRoutes: [
+        'POST /v1/billing/checkout-session',
+        'POST /v1/billing/customer-portal-session',
+        'POST /v1/billing/stripe/webhook',
+      ],
+      checkoutSession: {
+        auth: 'session (web cookie or mobile session header) required; SetupGrant/RecoveryGrant/Bearer rejected',
+        body: 'empty object; additionalProperties rejected',
+        responseFields: ['data.checkoutUrl'],
+        errors: {
+          BILLING_NOT_AVAILABLE: 503,
+          MEMBERSHIP_ALREADY_ACTIVE: 409,
+          BILLING_MANAGE_EXISTING_SUBSCRIPTION: 409,
+          BILLING_CHECKOUT_FAILED: 502,
+          SESSION_NOT_AUTHORIZED: 401,
+          RATE_LIMITED: 429,
+        },
+      },
+      customerPortalSession: {
+        auth: 'session (web cookie or mobile session header) required; SetupGrant/RecoveryGrant/Bearer rejected',
+        body: 'empty object; additionalProperties rejected',
+        responseFields: ['data.portalUrl'],
+        errors: {
+          BILLING_CUSTOMER_NOT_AVAILABLE: 404,
+          BILLING_PORTAL_FAILED: 502,
+          SESSION_NOT_AUTHORIZED: 401,
+          RATE_LIMITED: 429,
+          BILLING_NOT_AVAILABLE: 503,
+        },
+      },
+      stripeWebhook: {
+        auth: 'raw Stripe-Signature verification via constructWebhookEvent',
+        bodyLimit: 1_048_576,
+        contentTypeParser: 'application/json parsed as Buffer with rawBody attached',
+        response: '{ received: true }',
+        signatureFailure: '400 Bad Request without invoking the processor',
+        featureFlagDisabled: '404 Not Found',
+      },
+    },
+    checkoutFlow: {
+      idempotencyKeys: [
+        'town:create-customer:<billing-reference>',
+        'town:checkout:<billing-reference>:<attempt-id>',
+      ],
+      metadata: {
+        customer: {
+          town_account_reference: 'billing_reference UUID',
+          town_billing_schema_version: '1',
+        },
+        checkoutSession: {
+          town_account_reference: 'billing_reference UUID',
+          town_checkout_attempt_id: 'stripe_checkout_attempts.id',
+          town_billing_schema_version: '1',
+        },
+        subscription: {
+          town_account_reference: 'billing_reference UUID',
+          town_billing_schema_version: '1',
+        },
+      },
+      neverStored: [
+        'raw Stripe payloads',
+        'card data',
+        'payment method identifiers',
+        'checkout URLs beyond the immediate response body',
+        'portal URLs beyond the immediate response body',
+      ],
+    },
+    webhookProcessor: {
+      handledEventTypes: [
+        'checkout.session.completed',
+        'invoice.paid',
+        'invoice.payment_failed',
+        'customer.subscription.updated',
+        'customer.subscription.deleted',
+      ],
+      ignoredEventPolicy: 'unhandled event types return 200 without state mutation',
+      livemodeContract:
+        'events with livemode !== STRIPE_EXPECTED_LIVEMODE are rejected without mutation',
+      apiVersionContract:
+        'events with api_version other than the pinned version are rejected without mutation',
+      transitionCoupling: {
+        'invoice.paid': 'activateMembership(source=stripe)',
+        'customer.subscription.updated (cancel_at_period_end=true)':
+          'scheduleMembershipCancellation',
+        'customer.subscription.updated (cancel_at_period_end=false)': 'reactivateMembership',
+        'customer.subscription.deleted (now >= access_until)': 'expireMembership',
+        'customer.subscription.deleted (still within access_until)': 'audit only; access preserved',
+        'checkout.session.completed': 'links subscription/customer references without activation',
+        'invoice.payment_failed': 'audit only; no entitlement mutation',
+      },
+      idempotency: [
+        'transition-invoking events use membership_source_events keyed by (stripe, event.id)',
+        'checkout.session.completed uses no-op SQL update when subscription id already linked',
+        'invoice.payment_failed audits are safe to replay',
+      ],
+      httpMapping: {
+        applied: '200 { received: true }',
+        replayed: '200 { received: true }',
+        ignored: '200 { received: true }',
+        rejected:
+          '200 { received: true } for structural/idempotency mismatches; recoverable rejections may retry',
+        signatureFailure: '400 Bad Request',
+      },
+    },
+    envConfig: {
+      flag: 'STRIPE_BILLING_ENABLED',
+      required: [
+        'STRIPE_SECRET_KEY (starts with sk_, min length 20)',
+        'STRIPE_WEBHOOK_SECRET (starts with whsec_, min length 20)',
+        'STRIPE_ANNUAL_PRICE_ID (starts with price_)',
+        'STRIPE_PORTAL_CONFIGURATION_ID (starts with bpc_)',
+        'STRIPE_CHECKOUT_SUCCESS_URL (https absolute)',
+        'STRIPE_CHECKOUT_CANCEL_URL (https absolute)',
+        'STRIPE_PORTAL_RETURN_URL (https absolute)',
+        'STRIPE_API_VERSION = 2026-06-24.dahlia',
+        'STRIPE_EXPECTED_LIVEMODE (true in production, false otherwise)',
+        'CEREMONY_RATE_LIMIT_HASH_KEY (min 32 chars)',
+      ],
+      productionExclusions: [
+        'STRIPE_EXPECTED_LIVEMODE=false is rejected in production',
+        'Wildcards, empty strings, and non-https URLs are rejected',
+        'STRIPE_API_VERSION diverging from the pinned value is rejected',
+      ],
+      sanitization:
+        'Environment validation errors never include secret values; sanitized paths return generic hints only',
+    },
+    explicitExclusions: [
+      'JWTs',
+      'Public exposure of Stripe customer, subscription, invoice, or payment identifiers',
+      'Storing Checkout or Portal URLs beyond the response body',
+      'Direct membership entitlement mutation from routes (only via Slice 1 transitions or the webhook processor)',
+      'Additional webhook event types not enumerated above',
+      'Trial subscriptions, paused subscriptions, non-annual pricing, or multi-line subscriptions',
+      'GraphQL, Redis, or worker-based webhook processing',
+    ],
+    testCommands: [
+      'npm test',
+      'npm run test:integration',
+      'npm run db:check',
+      'npm run db:migrate:test',
+      'npm run openapi:check',
+      'npm run identity:contract:check',
+      'npm run auth:contract:check',
+      'npm run membership:contract:check',
+      'npm run billing:contract:check',
+    ],
+  };
+}

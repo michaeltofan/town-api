@@ -40,6 +40,11 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
           description:
             'Passkey authentication and opaque account sessions. Web clients use only the Secure HttpOnly session cookie; mobile clients use only Authorization: Session <token>. Sessions do not grant membership, payment, local verification, or civic entitlement.',
         },
+        {
+          name: 'Billing',
+          description:
+            'Stripe billing runtime for TOWN membership. Checkout and Customer Portal endpoints require an active session; the webhook endpoint verifies raw Stripe signatures. Never exposes Stripe customer, subscription, invoice, or payment identifiers in public API responses; only Stripe-issued Checkout and Portal URLs are returned.',
+        },
       ],
       components: {
         securitySchemes: {

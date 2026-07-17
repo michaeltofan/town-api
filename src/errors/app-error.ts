@@ -37,3 +37,35 @@ export function civicParticipationNotAuthorizedError(): AppError {
     'Civic participation is not authorized for this account.',
   );
 }
+
+export function billingNotAvailableError(): AppError {
+  return new AppError(503, 'BILLING_NOT_AVAILABLE', 'Billing is not available at this time.');
+}
+
+export function membershipAlreadyActiveError(): AppError {
+  return new AppError(409, 'MEMBERSHIP_ALREADY_ACTIVE', 'Membership is already active.');
+}
+
+export function billingManageExistingSubscriptionError(): AppError {
+  return new AppError(
+    409,
+    'BILLING_MANAGE_EXISTING_SUBSCRIPTION',
+    'Use the billing portal to manage the existing subscription.',
+  );
+}
+
+export function billingCheckoutFailedError(): AppError {
+  return new AppError(502, 'BILLING_CHECKOUT_FAILED', 'Billing checkout could not be started.');
+}
+
+export function billingCustomerNotAvailableError(): AppError {
+  return new AppError(
+    404,
+    'BILLING_CUSTOMER_NOT_AVAILABLE',
+    'No billing customer is available for this account.',
+  );
+}
+
+export function billingPortalFailedError(): AppError {
+  return new AppError(502, 'BILLING_PORTAL_FAILED', 'Billing portal could not be started.');
+}

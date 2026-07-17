@@ -18,6 +18,8 @@ const EXPECTED_TABLES = [
   'setup_grants',
   'signal_confirmations',
   'signals',
+  'stripe_checkout_attempts',
+  'stripe_customer_links',
   'webauthn_challenges',
 ];
 
