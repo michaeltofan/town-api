@@ -41,6 +41,116 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/health/build": {
+      "get": {
+        "description": "Returns the immutable runtime build identity: service name, semantic version from package.json, deployed commit SHA when present, resolved APP_ENV, Node.js runtime version, optional build timestamp, and the expected drizzle migration count derived from the shipped journal. Never returns secrets, connection strings, hostnames, or request-scoped data.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "buildTimestamp": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "commitSha": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "environment": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "development"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "test"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "staging"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "production"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "expectedMigrationCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "nodeVersion": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "service": {
+                          "enum": [
+                            "town-api"
+                          ],
+                          "type": "string"
+                        },
+                        "version": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "service",
+                        "version",
+                        "commitSha",
+                        "environment",
+                        "nodeVersion",
+                        "buildTimestamp",
+                        "expectedMigrationCount"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Runtime build identity",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "description": "Returns ok when the process is running and able to serve HTTP.",
@@ -76,7 +186,7 @@
     },
     "/health/ready": {
       "get": {
-        "description": "Returns ready when PostgreSQL is reachable. Returns not_ready when the database readiness check fails.",
+        "description": "Returns ready when configuration is accepted, PostgreSQL is reachable within the bounded readiness timeout, and the drizzle migration ledger matches the expected count. Returns not_ready with safe component checks otherwise. Never exposes migration names, SQL, connection strings, or secrets.",
         "responses": {
           "200": {
             "content": {
@@ -84,6 +194,78 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "checks": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "config": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "ok"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "fail"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "database": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "ok"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "fail"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "timeout"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "migrations": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "ok"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "fail"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "unknown"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "config",
+                        "database",
+                        "migrations"
+                      ],
+                      "title": "HealthChecks",
+                      "type": "object"
+                    },
                     "status": {
                       "enum": [
                         "ready"
@@ -92,7 +274,8 @@
                     }
                   },
                   "required": [
-                    "status"
+                    "status",
+                    "checks"
                   ],
                   "type": "object"
                 }
@@ -106,6 +289,77 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "checks": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "config": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "ok"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "fail"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "database": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "ok"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "fail"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "timeout"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "migrations": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "ok"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "fail"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "unknown"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "config",
+                        "database",
+                        "migrations"
+                      ],
+                      "type": "object"
+                    },
                     "status": {
                       "enum": [
                         "not_ready"
@@ -114,7 +368,8 @@
                     }
                   },
                   "required": [
-                    "status"
+                    "status",
+                    "checks"
                   ],
                   "type": "object"
                 }
