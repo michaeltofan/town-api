@@ -98,9 +98,7 @@ function parseJournal(raw: string): MigrationJournal {
   return { entries };
 }
 
-export function readMigrationJournal(
-  journalPath: string = resolveJournalPath(),
-): MigrationJournal {
+export function readMigrationJournal(journalPath: string = resolveJournalPath()): MigrationJournal {
   const raw = readFileSync(journalPath, 'utf8');
   return parseJournal(raw);
 }
@@ -165,9 +163,7 @@ function isHashPermutation(
   return expected.some((row, index) => row.hash !== applied[index]?.hash);
 }
 
-function validateAppliedRows(
-  rows: readonly AppliedMigration[],
-): MigrationLedgerDetail | null {
+function validateAppliedRows(rows: readonly AppliedMigration[]): MigrationLedgerDetail | null {
   const seenIds = new Set<number>();
   const seenHashes = new Set<string>();
   for (const row of rows) {
@@ -297,8 +293,7 @@ function parseAppliedRows(rows: readonly LedgerRow[]): AppliedMigration[] | 'mal
       !Number.isInteger(row.id) ||
       typeof row.hash !== 'string' ||
       row.hash.length === 0 ||
-      row.created_at === null ||
-      row.created_at === undefined
+      row.created_at === null
     ) {
       return 'malformed';
     }

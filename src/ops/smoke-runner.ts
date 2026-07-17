@@ -268,7 +268,11 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
         timeoutMs,
         'cors-unauthorized-origin',
       );
-      assertOriginRejected(response.headers.get('access-control-allow-origin'), origin, 'unauthorized');
+      assertOriginRejected(
+        response.headers.get('access-control-allow-origin'),
+        origin,
+        'unauthorized',
+      );
       return 'rejected';
     },
     true,
@@ -336,7 +340,7 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
         throw new Error(`preflight ACAO mismatch: ${String(allow)}`);
       }
       const methods = response.headers.get('access-control-allow-methods');
-      if (methods === null || !methods.toUpperCase().includes('GET')) {
+      if (!methods?.toUpperCase().includes('GET')) {
         throw new Error('preflight missing Allow-Methods');
       }
       const maxAge = response.headers.get('access-control-max-age');

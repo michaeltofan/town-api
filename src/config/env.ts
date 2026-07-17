@@ -842,6 +842,13 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     }
   }
 
+  // Canonical browser origin allowlist (WebAuthn + runtime CORS). Retain and
+  // validate whenever set, even if ceremony features are disabled.
+  if (isNonEmptyString(source.WEBAUTHN_ALLOWED_ORIGINS)) {
+    parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, nodeEnv);
+    candidate.WEBAUTHN_ALLOWED_ORIGINS = source.WEBAUTHN_ALLOWED_ORIGINS;
+  }
+
   if (!Value.Check(EnvSchema, candidate)) {
     const details = [...Value.Errors(EnvSchema, candidate)]
       .map((error) => sanitizeEnvErrorPath(error.path || '/env', error.message))

@@ -28,7 +28,10 @@ async function main(): Promise<void> {
       );
       process.exit(1);
     }
-    if (result.applied !== EXPECTED_MIGRATION_COUNT || result.expected !== EXPECTED_MIGRATION_COUNT) {
+    if (
+      result.applied !== EXPECTED_MIGRATION_COUNT ||
+      result.expected !== EXPECTED_MIGRATION_COUNT
+    ) {
       process.stderr.write(
         `Migration verify failed: applied/expected count does not match journal constant\n`,
       );

@@ -140,15 +140,17 @@ describe('runtime CORS policy', () => {
       });
       expect(response.statusCode).toBe(204);
       expect(response.headers['access-control-allow-origin']).toBe(TEST_ORIGIN);
-      const methods = String(response.headers['access-control-allow-methods'] ?? '');
+      const methodsHeader = response.headers['access-control-allow-methods'];
+      const methods = typeof methodsHeader === 'string' ? methodsHeader : '';
       for (const method of ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']) {
         expect(methods.toUpperCase()).toContain(method);
       }
       expect(CORS_ALLOWED_METHODS).toContain('GET');
-      expect(Number.parseInt(String(response.headers['access-control-max-age']), 10)).toBe(
-        CORS_MAX_AGE_SECONDS,
-      );
-      const allowHeaders = String(response.headers['access-control-allow-headers'] ?? '');
+      const maxAgeHeader = response.headers['access-control-max-age'];
+      const maxAgeRaw = typeof maxAgeHeader === 'string' ? maxAgeHeader : '0';
+      expect(Number.parseInt(maxAgeRaw, 10)).toBe(CORS_MAX_AGE_SECONDS);
+      const allowHeadersHeader = response.headers['access-control-allow-headers'];
+      const allowHeaders = typeof allowHeadersHeader === 'string' ? allowHeadersHeader : '';
       expect(allowHeaders.toLowerCase()).toContain('authorization');
       expect(allowHeaders.toLowerCase()).toContain('content-type');
     } finally {

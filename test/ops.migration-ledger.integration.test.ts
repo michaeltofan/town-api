@@ -160,16 +160,14 @@ describe('migration ledger against real PostgreSQL', () => {
       if (first === undefined || second === undefined) {
         throw new Error('need two ledger rows');
       }
-      await pool.query(`UPDATE drizzle.__drizzle_migrations SET hash = $1, created_at = $2 WHERE id = $3`, [
-        second.hash,
-        second.created_at,
-        first.id,
-      ]);
-      await pool.query(`UPDATE drizzle.__drizzle_migrations SET hash = $1, created_at = $2 WHERE id = $3`, [
-        first.hash,
-        first.created_at,
-        second.id,
-      ]);
+      await pool.query(
+        `UPDATE drizzle.__drizzle_migrations SET hash = $1, created_at = $2 WHERE id = $3`,
+        [second.hash, second.created_at, first.id],
+      );
+      await pool.query(
+        `UPDATE drizzle.__drizzle_migrations SET hash = $1, created_at = $2 WHERE id = $3`,
+        [first.hash, first.created_at, second.id],
+      );
       const result = await checkMigrationLedger(pool, { timeoutMs: 5000 });
       expect(result.status).toBe('fail');
       expect(result.detail).toBe('order_mismatch');
