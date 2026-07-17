@@ -4,6 +4,8 @@ import Fastify from 'fastify';
 import type { Env } from './config/env.js';
 import { createDatabaseFromEnv, type Database } from './db/client.js';
 import databasePlugin from './db/plugin.js';
+import { buildIdentityFromEnv } from './ops/build-identity.js';
+import { resolveRequestId } from './ops/request-id.js';
 import controlledAccessPlugin from './plugins/controlled-access.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
 import openApiPlugin from './plugins/openapi.js';
@@ -85,7 +87,27 @@ const SENSITIVE_HEADER_REDACT = {
     'req.headers.Cookie',
     'req.headers["cookie"]',
     'req.headers["Cookie"]',
+    'req.headers["stripe-signature"]',
+    'req.headers["Stripe-Signature"]',
+    'req.headers.stripe-signature',
     'req.cookies.*',
+    'req.body.password',
+    'req.body.token',
+    'req.body.recoveryToken',
+    'req.body.setupToken',
+    'DATABASE_URL',
+    'env.DATABASE_URL',
+    '*.DATABASE_URL',
+    '*.STRIPE_SECRET_KEY',
+    '*.STRIPE_WEBHOOK_SECRET',
+    '*.SESSION_TOKEN_HASH_KEY',
+    '*.EMAIL_VERIFICATION_HASH_KEY',
+    '*.CEREMONY_RATE_LIMIT_HASH_KEY',
+    '*.WEBAUTHN_CHALLENGE_HASH_KEY',
+    '*.PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY',
+    '*.ACCOUNT_RECOVERY_HASH_KEY',
+    '*.ACCOUNT_RECOVERY_TOKEN_HASH_KEY',
+    '*.CONTROLLED_CONFIRMATION_KEY',
   ],
   censor: '[Redacted]',
 };
@@ -98,17 +120,27 @@ function resolveLoggerOption(
     return false;
   }
 
+  const identity = buildIdentityFromEnv(env);
+  const base: Record<string, unknown> = {
+    service: identity.service,
+    environment: identity.environment,
+    version: identity.version,
+    commitSha: identity.commitSha,
+  };
+
   if (typeof logger === 'object') {
     return {
       level: env.LOG_LEVEL,
+      base,
       ...logger,
-      // Never serialize control keys or SetupGrant Authorization headers.
+      // Never serialize control keys, SetupGrant Authorization headers, or secrets.
       redact: SENSITIVE_HEADER_REDACT,
     };
   }
 
   return {
     level: env.LOG_LEVEL,
+    base,
     redact: SENSITIVE_HEADER_REDACT,
   };
 }
@@ -116,15 +148,13 @@ function resolveLoggerOption(
 export async function buildApp(options: BuildAppOptions) {
   const app = Fastify({
     logger: resolveLoggerOption(options.env, options.logger),
-    requestIdHeader: 'x-request-id',
+    // Deployment Readiness V1: validate incoming x-request-id ourselves so
+    // that malformed client-supplied ids are always replaced with a fresh
+    // req_<uuid>. Setting requestIdHeader to false forces genReqId to run for
+    // every request regardless of what the client sent.
+    requestIdHeader: false,
     trustProxy: options.env.TRUST_PROXY,
-    genReqId: (req) => {
-      const header = req.headers['x-request-id'];
-      if (typeof header === 'string' && header.length > 0) {
-        return header;
-      }
-      return `req_${crypto.randomUUID()}`;
-    },
+    genReqId: (req) => resolveRequestId(req.headers['x-request-id']),
     // Honor TypeBox additionalProperties:false (do not silently strip extras).
     ajv: {
       customOptions: {
@@ -133,6 +163,17 @@ export async function buildApp(options: BuildAppOptions) {
     },
   }).withTypeProvider<TypeBoxTypeProvider>();
 
+  // Deployment Readiness V1: mark shutdown state on the instance so /health/ready
+  // can fail fast without exposing shutdown signals or timers to callers.
+  if (!app.hasDecorator('isShuttingDown')) {
+    app.decorate('isShuttingDown', false);
+  }
+
+  // Always echo the accepted/generated request id to the client for correlation.
+  app.addHook('onSend', async (request, reply) => {
+    reply.header('x-request-id', request.id);
+  });
+
   const database = options.database ?? createDatabaseFromEnv(options.env);
 
   await app.register(errorHandlerPlugin);
@@ -140,7 +181,7 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(openApiPlugin);
   await app.register(controlledAccessPlugin, { env: options.env });
   await app.register(databasePlugin, { database });
-  await app.register(healthRoutes);
+  await app.register(healthRoutes, { env: options.env });
   await app.register(communitiesRoutes);
   await app.register(signalsRoutes);
   await app.register(confirmationRoutes, {
