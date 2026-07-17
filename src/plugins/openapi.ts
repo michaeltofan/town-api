@@ -9,7 +9,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
       info: {
         title: 'TOWN API',
         description:
-          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, first-passkey WebAuthn registration, passkey authentication sessions, and bounded account recovery. Controlled confirmation, email verification, setup-grant passkey registration, and recovery grants are not public authentication or login sessions.',
+          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, first-passkey WebAuthn registration, passkey authentication sessions, bounded account recovery, and session-authenticated passkey management. Controlled confirmation, email verification, setup-grant passkey registration, and recovery grants are not public authentication or login sessions.',
         version: '0.1.0',
       },
       tags: [
@@ -33,7 +33,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Account',
           description:
-            'Account setup email verification, first-passkey WebAuthn registration, and bounded account recovery. Recovery grants are restricted authorization, not sessions. Routes do not create login sessions or disclose account existence beyond protocol-required WebAuthn options.',
+            'Account setup email verification, first-passkey WebAuthn registration, bounded account recovery, and session-authenticated passkey management. Registration options/verify are dual-mode (Session add-passkey or SetupGrant first registration). Recovery grants are restricted authorization, not sessions.',
         },
         {
           name: 'Authentication',

@@ -31,6 +31,12 @@ const APPROVED_EVENT_TYPES = new Set<IdentitySecurityEventType>([
   'authentication_succeeded',
   'recovery_email_verified',
   'recovery_registration_failed',
+  'passkey_inventory_viewed',
+  'passkey_management_changed',
+  'passkey_reauthentication_started',
+  'passkey_reauthentication_succeeded',
+  'passkey_reauthentication_failed',
+  'passkey_renamed',
 ]);
 
 export async function appendIdentitySecurityEvent(

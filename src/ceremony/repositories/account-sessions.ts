@@ -24,7 +24,6 @@ import {
 } from '../policy.js';
 
 type Db = Database['db'];
-type DbLike = Parameters<typeof appendIdentitySecurityEvent>[0];
 
 const APPROVED_CLIENT_TYPES = new Set<AccountSessionClientType>(['web', 'mobile']);
 const APPROVED_REVOCATION_REASONS = new Set<AccountSessionRevocationReason>([
@@ -36,6 +35,8 @@ const APPROVED_REVOCATION_REASONS = new Set<AccountSessionRevocationReason>([
   'recovery_completed',
   'credential_compromised',
   'security_version_changed',
+  'passkey_added',
+  'passkey_revoked',
 ]);
 
 async function assertSessionEligibleAccount(db: Db, accountId: string): Promise<void> {
@@ -174,6 +175,8 @@ export async function createAccountSession(
     authenticatedAt?: string;
     securityVersion?: number;
     recoveryRecentAt?: string | null;
+    authenticatedPasskeyId?: string | null;
+    freshAuthenticatedAt?: string | null;
     eventId?: string;
     requestId?: string | null;
   },
@@ -224,6 +227,8 @@ export async function createAccountSession(
       revokedAt: null,
       revocationReason: null,
       recoveryRecentAt: input.recoveryRecentAt ?? null,
+      authenticatedPasskeyId: input.authenticatedPasskeyId ?? null,
+      freshAuthenticatedAt: input.freshAuthenticatedAt ?? null,
       securityVersion,
     })
     .returning();
@@ -339,101 +344,148 @@ export async function rotateAccountSession(
     newSessionId: string;
     newTokenHash: Buffer;
     now: string;
+    freshAuthenticatedAt?: string | null;
+    authenticatedPasskeyId?: string | null;
+    eventId?: string;
+    requestId?: string | null;
+  },
+): Promise<{ previous: AccountSessionRow; replacement: AccountSessionRow }> {
+  return db.transaction(async (tx) => rotateAccountSessionTx(tx as unknown as Db, input));
+}
+
+/**
+ * Rotate within an existing transaction (no nested transaction wrapper).
+ */
+export async function rotateAccountSessionTx(
+  db: Db,
+  input: {
+    oldSessionId: string;
+    newSessionId: string;
+    newTokenHash: Buffer;
+    now: string;
+    freshAuthenticatedAt?: string | null;
+    authenticatedPasskeyId?: string | null;
     eventId?: string;
     requestId?: string | null;
   },
 ): Promise<{ previous: AccountSessionRow; replacement: AccountSessionRow }> {
   const newTokenHash = assertHashedBytes(input.newTokenHash, 'session tokenHash');
 
-  const result = await db.transaction(async (tx) => {
-    const dbTx = tx as unknown as DbLike;
-    const revoked = await tx
-      .update(accountSessions)
-      .set({
-        revokedAt: input.now,
-        revocationReason: 'rotated',
-      })
-      .where(
-        and(
-          eq(accountSessions.id, input.oldSessionId),
-          isNull(accountSessions.revokedAt),
-          gt(accountSessions.idleExpiresAt, input.now),
-          gt(accountSessions.absoluteExpiresAt, input.now),
-        ),
-      )
-      .returning();
-    const previous = revoked[0];
-    if (!previous) {
-      const existing = await tx
-        .select()
-        .from(accountSessions)
-        .where(eq(accountSessions.id, input.oldSessionId))
-        .limit(1);
-      const session = existing[0];
-      if (!session) {
-        throw new CeremonyInvariantError('SESSION_NOT_FOUND', 'Account session was not found');
-      }
-      if (session.revokedAt !== null) {
-        throw new CeremonyInvariantError('SESSION_REVOKED', 'Account session has been revoked');
-      }
-      if (!isBefore(input.now, session.idleExpiresAt)) {
-        throw new CeremonyInvariantError(
-          'SESSION_IDLE_EXPIRED',
-          'Account session idle timeout exceeded',
-        );
-      }
+  const revoked = await db
+    .update(accountSessions)
+    .set({
+      revokedAt: input.now,
+      revocationReason: 'rotated',
+    })
+    .where(
+      and(
+        eq(accountSessions.id, input.oldSessionId),
+        isNull(accountSessions.revokedAt),
+        gt(accountSessions.idleExpiresAt, input.now),
+        gt(accountSessions.absoluteExpiresAt, input.now),
+      ),
+    )
+    .returning();
+  const previous = revoked[0];
+  if (!previous) {
+    const existing = await db
+      .select()
+      .from(accountSessions)
+      .where(eq(accountSessions.id, input.oldSessionId))
+      .limit(1);
+    const session = existing[0];
+    if (!session) {
+      throw new CeremonyInvariantError('SESSION_NOT_FOUND', 'Account session was not found');
+    }
+    if (session.revokedAt !== null) {
+      throw new CeremonyInvariantError('SESSION_REVOKED', 'Account session has been revoked');
+    }
+    if (!isBefore(input.now, session.idleExpiresAt)) {
       throw new CeremonyInvariantError(
-        'SESSION_ABSOLUTE_EXPIRED',
-        'Account session absolute timeout exceeded',
+        'SESSION_IDLE_EXPIRED',
+        'Account session idle timeout exceeded',
       );
     }
+    throw new CeremonyInvariantError(
+      'SESSION_ABSOLUTE_EXPIRED',
+      'Account session absolute timeout exceeded',
+    );
+  }
 
-    const absoluteExpiresAt = previous.absoluteExpiresAt;
-    const idleExpiresAt = computeIdleExpiresAt(input.now, absoluteExpiresAt);
+  const absoluteExpiresAt = previous.absoluteExpiresAt;
+  const idleExpiresAt = computeIdleExpiresAt(input.now, absoluteExpiresAt);
+  const freshAuthenticatedAt =
+    input.freshAuthenticatedAt !== undefined
+      ? input.freshAuthenticatedAt
+      : previous.freshAuthenticatedAt;
+  const authenticatedPasskeyId =
+    input.authenticatedPasskeyId !== undefined
+      ? input.authenticatedPasskeyId
+      : previous.authenticatedPasskeyId;
 
-    const inserted = await tx
-      .insert(accountSessions)
-      .values({
-        id: input.newSessionId,
-        accountId: previous.accountId,
-        tokenHash: newTokenHash,
-        clientType: previous.clientType,
-        // Preserve original creation/authentication timestamps so rotation does not
-        // refresh authentication age and remains within authenticated_at >= created_at.
-        createdAt: previous.createdAt,
-        authenticatedAt: previous.authenticatedAt,
-        lastSeenAt: input.now,
-        idleExpiresAt,
-        absoluteExpiresAt,
-        revokedAt: null,
-        revocationReason: null,
-        recoveryRecentAt: previous.recoveryRecentAt,
-        securityVersion: previous.securityVersion,
-      })
-      .returning();
-    const replacement = inserted[0];
-    if (!replacement) {
-      throw new Error('Failed to create replacement session');
-    }
+  const inserted = await db
+    .insert(accountSessions)
+    .values({
+      id: input.newSessionId,
+      accountId: previous.accountId,
+      tokenHash: newTokenHash,
+      clientType: previous.clientType,
+      createdAt: previous.createdAt,
+      authenticatedAt: previous.authenticatedAt,
+      lastSeenAt: input.now,
+      idleExpiresAt,
+      absoluteExpiresAt,
+      revokedAt: null,
+      revocationReason: null,
+      recoveryRecentAt: previous.recoveryRecentAt,
+      authenticatedPasskeyId,
+      freshAuthenticatedAt,
+      securityVersion: previous.securityVersion,
+    })
+    .returning();
+  const replacement = inserted[0];
+  if (!replacement) {
+    throw new Error('Failed to create replacement session');
+  }
 
-    if (input.eventId) {
-      await appendIdentitySecurityEvent(dbTx, {
-        id: input.eventId,
-        accountId: previous.accountId,
-        eventType: 'session_rotated',
-        occurredAt: input.now,
-        requestId: input.requestId ?? null,
-        metadata: {
-          previousSessionId: previous.id,
-          replacementSessionId: replacement.id,
-        },
-      });
-    }
+  if (input.eventId) {
+    await appendIdentitySecurityEvent(db, {
+      id: input.eventId,
+      accountId: previous.accountId,
+      eventType: 'session_rotated',
+      occurredAt: input.now,
+      requestId: input.requestId ?? null,
+      metadata: {
+        previousSessionId: previous.id,
+        replacementSessionId: replacement.id,
+      },
+    });
+  }
 
-    return { previous, replacement };
-  });
+  return { previous, replacement };
+}
 
-  return result;
+export async function updateAccountSessionFreshness(
+  db: Db,
+  input: {
+    sessionId: string;
+    freshAuthenticatedAt: string;
+    authenticatedPasskeyId: string;
+  },
+): Promise<AccountSessionRow> {
+  const updated = await db
+    .update(accountSessions)
+    .set({
+      freshAuthenticatedAt: input.freshAuthenticatedAt,
+      authenticatedPasskeyId: input.authenticatedPasskeyId,
+    })
+    .where(and(eq(accountSessions.id, input.sessionId), isNull(accountSessions.revokedAt)))
+    .returning();
+  const row = updated[0];
+  if (!row) {
+    throw new CeremonyInvariantError('SESSION_NOT_FOUND', 'Account session was not found');
+  }
+  return row;
 }
 
 async function revokeMatchingSessions(

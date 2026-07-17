@@ -15,6 +15,7 @@ import { confirmationRoutes } from './routes/confirmations.js';
 import { emailVerificationRoutes } from './routes/email-verifications.js';
 import { healthRoutes } from './routes/health.js';
 import { passkeyAuthenticationRoutes } from './routes/passkey-authentication.js';
+import { passkeyManagementRoutes } from './routes/passkey-management.js';
 import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { signalsRoutes } from './routes/signals.js';
 
@@ -44,8 +45,14 @@ export type BuildAppOptions = {
     now?: () => string;
     generateId?: () => string;
     generateUserHandle?: () => Buffer;
+    generateToken?: () => string;
   };
   passkeyAuthentication?: {
+    now?: () => string;
+    generateId?: () => string;
+    generateToken?: () => string;
+  };
+  passkeyManagement?: {
     now?: () => string;
     generateId?: () => string;
     generateToken?: () => string;
@@ -167,6 +174,29 @@ export async function buildApp(options: BuildAppOptions) {
     ...(options.passkeyRegistration?.generateUserHandle !== undefined
       ? { generateUserHandle: options.passkeyRegistration.generateUserHandle }
       : {}),
+    ...(options.passkeyRegistration?.generateToken !== undefined
+      ? { generateToken: options.passkeyRegistration.generateToken }
+      : options.passkeyAuthentication?.generateToken !== undefined
+        ? { generateToken: options.passkeyAuthentication.generateToken }
+        : {}),
+  });
+  await app.register(passkeyManagementRoutes, {
+    env: options.env,
+    ...(options.passkeyManagement?.now !== undefined
+      ? { now: options.passkeyManagement.now }
+      : options.passkeyAuthentication?.now !== undefined
+        ? { now: options.passkeyAuthentication.now }
+        : {}),
+    ...(options.passkeyManagement?.generateId !== undefined
+      ? { generateId: options.passkeyManagement.generateId }
+      : options.passkeyAuthentication?.generateId !== undefined
+        ? { generateId: options.passkeyAuthentication.generateId }
+        : {}),
+    ...(options.passkeyManagement?.generateToken !== undefined
+      ? { generateToken: options.passkeyManagement.generateToken }
+      : options.passkeyAuthentication?.generateToken !== undefined
+        ? { generateToken: options.passkeyAuthentication.generateToken }
+        : {}),
   });
   await app.register(passkeyAuthenticationRoutes, {
     env: options.env,

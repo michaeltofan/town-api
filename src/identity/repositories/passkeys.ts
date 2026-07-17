@@ -1,6 +1,12 @@
 import { and, count, eq, isNull } from 'drizzle-orm';
+import { randomUUID as cryptoRandomUuid } from 'node:crypto';
 import type { Database } from '../../db/client.js';
-import { accounts, passkeyCredentials, type PasskeyCredentialRow } from '../../db/schema.js';
+import {
+  accounts,
+  passkeyCredentials,
+  type PasskeyCredentialRow,
+  type PasskeyRevocationReason,
+} from '../../db/schema.js';
 import { IdentityInvariantError } from '../errors.js';
 
 type Db = Database['db'];
@@ -9,6 +15,7 @@ export async function addPasskeyCredential(
   db: Db,
   input: {
     id: string;
+    publicId?: string;
     accountId: string;
     credentialId: Buffer;
     publicKey: Buffer;
@@ -31,6 +38,7 @@ export async function addPasskeyCredential(
       .insert(passkeyCredentials)
       .values({
         id: input.id,
+        publicId: input.publicId ?? cryptoRandomUuid(),
         accountId: input.accountId,
         credentialId: input.credentialId,
         publicKey: input.publicKey,
@@ -44,6 +52,7 @@ export async function addPasskeyCredential(
         lastUsedAt: null,
         createdAt: input.createdAt,
         revokedAt: null,
+        revocationReason: null,
       })
       .returning();
     const row = rows[0];
@@ -134,15 +143,56 @@ export async function updatePasskeyAuthenticationState(
   return row;
 }
 
+export async function findActivePasskeyByPublicId(
+  db: Db,
+  input: { publicId: string; accountId: string },
+): Promise<PasskeyCredentialRow | null> {
+  const rows = await db
+    .select()
+    .from(passkeyCredentials)
+    .where(
+      and(
+        eq(passkeyCredentials.publicId, input.publicId),
+        eq(passkeyCredentials.accountId, input.accountId),
+        isNull(passkeyCredentials.revokedAt),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updatePasskeyLabel(
+  db: Db,
+  input: { credentialRowId: string; label: string | null },
+): Promise<PasskeyCredentialRow> {
+  const updated = await db
+    .update(passkeyCredentials)
+    .set({ label: input.label })
+    .where(
+      and(eq(passkeyCredentials.id, input.credentialRowId), isNull(passkeyCredentials.revokedAt)),
+    )
+    .returning();
+  const row = updated[0];
+  if (!row) {
+    throw new IdentityInvariantError('PASSKEY_NOT_ACTIVE', 'Passkey is not active');
+  }
+  return row;
+}
+
 export async function revokePasskey(
   db: Db,
-  input: { credentialRowId: string; revokedAt: string },
+  input: {
+    credentialRowId: string;
+    revokedAt: string;
+    revocationReason?: PasskeyRevocationReason;
+  },
 ): Promise<PasskeyCredentialRow> {
   const existing = await db
     .select()
     .from(passkeyCredentials)
     .where(eq(passkeyCredentials.id, input.credentialRowId))
-    .limit(1);
+    .limit(1)
+    .for('update');
   const credential = existing[0];
   if (credential?.revokedAt != null) {
     throw new IdentityInvariantError('PASSKEY_NOT_ACTIVE', 'Passkey is not active');
@@ -181,8 +231,13 @@ export async function revokePasskey(
 
   const updated = await db
     .update(passkeyCredentials)
-    .set({ revokedAt: input.revokedAt })
-    .where(eq(passkeyCredentials.id, input.credentialRowId))
+    .set({
+      revokedAt: input.revokedAt,
+      revocationReason: input.revocationReason ?? 'user_requested',
+    })
+    .where(
+      and(eq(passkeyCredentials.id, input.credentialRowId), isNull(passkeyCredentials.revokedAt)),
+    )
     .returning();
   const row = updated[0];
   if (!row) {

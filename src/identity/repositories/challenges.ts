@@ -199,6 +199,7 @@ export async function createWebAuthnChallenge(
   input: {
     id: string;
     accountId: string | null;
+    sessionId?: string | null;
     purpose: WebAuthnChallengePurpose;
     challengeHash: Buffer;
     expiresAt: string;
@@ -218,6 +219,7 @@ export async function createWebAuthnChallenge(
     .values({
       id: input.id,
       accountId: input.accountId,
+      sessionId: input.sessionId ?? null,
       purpose: input.purpose,
       challengeHash,
       expiresAt: input.expiresAt,
@@ -248,6 +250,34 @@ export async function revokeActiveWebAuthnChallengesForAccount(
 ): Promise<number> {
   const conditions = [
     eq(webauthnChallenges.accountId, input.accountId),
+    eq(webauthnChallenges.purpose, input.purpose),
+    isNull(webauthnChallenges.consumedAt),
+    isNull(webauthnChallenges.revokedAt),
+    gt(webauthnChallenges.expiresAt, input.now),
+  ];
+  if (input.excludeChallengeId !== undefined) {
+    conditions.push(sql`${webauthnChallenges.id} <> ${input.excludeChallengeId}`);
+  }
+
+  const updated = await db
+    .update(webauthnChallenges)
+    .set({ revokedAt: input.now })
+    .where(and(...conditions))
+    .returning({ id: webauthnChallenges.id });
+  return updated.length;
+}
+
+export async function revokeActiveWebAuthnChallengesForSession(
+  db: Db,
+  input: {
+    sessionId: string;
+    purpose: WebAuthnChallengePurpose;
+    now: string;
+    excludeChallengeId?: string;
+  },
+): Promise<number> {
+  const conditions = [
+    eq(webauthnChallenges.sessionId, input.sessionId),
     eq(webauthnChallenges.purpose, input.purpose),
     isNull(webauthnChallenges.consumedAt),
     isNull(webauthnChallenges.revokedAt),
