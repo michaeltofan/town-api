@@ -636,7 +636,7 @@ response body.
 ### Stripe SDK version pinning
 
 - SDK package: `stripe@22.3.2` (exact)
-- API version: `2026-06-24.dahlia` (pinned via `TOWN_STRIPE_API_VERSION`)
+- API version: `2026-06-24.dahlia` (pinned via `STRIPE_API_VERSION`)
 - The environment loader enforces `STRIPE_API_VERSION=2026-06-24.dahlia` when
   Stripe billing is enabled; other values are rejected.
 

@@ -15,7 +15,7 @@ import type { MembershipTransitionOutcome } from '../membership/transitions/shar
 import { assertAnnualPrice } from './price-policy.js';
 import { findCustomerLinkByStripeCustomerId } from './repositories/customer-links.js';
 import { markCheckoutAttemptStatus } from './repositories/checkout-attempts.js';
-import { TOWN_STRIPE_API_VERSION } from './stripe-adapter.js';
+import { STRIPE_API_VERSION } from './stripe-adapter.js';
 import type { TownStripeAdapter } from './stripe-adapter.js';
 
 type Db = Database['db'];
@@ -203,7 +203,7 @@ export async function processStripeWebhookEvent(
     },
   });
 
-  if (event.api_version && event.api_version !== TOWN_STRIPE_API_VERSION) {
+  if (event.api_version && event.api_version !== STRIPE_API_VERSION) {
     await auditStripeEvent(db, {
       accountId: null,
       eventType: 'stripe_webhook_rejected',

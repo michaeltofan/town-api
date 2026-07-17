@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadEnv, TOWN_STRIPE_API_VERSION } from '../src/config/env.js';
+import { loadEnv, STRIPE_API_VERSION } from '../src/config/env.js';
 
 const BASE = {
   DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
@@ -12,7 +12,7 @@ const BASE = {
   STRIPE_CHECKOUT_SUCCESS_URL: 'https://example.test/checkout/success',
   STRIPE_CHECKOUT_CANCEL_URL: 'https://example.test/checkout/cancel',
   STRIPE_PORTAL_RETURN_URL: 'https://example.test/portal/return',
-  STRIPE_API_VERSION: TOWN_STRIPE_API_VERSION,
+  STRIPE_API_VERSION,
   STRIPE_EXPECTED_LIVEMODE: 'false',
 } as const;
 
@@ -36,7 +36,7 @@ describe('loadEnv Stripe billing', () => {
     const env = loadEnv({ ...BASE });
     expect(env.STRIPE_BILLING_ENABLED).toBe(true);
     expect(env.STRIPE_SECRET_KEY).toBe(BASE.STRIPE_SECRET_KEY);
-    expect(env.STRIPE_API_VERSION).toBe(TOWN_STRIPE_API_VERSION);
+    expect(env.STRIPE_API_VERSION).toBe(STRIPE_API_VERSION);
     expect(env.STRIPE_EXPECTED_LIVEMODE).toBe(false);
   });
 

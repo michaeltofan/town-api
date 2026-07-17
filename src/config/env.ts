@@ -24,8 +24,9 @@ import {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const TOWN_STRIPE_API_VERSION = '2026-06-24.dahlia' as const;
-export type TownStripeApiVersion = typeof TOWN_STRIPE_API_VERSION;
+/** Pinned Stripe API version; must match env `STRIPE_API_VERSION` when billing is enabled. */
+export const STRIPE_API_VERSION = '2026-06-24.dahlia' as const;
+export type StripeApiVersion = typeof STRIPE_API_VERSION;
 
 const EnvSchema = Type.Object(
   {
@@ -629,9 +630,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
         );
       }
     }
-    if (apiVersion !== undefined && apiVersion !== TOWN_STRIPE_API_VERSION) {
+    if (apiVersion !== undefined && apiVersion !== STRIPE_API_VERSION) {
       throw new Error(
-        `Invalid environment configuration: STRIPE_API_VERSION must equal ${TOWN_STRIPE_API_VERSION} when STRIPE_BILLING_ENABLED is true`,
+        `Invalid environment configuration: STRIPE_API_VERSION must equal ${STRIPE_API_VERSION} when STRIPE_BILLING_ENABLED is true`,
       );
     }
 
@@ -670,7 +671,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     candidate.STRIPE_CHECKOUT_SUCCESS_URL = checkoutSuccessUrl;
     candidate.STRIPE_CHECKOUT_CANCEL_URL = checkoutCancelUrl;
     candidate.STRIPE_PORTAL_RETURN_URL = portalReturnUrl;
-    candidate.STRIPE_API_VERSION = TOWN_STRIPE_API_VERSION;
+    candidate.STRIPE_API_VERSION = STRIPE_API_VERSION;
     candidate.STRIPE_EXPECTED_LIVEMODE = expectedLivemode;
     candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
   }

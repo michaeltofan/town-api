@@ -1,4 +1,4 @@
-import { TOWN_STRIPE_API_VERSION } from '../../config/env.js';
+import { STRIPE_API_VERSION } from '../../config/env.js';
 import {
   TOWN_BILLING_CURRENCY,
   TOWN_BILLING_INTERVAL,
@@ -38,7 +38,7 @@ export function generateBillingContractDocument(): unknown {
     stripe: {
       sdkPackage: 'stripe',
       sdkVersion: '22.3.2',
-      apiVersion: TOWN_STRIPE_API_VERSION,
+      apiVersion: STRIPE_API_VERSION,
       livemodeContract: {
         production:
           'STRIPE_EXPECTED_LIVEMODE must be true; webhook events and prices must be livemode=true',

@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import Stripe from 'stripe';
-import { TOWN_STRIPE_API_VERSION, type TownStripeApiVersion } from '../config/env.js';
+import { STRIPE_API_VERSION, type StripeApiVersion } from '../config/env.js';
 
-export { TOWN_STRIPE_API_VERSION };
-export type { TownStripeApiVersion };
+export { STRIPE_API_VERSION };
+export type { StripeApiVersion };
 
 /**
  * Bounded Stripe adapter surface. Only the calls required by the billing
@@ -37,7 +37,7 @@ export type TownStripeAdapter = {
  */
 export function createOfficialStripeAdapter(
   secretKey: string,
-  apiVersion: TownStripeApiVersion = TOWN_STRIPE_API_VERSION,
+  apiVersion: StripeApiVersion = STRIPE_API_VERSION,
 ): TownStripeAdapter {
   const client = new Stripe(secretKey, {
     apiVersion,
