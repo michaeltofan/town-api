@@ -271,6 +271,8 @@
     "GET /v1/account/passkeys",
     "POST /v1/account/security/reauthentication/passkeys/options",
     "POST /v1/account/security/reauthentication/passkeys/verify",
+    "POST /v1/account/passkeys/add/options",
+    "POST /v1/account/passkeys/add/verify",
     "PATCH /v1/account/passkeys/:passkeyId",
     "DELETE /v1/account/passkeys/:passkeyId"
   ],
@@ -322,15 +324,24 @@
       "reuseExistingUserHandle": true,
       "revokeOtherSessionsReason": "passkey_added"
     },
-    "dualModeAuthorization": [
-      "active Session (cookie or Authorization: Session) for add-passkey",
-      "SetupGrant for first-passkey registration",
-      "RecoveryGrant and Bearer rejected"
+    "authorization": [
+      "active Session (cookie or Authorization: Session) required for all management routes",
+      "SetupGrant cannot authorize any passkey management route",
+      "RecoveryGrant cannot authorize any passkey management route",
+      "Bearer rejected"
     ],
-    "dualModeRegistrationPaths": [
-      "POST /v1/account/passkeys/registration/options",
-      "POST /v1/account/passkeys/registration/verify"
-    ],
+    "distinctFromInitialRegistration": {
+      "addPasskeyAuthorization": "active Session plus fresh authentication only",
+      "addPasskeyRoutes": [
+        "POST /v1/account/passkeys/add/options",
+        "POST /v1/account/passkeys/add/verify"
+      ],
+      "initialSetupAuthorization": "SetupGrant only",
+      "initialSetupRoutes": [
+        "POST /v1/account/passkeys/registration/options",
+        "POST /v1/account/passkeys/registration/verify"
+      ]
+    },
     "featureFlag": "PASSKEY_AUTHENTICATION_ENABLED",
     "freshness": {
       "field": "account_sessions.fresh_authenticated_at",
@@ -390,8 +401,8 @@
       "GET /v1/account/passkeys",
       "POST /v1/account/security/reauthentication/passkeys/options",
       "POST /v1/account/security/reauthentication/passkeys/verify",
-      "POST /v1/account/passkeys/registration/options",
-      "POST /v1/account/passkeys/registration/verify",
+      "POST /v1/account/passkeys/add/options",
+      "POST /v1/account/passkeys/add/verify",
       "PATCH /v1/account/passkeys/:passkeyId",
       "DELETE /v1/account/passkeys/:passkeyId"
     ],

@@ -193,7 +193,7 @@ export async function addSecondPasskeyMobile(input: {
 }> {
   const optionsResponse = await input.app.inject({
     method: 'POST',
-    url: '/v1/account/passkeys/registration/options',
+    url: '/v1/account/passkeys/add/options',
     headers: { authorization: `Session ${input.sessionToken}` },
     payload: {},
   });
@@ -212,7 +212,7 @@ export async function addSecondPasskeyMobile(input: {
   const secondMaterial = createSoftPasskeyMaterial();
   const verifyResponse = await input.app.inject({
     method: 'POST',
-    url: '/v1/account/passkeys/registration/verify',
+    url: '/v1/account/passkeys/add/verify',
     headers: { authorization: `Session ${input.sessionToken}` },
     payload: {
       registrationCeremonyId: options.data.registrationCeremonyId,

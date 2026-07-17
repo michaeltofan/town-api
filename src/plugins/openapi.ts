@@ -33,7 +33,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Account',
           description:
-            'Account setup email verification, first-passkey WebAuthn registration, bounded account recovery, and session-authenticated passkey management. Registration options/verify are dual-mode (Session add-passkey or SetupGrant first registration). Recovery grants are restricted authorization, not sessions.',
+            'Account setup email verification, first-passkey WebAuthn registration, bounded account recovery, and session-authenticated passkey management. First-passkey registration requires SetupGrant. Passkey management (including add-passkey) requires an active Session only. Recovery grants are restricted authorization, not sessions.',
         },
         {
           name: 'Authentication',

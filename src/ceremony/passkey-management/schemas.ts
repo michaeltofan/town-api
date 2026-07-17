@@ -252,22 +252,6 @@ export const PasskeyRevokeMobileSuccessSchema = Type.Object(
   { additionalProperties: false },
 );
 
-const DualModeRegistrationVerifySuccessSchema = Type.Union([
-  Type.Object(
-    {
-      data: Type.Object(
-        {
-          status: Type.Literal('ACCOUNT_READY'),
-        },
-        { additionalProperties: false },
-      ),
-    },
-    { additionalProperties: false },
-  ),
-  PasskeyAddedWebSuccessSchema,
-  PasskeyAddedMobileSuccessSchema,
-]);
-
 export const PasskeyManagementRouteResponses = {
   inventory: {
     200: PasskeyInventorySuccessSchema,
@@ -292,7 +276,7 @@ export const PasskeyManagementRouteResponses = {
     404: ErrorResponseSchema,
     429: DomainErrorResponseSchema,
   },
-  dualRegistrationOptions: {
+  addPasskeyOptions: {
     200: PasskeyManagementRegistrationOptionsSuccessSchema,
     400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
@@ -300,8 +284,8 @@ export const PasskeyManagementRouteResponses = {
     404: ErrorResponseSchema,
     429: DomainErrorResponseSchema,
   },
-  dualRegistrationVerify: {
-    200: DualModeRegistrationVerifySuccessSchema,
+  addPasskeyVerify: {
+    200: Type.Union([PasskeyAddedWebSuccessSchema, PasskeyAddedMobileSuccessSchema]),
     400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
     403: DomainErrorResponseSchema,

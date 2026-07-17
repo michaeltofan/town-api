@@ -37,32 +37,50 @@ describe('passkey management api', () => {
     await pool.end();
   });
 
-  it('rejects SetupGrant, RecoveryGrant, and Bearer on management-only routes', async () => {
-    const inventory = await app.inject({
-      method: 'GET',
-      url: '/v1/account/passkeys',
-      headers: { authorization: 'SetupGrant not-a-real-token' },
-    });
-    expect(inventory.statusCode).toBe(401);
-    expect(inventory.json()).toMatchObject({ error: { code: 'SESSION_NOT_AUTHORIZED' } });
+  it('rejects SetupGrant, RecoveryGrant, and Bearer on all Slice 6 management routes', async () => {
+    const managementPaths = [
+      { method: 'GET' as const, url: '/v1/account/passkeys' },
+      {
+        method: 'POST' as const,
+        url: '/v1/account/security/reauthentication/passkeys/options',
+        payload: {},
+      },
+      {
+        method: 'POST' as const,
+        url: '/v1/account/passkeys/add/options',
+        payload: {},
+      },
+      {
+        method: 'POST' as const,
+        url: '/v1/account/passkeys/add/verify',
+        payload: {
+          registrationCeremonyId: '00000000-0000-4000-8000-000000000001',
+          response: {
+            id: 'x',
+            rawId: 'x',
+            type: 'public-key',
+            response: { clientDataJSON: 'x', attestationObject: 'x' },
+          },
+        },
+      },
+    ];
 
-    const recovery = await app.inject({
-      method: 'GET',
-      url: '/v1/account/passkeys',
-      headers: { authorization: 'RecoveryGrant not-a-real-token' },
-    });
-    expect(recovery.statusCode).toBe(401);
-
-    const bearer = await app.inject({
-      method: 'GET',
-      url: '/v1/account/passkeys',
-      headers: { authorization: 'Bearer not-a-real-token' },
-    });
-    expect(bearer.statusCode).toBe(401);
+    for (const path of managementPaths) {
+      for (const scheme of ['SetupGrant', 'RecoveryGrant', 'Bearer'] as const) {
+        const response = await app.inject({
+          method: path.method,
+          url: path.url,
+          headers: { authorization: `${scheme} not-a-real-token` },
+          ...('payload' in path ? { payload: path.payload } : {}),
+        });
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toMatchObject({ error: { code: 'SESSION_NOT_AUTHORIZED' } });
+      }
+    }
   });
 
-  it('keeps SetupGrant first-passkey registration dual-mode working', async () => {
-    const setup = await completeEmailSetup(app, delivery, 'Dual.Mode+setup@example.com');
+  it('keeps SetupGrant first-passkey registration on Slice 3 paths only', async () => {
+    const setup = await completeEmailSetup(app, delivery, 'Initial.Setup+setup@example.com');
     const optionsResponse = await app.inject({
       method: 'POST',
       url: '/v1/account/passkeys/registration/options',
@@ -89,6 +107,17 @@ describe('passkey management api', () => {
     });
     expect(verifyResponse.statusCode).toBe(200);
     expect(verifyResponse.json()).toMatchObject({ data: { status: 'ACCOUNT_READY' } });
+
+    const sessionOnSetupPath = await app.inject({
+      method: 'POST',
+      url: '/v1/account/passkeys/registration/options',
+      headers: { authorization: 'Session not-a-real-token' },
+      payload: {},
+    });
+    expect(sessionOnSetupPath.statusCode).toBe(400);
+    expect(sessionOnSetupPath.json()).toMatchObject({
+      error: { code: 'PASSKEY_REGISTRATION_FAILED' },
+    });
   });
 
   it('lists inventory with opaque public ids and safe fields only', async () => {
@@ -210,7 +239,7 @@ describe('passkey management api', () => {
 
     const optionsResponse = await app.inject({
       method: 'POST',
-      url: '/v1/account/passkeys/registration/options',
+      url: '/v1/account/passkeys/add/options',
       headers: { authorization: `Session ${freshToken}` },
       payload: {},
     });
@@ -226,7 +255,7 @@ describe('passkey management api', () => {
     const secondMaterial = createSoftPasskeyMaterial();
     const verifyResponse = await app.inject({
       method: 'POST',
-      url: '/v1/account/passkeys/registration/verify',
+      url: '/v1/account/passkeys/add/verify',
       headers: { authorization: `Session ${freshToken}` },
       payload: {
         registrationCeremonyId: options.data.registrationCeremonyId,
@@ -279,7 +308,7 @@ describe('passkey management api', () => {
     });
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/account/passkeys/registration/options',
+      url: '/v1/account/passkeys/add/options',
       headers: { authorization: `Session ${login.sessionToken}` },
       payload: {},
     });

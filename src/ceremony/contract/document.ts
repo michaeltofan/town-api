@@ -50,6 +50,8 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       'GET /v1/account/passkeys',
       'POST /v1/account/security/reauthentication/passkeys/options',
       'POST /v1/account/security/reauthentication/passkeys/verify',
+      'POST /v1/account/passkeys/add/options',
+      'POST /v1/account/passkeys/add/verify',
       'PATCH /v1/account/passkeys/:passkeyId',
       'DELETE /v1/account/passkeys/:passkeyId',
     ],
@@ -409,24 +411,33 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     passkeyManagementRuntime: {
       status: 'implemented',
       featureFlag: 'PASSKEY_AUTHENTICATION_ENABLED',
-      dualModeRegistrationPaths: [
-        'POST /v1/account/passkeys/registration/options',
-        'POST /v1/account/passkeys/registration/verify',
-      ],
-      dualModeAuthorization: [
-        'active Session (cookie or Authorization: Session) for add-passkey',
-        'SetupGrant for first-passkey registration',
-        'RecoveryGrant and Bearer rejected',
+      authorization: [
+        'active Session (cookie or Authorization: Session) required for all management routes',
+        'SetupGrant cannot authorize any passkey management route',
+        'RecoveryGrant cannot authorize any passkey management route',
+        'Bearer rejected',
       ],
       routes: [
         'GET /v1/account/passkeys',
         'POST /v1/account/security/reauthentication/passkeys/options',
         'POST /v1/account/security/reauthentication/passkeys/verify',
-        'POST /v1/account/passkeys/registration/options',
-        'POST /v1/account/passkeys/registration/verify',
+        'POST /v1/account/passkeys/add/options',
+        'POST /v1/account/passkeys/add/verify',
         'PATCH /v1/account/passkeys/:passkeyId',
         'DELETE /v1/account/passkeys/:passkeyId',
       ],
+      distinctFromInitialRegistration: {
+        initialSetupRoutes: [
+          'POST /v1/account/passkeys/registration/options',
+          'POST /v1/account/passkeys/registration/verify',
+        ],
+        initialSetupAuthorization: 'SetupGrant only',
+        addPasskeyRoutes: [
+          'POST /v1/account/passkeys/add/options',
+          'POST /v1/account/passkeys/add/verify',
+        ],
+        addPasskeyAuthorization: 'active Session plus fresh authentication only',
+      },
       freshness: {
         field: 'account_sessions.fresh_authenticated_at',
         windowMinutes: 10,

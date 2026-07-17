@@ -1,16 +1,19 @@
 import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
-import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
+import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
 import type { Env } from '../config/env.js';
 import { requirePasskeyManagementConfig } from '../ceremony/passkey-management/config.js';
 import { assertWebCookieCsrf } from '../ceremony/passkey-authentication/csrf.js';
 import {
   PasskeyIdParamsSchema,
+  PasskeyManagementRegistrationOptionsBodySchema,
+  PasskeyManagementRegistrationVerifyBodySchema,
   PasskeyManagementRouteResponses,
   PasskeyReauthenticationOptionsBodySchema,
   PasskeyReauthenticationVerifyBodySchema,
   PasskeyRenameBodySchema,
 } from '../ceremony/passkey-management/schemas.js';
 import {
+  createManagedPasskeyRegistrationOptions,
   createPasskeyReauthenticationOptions,
   FreshAuthenticationRequiredError,
   InvalidPasskeyLabelRequestError,
@@ -18,10 +21,12 @@ import {
   listPasskeyInventory,
   PasskeyNotFoundError,
   PasskeyReauthenticationFailedError,
+  PasskeyRegistrationFailedError,
   RateLimitedError,
   renamePasskey,
   revokeManagedPasskey,
   SessionNotAuthorizedError,
+  verifyManagedPasskeyRegistration,
   verifyPasskeyReauthentication,
   type PasskeyManagementDeps,
 } from '../ceremony/passkey-management/service.js';
@@ -65,6 +70,14 @@ function passkeyReauthenticationFailedError(): AppError {
     400,
     'PASSKEY_REAUTHENTICATION_FAILED',
     'Passkey reauthentication could not be completed.',
+  );
+}
+
+function passkeyRegistrationFailedError(): AppError {
+  return new AppError(
+    400,
+    'PASSKEY_REGISTRATION_FAILED',
+    'Passkey registration could not be completed.',
   );
 }
 
@@ -356,6 +369,146 @@ export const passkeyManagementRoutes: FastifyPluginCallbackTypebox<
         }
         if (error instanceof PasskeyReauthenticationFailedError) {
           throw passkeyReauthenticationFailedError();
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    '/v1/account/passkeys/add/options',
+    {
+      schema: {
+        tags: ['Account'],
+        summary: 'Create WebAuthn options to add a passkey to an authenticated account',
+        description:
+          'Issues manage_passkeys_register PublicKeyCredentialCreationOptions for an additional passkey. Requires an active web or mobile session and fresh authentication. SetupGrant, RecoveryGrant, and Bearer are rejected. Distinct from SetupGrant first-passkey registration at /v1/account/passkeys/registration/*.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        body: PasskeyManagementRegistrationOptionsBodySchema,
+        response: PasskeyManagementRouteResponses.addPasskeyOptions,
+      },
+    },
+    async (request, reply) => {
+      if (!assertPasskeyManagementEnabled(env, reply)) {
+        return;
+      }
+      try {
+        const { session } = await requireSession({
+          headers: request.headers,
+          cookies: request.cookies,
+        });
+        const result = await createManagedPasskeyRegistrationOptions(app.database.db, buildDeps(), {
+          session,
+          requestId: request.id,
+        });
+        return await reply.status(200).send({
+          data: {
+            registrationCeremonyId: result.registrationCeremonyId,
+            options: result.options,
+          },
+        });
+      } catch (error) {
+        if (error instanceof RateLimitedError) {
+          throw rateLimitedError();
+        }
+        if (error instanceof FreshAuthenticationRequiredError) {
+          throw freshAuthenticationRequiredError();
+        }
+        if (error instanceof SessionNotAuthorizedError) {
+          throw sessionNotAuthorizedError();
+        }
+        if (error instanceof PasskeyRegistrationFailedError) {
+          request.log.info(
+            {
+              requestId: request.id,
+              route: 'passkey_management_add_options',
+              outcome: 'failed',
+              failureCategory: error.failureCategory,
+            },
+            'Managed passkey registration options failed',
+          );
+          throw passkeyRegistrationFailedError();
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    '/v1/account/passkeys/add/verify',
+    {
+      schema: {
+        tags: ['Account'],
+        summary: 'Verify WebAuthn registration for an additional authenticated passkey',
+        description:
+          'Completes manage_passkeys_register for an additional passkey. Requires an active session and fresh authentication. Rotates the current session and revokes other sessions with passkey_added. SetupGrant, RecoveryGrant, and Bearer are rejected. Distinct from SetupGrant first-passkey registration at /v1/account/passkeys/registration/*.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        body: PasskeyManagementRegistrationVerifyBodySchema,
+        response: PasskeyManagementRouteResponses.addPasskeyVerify,
+      },
+    },
+    async (request, reply) => {
+      if (!assertPasskeyManagementEnabled(env, reply)) {
+        return;
+      }
+      try {
+        const { session } = await requireSession({
+          headers: request.headers,
+          cookies: request.cookies,
+        });
+        const result = await verifyManagedPasskeyRegistration(app.database.db, buildDeps(), {
+          session,
+          registrationCeremonyId: request.body.registrationCeremonyId,
+          response: request.body.response as RegistrationResponseJSON,
+          ...('label' in request.body ? { label: request.body.label ?? null } : {}),
+          requestId: request.id,
+        });
+        if (result.rotation.clientType === 'web') {
+          const config = requirePasskeyManagementConfig(env);
+          reply.setCookie(
+            config.webSessionCookieName,
+            result.rotation.rawToken,
+            webSessionCookieOptions({
+              now: now(),
+              absoluteExpiresAt: result.rotation.session.absoluteExpiresAt,
+            }),
+          );
+          return await reply.status(200).send({
+            data: {
+              status: result.status,
+              passkey: result.passkey,
+            },
+          });
+        }
+        return await reply.status(200).send({
+          data: {
+            status: result.status,
+            passkey: result.passkey,
+            sessionToken: result.rotation.rawToken,
+            sessionExpiresAt: result.rotation.session.absoluteExpiresAt,
+          },
+        });
+      } catch (error) {
+        if (error instanceof RateLimitedError) {
+          throw rateLimitedError();
+        }
+        if (error instanceof FreshAuthenticationRequiredError) {
+          throw freshAuthenticationRequiredError();
+        }
+        if (error instanceof SessionNotAuthorizedError) {
+          throw sessionNotAuthorizedError();
+        }
+        if (error instanceof PasskeyRegistrationFailedError) {
+          request.log.info(
+            {
+              requestId: request.id,
+              route: 'passkey_management_add_verify',
+              outcome: 'failed',
+              failureCategory: error.failureCategory,
+            },
+            'Managed passkey registration verify failed',
+          );
+          throw passkeyRegistrationFailedError();
         }
         throw error;
       }

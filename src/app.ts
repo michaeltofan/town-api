@@ -45,7 +45,6 @@ export type BuildAppOptions = {
     now?: () => string;
     generateId?: () => string;
     generateUserHandle?: () => Buffer;
-    generateToken?: () => string;
   };
   passkeyAuthentication?: {
     now?: () => string;
@@ -174,11 +173,6 @@ export async function buildApp(options: BuildAppOptions) {
     ...(options.passkeyRegistration?.generateUserHandle !== undefined
       ? { generateUserHandle: options.passkeyRegistration.generateUserHandle }
       : {}),
-    ...(options.passkeyRegistration?.generateToken !== undefined
-      ? { generateToken: options.passkeyRegistration.generateToken }
-      : options.passkeyAuthentication?.generateToken !== undefined
-        ? { generateToken: options.passkeyAuthentication.generateToken }
-        : {}),
   });
   await app.register(passkeyManagementRoutes, {
     env: options.env,
