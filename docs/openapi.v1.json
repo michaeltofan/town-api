@@ -35,7 +35,7 @@
     }
   },
   "info": {
-    "description": "TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, first-passkey WebAuthn registration, passkey authentication sessions, bounded account recovery, and session-authenticated passkey management. Controlled confirmation, email verification, setup-grant passkey registration, and recovery grants are not public authentication or login sessions.",
+    "description": "TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation (read-only) plus session-authenticated participant signal confirmation, gated email verification, first-passkey WebAuthn registration, passkey authentication sessions, bounded account recovery, session-authenticated passkey management, and session-authenticated membership entitlement read. Controlled confirmation reads, email verification, setup-grant passkey registration, and recovery grants are not public authentication or login sessions. Membership foundation is separate from account identity; no public membership mutation routes exist and no Stripe network integration is included.",
     "title": "TOWN API",
     "version": "0.1.0"
   },
@@ -404,6 +404,315 @@
           }
         },
         "summary": "Complete account email verification",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/v1/account/membership": {
+      "get": {
+        "description": "Returns the effective membership status (inactive/active/cancelling/expired), accessUntil, cancelAtPeriodEnd, and the civic access level derived from membership, actor linkage, and fail-closed local eligibility. Requires an active web or mobile session. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes Stripe customer or subscription identifiers.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "access": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canParticipate": {
+                              "type": "boolean"
+                            },
+                            "level": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "visitor"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "read_only"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "participant"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "localEligibility": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "eligible"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "not_verified"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "expired"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "mismatched_community"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "unavailable"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "level",
+                            "canParticipate",
+                            "localEligibility"
+                          ],
+                          "type": "object"
+                        },
+                        "membership": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "accessUntil": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "cancelAtPeriodEnd": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "inactive"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "active"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "cancelling"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "expired"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "accessUntil",
+                            "cancelAtPeriodEnd"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "membership",
+                        "access"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "maximum": 599,
+                      "minimum": 400,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Read the authenticated account membership entitlement and civic access view",
         "tags": [
           "Account"
         ]
@@ -5128,7 +5437,7 @@
         ]
       },
       "put": {
-        "description": "Temporary controlled test mechanism using X-TOWN-Control-Key. This is not public authentication. Idempotent PUT: first request creates the confirmation; repeats return the same confirmedAt. Body must be empty. No public counts or actor identifiers are exposed.",
+        "description": "Requires an active web or mobile session. The account must have participant civic access derived from an active membership entitlement, a linked civic actor for the signal community, and fail-closed local eligibility. SetupGrant, RecoveryGrant, Bearer, and the temporary X-TOWN-Control-Key are rejected. Idempotent: repeats return the same confirmedAt. Body must be empty. Never exposes actor identifiers, counts, or Stripe provider identifiers. Denials emit CIVIC_PARTICIPATION_NOT_AUTHORIZED without leaking the specific reason.",
         "parameters": [
           {
             "in": "path",
@@ -5344,10 +5653,13 @@
         },
         "security": [
           {
-            "TownControlKey": []
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
           }
         ],
-        "summary": "Confirm a published signal for the controlled test actor",
+        "summary": "Confirm a published signal as an authenticated civic participant",
         "tags": [
           "Confirmations"
         ]
@@ -5368,11 +5680,11 @@
       "name": "Signals"
     },
     {
-      "description": "Temporary controlled signal confirmation for a single seeded test actor. Not public authentication, membership, or social counting.",
+      "description": "GET is the temporary controlled read-only mechanism using X-TOWN-Control-Key for a single seeded test actor. PUT is the session-authenticated civic participant confirmation route requiring an active Session, an active membership entitlement, a linked civic actor for the signal community, and fail-closed local participation eligibility. Not social counting; no public confirmation totals or actor identifiers are exposed.",
       "name": "Confirmations"
     },
     {
-      "description": "Account setup email verification, first-passkey WebAuthn registration, bounded account recovery, and session-authenticated passkey management. First-passkey registration requires SetupGrant. Passkey management (including add-passkey) requires an active Session only. Recovery grants are restricted authorization, not sessions.",
+      "description": "Account setup email verification, first-passkey WebAuthn registration, bounded account recovery, session-authenticated passkey management, and session-authenticated membership entitlement inventory read at GET /v1/account/membership. First-passkey registration requires SetupGrant. Passkey management (including add-passkey) requires an active Session only. Recovery grants are restricted authorization, not sessions. Membership inventory never exposes Stripe customer or subscription identifiers.",
       "name": "Account"
     },
     {

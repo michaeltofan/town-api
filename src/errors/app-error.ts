@@ -29,3 +29,11 @@ export function actorNotEligibleForCommunityError(): AppError {
     'The actor is not eligible for this community.',
   );
 }
+
+export function civicParticipationNotAuthorizedError(): AppError {
+  return new AppError(
+    403,
+    'CIVIC_PARTICIPATION_NOT_AUTHORIZED',
+    'Civic participation is not authorized for this account.',
+  );
+}

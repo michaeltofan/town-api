@@ -17,6 +17,19 @@ const FORBIDDEN_METADATA_KEYS = new Set([
   'token_hash',
   'setupToken',
   'setup_token',
+  'sourceCustomerId',
+  'sourceSubscriptionId',
+  'source_customer_id',
+  'source_subscription_id',
+  'payload',
+  'payloadHash',
+  'card',
+  'paymentMethod',
+  'invoice',
+  'stripeSignature',
+  'email',
+  'ip',
+  'rawIp',
 ]);
 
 /**

@@ -23,6 +23,21 @@ export async function findActiveControlledActor(db: Db, actorId: string): Promis
   return rows[0] ?? null;
 }
 
+export async function findActiveCivicActorByAccountId(
+  db: Db,
+  accountId: string,
+): Promise<ActorRow | null> {
+  const rows = await db
+    .select()
+    .from(actors)
+    .where(
+      and(eq(actors.accountId, accountId), eq(actors.kind, 'civic'), eq(actors.status, 'active')),
+    )
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
 export async function findConfirmationByActorAndSignal(
   db: Db,
   actorId: string,
@@ -87,6 +102,60 @@ export async function ensureSignalConfirmation(
   const confirmation = await findConfirmationByActorAndSignal(db, actorId, signalId);
   if (!confirmation) {
     throw new Error('Controlled confirmation persistence failed');
+  }
+
+  return {
+    confirmation,
+    signalId,
+  };
+}
+
+/**
+ * Idempotently ensures a participant confirmation for a civic actor/signal pair.
+ */
+export async function ensureParticipantSignalConfirmation(
+  db: Db,
+  actorId: string,
+  signalId: string,
+): Promise<EnsureConfirmationResult> {
+  const published = await findPublishedSignalById(db, signalId);
+  if (!published) {
+    throw signalNotFoundError();
+  }
+
+  const actorRows = await db
+    .select()
+    .from(actors)
+    .where(and(eq(actors.id, actorId), eq(actors.kind, 'civic'), eq(actors.status, 'active')))
+    .limit(1);
+  const actor = actorRows[0];
+  if (!actor?.accountId) {
+    throw new Error('Civic participant confirmation setup is invalid');
+  }
+
+  if (actor.communityId !== published.signal.communityId) {
+    throw actorNotEligibleForCommunityError();
+  }
+
+  const confirmationId = crypto.randomUUID();
+  const timestamp = new Date().toISOString();
+
+  await db
+    .insert(signalConfirmations)
+    .values({
+      id: confirmationId,
+      signalId,
+      actorId,
+      confirmedAt: timestamp,
+      createdAt: timestamp,
+    })
+    .onConflictDoNothing({
+      target: [signalConfirmations.signalId, signalConfirmations.actorId],
+    });
+
+  const confirmation = await findConfirmationByActorAndSignal(db, actorId, signalId);
+  if (!confirmation) {
+    throw new Error('Civic participant confirmation persistence failed');
   }
 
   return {

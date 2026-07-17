@@ -37,6 +37,14 @@ const APPROVED_EVENT_TYPES = new Set<IdentitySecurityEventType>([
   'passkey_reauthentication_succeeded',
   'passkey_reauthentication_failed',
   'passkey_renamed',
+  'membership_created',
+  'membership_activated',
+  'membership_cancellation_scheduled',
+  'membership_reactivated',
+  'membership_expired',
+  'membership_event_replayed',
+  'membership_event_rejected',
+  'civic_participation_denied',
 ]);
 
 export async function appendIdentitySecurityEvent(

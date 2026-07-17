@@ -1,17 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { count, eq } from 'drizzle-orm';
 import { Pool } from 'pg';
-import { createDatabase } from '../src/db/client.js';
-import { signalConfirmations } from '../src/db/schema.js';
 import { FOUNDATION_SIGNAL_IDS } from '../src/db/seeds/foundation-content.js';
-import {
-  CONTROLLED_TEST_KEY,
-  createControlledConfirmationTestApp,
-  requireDatabaseUrl,
-} from './helpers/pg.js';
+import { CONTROLLED_TEST_KEY, createControlledConfirmationTestApp } from './helpers/pg.js';
 
-describe('signal confirmation API', () => {
-  const databaseUrl = requireDatabaseUrl();
+/**
+ * PUT /v1/signals/:signalId/confirmation is now a session-authenticated participant
+ * confirmation route (covered by test/membership.confirmation.api.test.ts). The
+ * controlled X-TOWN-Control-Key mechanism is preserved for GET only to maintain
+ * historical read-only testing isolation for the controlled test actor.
+ */
+describe('signal confirmation controlled GET (historical isolation)', () => {
   let pool: Pool;
   let app: Awaited<ReturnType<typeof createControlledConfirmationTestApp>>['app'];
   let controlKey: string;
@@ -25,235 +23,118 @@ describe('signal confirmation API', () => {
     await pool.end();
   });
 
-  it('returns unconfirmed then confirmed state with exact fields', async () => {
+  it('GET returns unconfirmed state for the controlled test actor', async () => {
     const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal1;
-
-    const before = await app.inject({
+    const response = await app.inject({
       method: 'GET',
       url: `/v1/signals/${signalId}/confirmation`,
       headers: { 'x-town-control-key': controlKey },
     });
-    expect(before.statusCode).toBe(200);
-    expect(before.headers['content-type']).toContain('application/json');
-    expect(before.json()).toEqual({
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('application/json');
+    expect(response.json()).toEqual({
       data: {
         signalId,
         confirmed: false,
         confirmedAt: null,
       },
     });
+    expect(JSON.stringify(response.json())).not.toContain(controlKey);
+    expect(JSON.stringify(response.json())).not.toMatch(/actor|CONTROLLED/i);
+  });
 
-    const put = await app.inject({
-      method: 'PUT',
-      url: `/v1/signals/${signalId}/confirmation`,
-      headers: {
-        'x-town-control-key': controlKey,
-        'content-type': 'application/json',
-      },
-      payload: {},
-    });
-    expect(put.statusCode).toBe(200);
-    const putBody: {
-      data: { signalId: string; confirmed: boolean; confirmedAt: string };
-    } = put.json();
-    expect(putBody).toEqual({
-      data: {
-        signalId,
-        confirmed: true,
-        confirmedAt: putBody.data.confirmedAt,
-      },
-    });
-    expect(putBody.data.confirmedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    expect(JSON.stringify(putBody)).not.toMatch(/actor|count|confirmationId|CONTROLLED/i);
-
-    const after = await app.inject({
+  it('GET rejects missing control key with 401 CONTROLLED_ACCESS_REQUIRED', async () => {
+    const response = await app.inject({
       method: 'GET',
-      url: `/v1/signals/${signalId}/confirmation`,
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/confirmation`,
+    });
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: { code: 'CONTROLLED_ACCESS_REQUIRED' },
+    });
+  });
+
+  it('GET rejects invalid control key without echoing the supplied value', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/confirmation`,
+      headers: { 'x-town-control-key': 'wrong-key' },
+    });
+    expect(response.statusCode).toBe(401);
+    expect(JSON.stringify(response.json())).not.toContain('wrong-key');
+    expect(JSON.stringify(response.json())).not.toContain(controlKey);
+  });
+
+  it('GET rejects a Munich signal (community mismatch) with 403', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.munichSignal1}/confirmation`,
       headers: { 'x-town-control-key': controlKey },
     });
-    expect(after.statusCode).toBe(200);
-    expect(after.json()).toEqual({
-      data: {
-        signalId,
-        confirmed: true,
-        confirmedAt: putBody.data.confirmedAt,
-      },
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: { code: 'ACTOR_NOT_ELIGIBLE_FOR_COMMUNITY' },
     });
   });
 
-  it('PUT is idempotent and keeps confirmedAt stable', async () => {
-    const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal2;
-
-    const first = await app.inject({
-      method: 'PUT',
-      url: `/v1/signals/${signalId}/confirmation`,
-      headers: { 'x-town-control-key': controlKey, 'content-type': 'application/json' },
-      payload: {},
-    });
-    const second = await app.inject({
-      method: 'PUT',
-      url: `/v1/signals/${signalId}/confirmation`,
-      headers: { 'x-town-control-key': controlKey, 'content-type': 'application/json' },
-      payload: {},
-    });
-
-    expect(first.statusCode).toBe(200);
-    expect(second.statusCode).toBe(200);
-    const firstBody: { data: { confirmedAt: string } } = first.json();
-    const secondBody: { data: { confirmedAt: string } } = second.json();
-    expect(secondBody.data.confirmedAt).toBe(firstBody.data.confirmedAt);
-
-    const database = createDatabase({
-      connectionString: databaseUrl,
-      poolMax: 1,
-      connectionTimeoutMs: 3000,
-      idleTimeoutMs: 1000,
-    });
-    try {
-      const total = await database.db
-        .select({ value: count() })
-        .from(signalConfirmations)
-        .where(eq(signalConfirmations.signalId, signalId));
-      expect(total[0]?.value).toBe(1);
-    } finally {
-      await database.close();
-    }
-  });
-
-  it('concurrent PUT requests create exactly one confirmation row', async () => {
-    const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal3;
-
-    const responses = await Promise.all(
-      Array.from({ length: 10 }, () =>
-        app.inject({
-          method: 'PUT',
-          url: `/v1/signals/${signalId}/confirmation`,
-          headers: { 'x-town-control-key': controlKey, 'content-type': 'application/json' },
-          payload: {},
-        }),
-      ),
-    );
-
-    expect(responses.every((response) => response.statusCode === 200)).toBe(true);
-    const confirmedAts = new Set(
-      responses.map((response) => {
-        const body: { data: { confirmedAt: string } } = response.json();
-        return body.data.confirmedAt;
-      }),
-    );
-    expect(confirmedAts.size).toBe(1);
-
-    const database = createDatabase({
-      connectionString: databaseUrl,
-      poolMax: 1,
-      connectionTimeoutMs: 3000,
-      idleTimeoutMs: 1000,
-    });
-    try {
-      const total = await database.db
-        .select({ value: count() })
-        .from(signalConfirmations)
-        .where(eq(signalConfirmations.signalId, signalId));
-      expect(total[0]?.value).toBe(1);
-    } finally {
-      await database.close();
-    }
-  });
-
-  it('enforces access, eligibility, validation, and empty body rules', async () => {
+  it('feature disabled returns safe 404 with no leak', async () => {
     const disabled = await createControlledConfirmationTestApp({ enabled: false });
     try {
       const response = await disabled.app.inject({
-        method: 'PUT',
+        method: 'GET',
         url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/confirmation`,
         headers: { 'x-town-control-key': CONTROLLED_TEST_KEY },
-        payload: {},
       });
       expect(response.statusCode).toBe(404);
       expect(response.json()).toMatchObject({
         statusCode: 404,
         error: 'Not Found',
-        message: 'Not Found',
       });
       expect(JSON.stringify(response.json())).not.toContain(CONTROLLED_TEST_KEY);
     } finally {
       await disabled.app.close();
       await disabled.pool.end();
     }
+  });
 
-    const missingKey = await app.inject({
-      method: 'GET',
-      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/confirmation`,
-    });
-    expect(missingKey.statusCode).toBe(401);
-    expect(missingKey.json()).toMatchObject({
-      error: {
-        code: 'CONTROLLED_ACCESS_REQUIRED',
-        message: 'Controlled access is required.',
-      },
-    });
-
-    const invalidKey = await app.inject({
-      method: 'GET',
-      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/confirmation`,
-      headers: { 'x-town-control-key': 'wrong-key' },
-    });
-    expect(invalidKey.statusCode).toBe(401);
-    expect(JSON.stringify(invalidKey.json())).not.toContain(controlKey);
-    expect(JSON.stringify(invalidKey.json())).not.toContain('wrong-key');
-
-    const munich = await app.inject({
+  it('PUT no longer accepts the control key as a bypass — a control-key-only PUT is rejected as session unauthorized', async () => {
+    const response = await app.inject({
       method: 'PUT',
-      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.munichSignal1}/confirmation`,
-      headers: { 'x-town-control-key': controlKey, 'content-type': 'application/json' },
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/confirmation`,
+      headers: {
+        'x-town-control-key': controlKey,
+        'content-type': 'application/json',
+      },
       payload: {},
     });
-    expect(munich.statusCode).toBe(403);
-    expect(munich.json()).toMatchObject({
-      error: {
-        code: 'ACTOR_NOT_ELIGIBLE_FOR_COMMUNITY',
-        message: 'The actor is not eligible for this community.',
-      },
-    });
+    // Without PASSKEY_AUTHENTICATION_ENABLED the route call-not-found path is used; when disabled
+    // PUT returns 404. This controlled app runs with PASSKEY_AUTHENTICATION_ENABLED=false, so the
+    // PUT route responds with 404 rather than 401 in this configuration. Either way, a control key
+    // alone must never succeed.
+    expect([401, 404]).toContain(response.statusCode);
+    const body = JSON.stringify(response.json());
+    expect(body).not.toMatch(/"confirmed":\s*true/);
+    expect(body).not.toContain(controlKey);
+  });
 
-    const munichGet = await app.inject({
-      method: 'GET',
-      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.munichSignal1}/confirmation`,
-      headers: { 'x-town-control-key': controlKey },
-    });
-    expect(munichGet.statusCode).toBe(403);
-
+  it('missing signal returns 404 SIGNAL_NOT_FOUND', async () => {
     const missing = await app.inject({
-      method: 'PUT',
+      method: 'GET',
       url: '/v1/signals/00000000-0000-4000-8000-000000000999/confirmation',
-      headers: { 'x-town-control-key': controlKey, 'content-type': 'application/json' },
-      payload: {},
+      headers: { 'x-town-control-key': controlKey },
     });
     expect(missing.statusCode).toBe(404);
     expect(missing.json()).toMatchObject({
-      error: {
-        code: 'SIGNAL_NOT_FOUND',
-        message: 'The requested signal was not found.',
-      },
+      error: { code: 'SIGNAL_NOT_FOUND' },
     });
+  });
 
+  it('invalid UUID param returns 400', async () => {
     const invalidUuid = await app.inject({
-      method: 'PUT',
+      method: 'GET',
       url: '/v1/signals/not-a-uuid/confirmation',
-      headers: { 'x-town-control-key': controlKey, 'content-type': 'application/json' },
-      payload: {},
+      headers: { 'x-town-control-key': controlKey },
     });
     expect(invalidUuid.statusCode).toBe(400);
-
-    const unexpectedBody = await app.inject({
-      method: 'PUT',
-      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/confirmation`,
-      headers: { 'x-town-control-key': controlKey, 'content-type': 'application/json' },
-      payload: { actorId: 'client-chosen' },
-    });
-    expect(unexpectedBody.statusCode).toBe(400);
-    expect(JSON.stringify(unexpectedBody.json())).not.toMatch(
-      /00000000-0000-4000-8000-000000000301/,
-    );
   });
 });

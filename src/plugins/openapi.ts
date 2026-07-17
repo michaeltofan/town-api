@@ -9,7 +9,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
       info: {
         title: 'TOWN API',
         description:
-          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation, gated email verification, first-passkey WebAuthn registration, passkey authentication sessions, bounded account recovery, and session-authenticated passkey management. Controlled confirmation, email verification, setup-grant passkey registration, and recovery grants are not public authentication or login sessions.',
+          'TOWN API civic foundation — health probes, communities, published signals, temporary controlled signal confirmation (read-only) plus session-authenticated participant signal confirmation, gated email verification, first-passkey WebAuthn registration, passkey authentication sessions, bounded account recovery, session-authenticated passkey management, and session-authenticated membership entitlement read. Controlled confirmation reads, email verification, setup-grant passkey registration, and recovery grants are not public authentication or login sessions. Membership foundation is separate from account identity; no public membership mutation routes exist and no Stripe network integration is included.',
         version: '0.1.0',
       },
       tags: [
@@ -28,12 +28,12 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Confirmations',
           description:
-            'Temporary controlled signal confirmation for a single seeded test actor. Not public authentication, membership, or social counting.',
+            'GET is the temporary controlled read-only mechanism using X-TOWN-Control-Key for a single seeded test actor. PUT is the session-authenticated civic participant confirmation route requiring an active Session, an active membership entitlement, a linked civic actor for the signal community, and fail-closed local participation eligibility. Not social counting; no public confirmation totals or actor identifiers are exposed.',
         },
         {
           name: 'Account',
           description:
-            'Account setup email verification, first-passkey WebAuthn registration, bounded account recovery, and session-authenticated passkey management. First-passkey registration requires SetupGrant. Passkey management (including add-passkey) requires an active Session only. Recovery grants are restricted authorization, not sessions.',
+            'Account setup email verification, first-passkey WebAuthn registration, bounded account recovery, session-authenticated passkey management, and session-authenticated membership entitlement inventory read at GET /v1/account/membership. First-passkey registration requires SetupGrant. Passkey management (including add-passkey) requires an active Session only. Recovery grants are restricted authorization, not sessions. Membership inventory never exposes Stripe customer or subscription identifiers.',
         },
         {
           name: 'Authentication',

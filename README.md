@@ -492,6 +492,138 @@ Distinct from Slice 3 initial registration (`SetupGrant` only):
 | `POST` | `/v1/account/passkeys/registration/options` | First-passkey registration options (`SetupGrant`) |
 | `POST` | `/v1/account/passkeys/registration/verify`  | First-passkey registration verify (`SetupGrant`)  |
 
+## Membership Foundation V1 — Slice 1
+
+Slice 1 of the membership foundation introduces the entitlement/access runtime for civic participation. Membership is a **separate foundation** from account identity and authentication: an `accounts` row is never gated by membership, and no membership boundary weakens the identity/auth contracts.
+
+Boundaries and non-negotiables:
+
+- Zero Stripe or other payment-provider dependency. No SDK, no webhook route, no provider identifiers in any public response. Internal transitions accept a `source` label (`stripe`, `test_fixture`, `admin_backfill`), but Stripe customer or subscription IDs are never accepted from or emitted to the network.
+- There is exactly one public membership route: `GET /v1/account/membership`. There are no public membership mutation routes and no membership webhooks in this slice.
+- Local participation eligibility defaults **fail-closed**: in `production` (or any non-test/non-development `NODE_ENV`), the default resolver returns `unavailable` and civic access reads never elevate to `participant`. Real local verification data plumbing is out of scope.
+- The controlled test actor (`00000000-0000-4000-8000-000000000301`) is never linked to an account, never receives a session, and never appears in confirmation-history attribution. Participant confirmation always attributes to the caller's linked civic actor.
+- Confirmation history is not reassigned after the participant PUT change. Pre-existing rows attributed to the controlled actor remain attributed to it; new participant PUTs write new rows attributed to the caller's civic actor.
+
+### Entitlement model
+
+`town.membership_entitlements` is a single row per account keyed by `account_id`:
+
+| Column                      | Notes                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------- |
+| `status`                    | One of `inactive`, `active`, `cancelling`, `expired`                               |
+| `access_until`              | UTC timestamp; participant access ends strictly before this (`now < access_until`) |
+| `cancel_at_period_end`      | `true` only while `status = 'cancelling'`                                          |
+| `source`                    | Internal label: `stripe`, `test_fixture`, or `admin_backfill`                      |
+| `source_customer_id`        | Provider-scoped identifier, never surfaced in public responses                     |
+| `source_subscription_id`    | Provider-scoped identifier, never surfaced in public responses                     |
+| `activated_at`              | First transition into `active`                                                     |
+| `cancellation_requested_at` | Non-null while `status = 'cancelling'`                                             |
+| `expired_at`                | Set when transitioning to `expired`                                                |
+| `version`                   | Monotonic per-account counter; increments only on `applied` transitions            |
+
+Status meanings:
+
+- `inactive`: no entitlement row yet, or an entitlement that has never been activated. Civic access is `read_only` (or `visitor` when no session), participation is denied.
+- `active`: `now < access_until`. Participant access is possible when the actor is linked, the community matches, and local eligibility is `eligible`.
+- `cancelling`: cancellation is scheduled; participant access is preserved until `access_until`.
+- `expired`: `access_until` has passed. Civic access drops to `read_only`; participation is denied.
+
+Access-until is also a stale-temporal boundary: even without an explicit `expire` transition, once `now >= access_until` the effective status returned by the API is `expired` and participation is denied.
+
+### Civic access levels
+
+Derived per request from session presence, account status, entitlement state, actor linkage, and local eligibility:
+
+- `visitor` — no active session.
+- `read_only` — active session but membership is not effective (missing/inactive/expired/cancelling with `access_until` passed) or actor/community/local eligibility does not permit participation.
+- `participant` — active session, active/cancelling membership within `access_until`, linked civic actor whose community matches the target, and local eligibility `eligible`.
+
+### `GET /v1/account/membership`
+
+Session-authorized read (web cookie or `Authorization: Session <token>`). SetupGrant, RecoveryGrant, and Bearer schemes are rejected with `401 SESSION_NOT_AUTHORIZED`. Rate limited by `membership_inventory_account`. Never returns Stripe customer or subscription identifiers.
+
+Response shape:
+
+```json
+{
+  "data": {
+    "membership": {
+      "status": "inactive|active|cancelling|expired",
+      "accessUntil": "2026-08-17T00:00:00.000Z",
+      "cancelAtPeriodEnd": false
+    },
+    "access": {
+      "level": "visitor|read_only|participant",
+      "canParticipate": true,
+      "localEligibility": "eligible|not_verified|expired|mismatched_community|unavailable"
+    }
+  }
+}
+```
+
+### Participant signal confirmation
+
+`PUT /v1/signals/:signalId/confirmation` is now session-authorized and requires civic-participation access. The controlled-key bypass is removed from the `PUT` path.
+
+- Requires an active normal session; SetupGrant/RecoveryGrant/Bearer/control key are rejected with `SESSION_NOT_AUTHORIZED`.
+- Web sessions must satisfy the same CSRF invariants as other mutative session routes.
+- Access is evaluated as `evaluateCivicAccess({ session, account, entitlement, actor, communityId, localEligibility, now })`. When the derived level is not `participant`, the route returns `403 CIVIC_PARTICIPATION_NOT_AUTHORIZED` and appends an `identity_security_events.civic_participation_denied` event with a bounded `denialReason` (no PII, no provider IDs, no localEligibility keys beyond the enum).
+- On success, `ensureParticipantSignalConfirmation` writes/returns the confirmation row attributed to the caller's linked civic actor — never the controlled test actor.
+
+`GET /v1/signals/:signalId/confirmation` remains gated by `X-TOWN-Control-Key` for historical read-side testing isolation and is unaffected by this slice.
+
+### Internal transitions and idempotency
+
+Transitions are internal-only functions (`activateMembership`, `scheduleMembershipCancellation`, `reactivateMembership`, `expireMembership`). They are not reachable from any HTTP route. Each transition:
+
+1. Locks or creates a `membership_source_events` row keyed by `(source, source_event_id)`.
+2. Locks the account row and any existing entitlement row.
+3. Validates the transition against the current state (e.g. reject `activate` on a closed account; reject `expire` before `access_until`; reject `reactivate` unless currently `cancelling`).
+4. Applies the mutation and increments `version` exactly once on `applied` outcomes.
+5. Appends bounded `identity_security_events` (`membership_created`, `membership_activated`, `membership_cancellation_scheduled`, `membership_reactivated`, `membership_expired`, `membership_event_replayed`, `membership_event_rejected`) — never containing provider IDs or personal data.
+
+Outcomes are one of `applied`, `replayed`, `stale`, or `rejected`.
+
+Source-event idempotency:
+
+- Same `(source, source_event_id)` with an identical canonical payload hash → `replayed`, no state change, no version bump.
+- Same `(source, source_event_id)` with a divergent payload hash → `rejected` with `payload_hash_mismatch`; no state change.
+- Concurrent identical `activate` transitions (`Promise.all`) resolve to exactly one `applied` and the remainder `replayed`; the ledger stores one applied row and version increments once. Deadlocks are retried with jittered backoff.
+
+Stale detection (accepted but not applied):
+
+- `activate` whose `access_until` would reduce the current active window → `stale` (`would_reduce_access_until`).
+- `activate` whose `effective_at` predates the current `updated_at` → `stale` (`older_event_overrides_newer_state`).
+- `expire`/`schedule_cancellation` for a superseded state → `stale`.
+
+### Reconciliation
+
+`reconcileExpiredMemberships` walks `active`/`cancelling` rows whose `access_until <= now`, expiring them in a batch under `FOR UPDATE SKIP LOCKED`. It is idempotent, respects a caller-provided batch size, and never expires an entitlement whose `access_until` is in the future.
+
+### Testing
+
+Comprehensive PostgreSQL 18 integration and unit coverage:
+
+```bash
+npm test
+npm run test:integration
+npm run membership:contract:generate
+npm run membership:contract:check
+```
+
+Suites include: payload-hash determinism, civic-access matrix (including temporal boundary and fail-closed local), migration invariants (no Stripe tables), transitions/idempotency/stale/concurrency/reconcile flows, `GET /v1/account/membership` response shapes and auth rejections, participant `PUT` matrix (including controlled-actor never linked, control-key rejected without session, and generic `CIVIC_PARTICIPATION_NOT_AUTHORIZED` denial), bounded audit metadata, and OpenAPI surface assertions.
+
+### Exclusions
+
+Explicitly out of scope for this slice:
+
+- No Stripe SDK, webhook route, or Stripe identifiers in public responses.
+- No public membership mutation routes; no public reconcile endpoint.
+- No production local eligibility source (defaults fail-closed).
+- No modification to identity/auth contracts' domain separation.
+- No linking of the controlled test actor to an account or session.
+- No reassignment of pre-existing confirmation history.
+
 ### Explicit exclusions
 
 Still not implemented:
@@ -529,6 +661,7 @@ Still not implemented:
 | `POST`   | `/v1/account/passkeys/add/verify`                        | add-passkey verify (session + freshness)        |
 | `PATCH`  | `/v1/account/passkeys/:passkeyId`                        | rename passkey                                  |
 | `DELETE` | `/v1/account/passkeys/:passkeyId`                        | revoke passkey                                  |
+| `GET`    | `/v1/account/membership`                                 | membership entitlement + civic access view      |
 
 ## Local database workflow
 
@@ -543,23 +676,25 @@ npm run dev
 
 Useful scripts:
 
-| Script                               | Purpose                                          |
-| ------------------------------------ | ------------------------------------------------ |
-| `npm run db:generate`                | generate reviewable SQL                          |
-| `npm run db:check`                   | validate migration history                       |
-| `npm run db:migrate`                 | apply committed migrations                       |
-| `npm run db:migrate:test`            | clean-DB migration verification                  |
-| `npm run db:seed:foundation`         | upsert canonical civic content                   |
-| `npm run db:seed:controlled-actor`   | upsert the single controlled test actor          |
-| `npm run identity:fixtures:load`     | load deterministic identity fixtures (test-only) |
-| `npm run identity:contract:generate` | write identity architecture contract             |
-| `npm run identity:contract:check`    | verify committed identity contract               |
-| `npm run auth:fixtures:load`         | load deterministic ceremony fixtures (test-only) |
-| `npm run auth:contract:generate`     | write ceremony architecture contract             |
-| `npm run auth:contract:check`        | verify committed ceremony contract               |
-| `npm test`                           | unit tests (no PostgreSQL required)              |
-| `npm run test:integration`           | PostgreSQL 18 integration suite                  |
-| `npm run check`                      | non-destructive quality gate                     |
+| Script                                 | Purpose                                          |
+| -------------------------------------- | ------------------------------------------------ |
+| `npm run db:generate`                  | generate reviewable SQL                          |
+| `npm run db:check`                     | validate migration history                       |
+| `npm run db:migrate`                   | apply committed migrations                       |
+| `npm run db:migrate:test`              | clean-DB migration verification                  |
+| `npm run db:seed:foundation`           | upsert canonical civic content                   |
+| `npm run db:seed:controlled-actor`     | upsert the single controlled test actor          |
+| `npm run identity:fixtures:load`       | load deterministic identity fixtures (test-only) |
+| `npm run identity:contract:generate`   | write identity architecture contract             |
+| `npm run identity:contract:check`      | verify committed identity contract               |
+| `npm run auth:fixtures:load`           | load deterministic ceremony fixtures (test-only) |
+| `npm run auth:contract:generate`       | write ceremony architecture contract             |
+| `npm run auth:contract:check`          | verify committed ceremony contract               |
+| `npm run membership:contract:generate` | write membership foundation contract             |
+| `npm run membership:contract:check`    | verify committed membership contract             |
+| `npm test`                             | unit tests (no PostgreSQL required)              |
+| `npm run test:integration`             | PostgreSQL 18 integration suite                  |
+| `npm run check`                        | non-destructive quality gate                     |
 
 ## CI
 
