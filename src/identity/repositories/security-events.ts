@@ -45,6 +45,19 @@ const APPROVED_EVENT_TYPES = new Set<IdentitySecurityEventType>([
   'membership_event_replayed',
   'membership_event_rejected',
   'civic_participation_denied',
+  'stripe_checkout_session_created',
+  'stripe_customer_linked',
+  'stripe_webhook_received',
+  'stripe_webhook_verified',
+  'stripe_webhook_replayed',
+  'stripe_webhook_rejected',
+  'stripe_subscription_linked',
+  'stripe_invoice_paid',
+  'stripe_cancellation_scheduled',
+  'stripe_cancellation_removed',
+  'stripe_subscription_deleted',
+  'stripe_payment_failed',
+  'stripe_price_mismatch',
 ]);
 
 export async function appendIdentitySecurityEvent(

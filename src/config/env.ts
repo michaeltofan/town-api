@@ -24,6 +24,9 @@ import {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+export const TOWN_STRIPE_API_VERSION = '2026-06-24.dahlia' as const;
+export type TownStripeApiVersion = typeof TOWN_STRIPE_API_VERSION;
+
 const EnvSchema = Type.Object(
   {
     NODE_ENV: Type.Union(
@@ -87,6 +90,16 @@ const EnvSchema = Type.Object(
     ACCOUNT_RECOVERY_DELIVERY_MODE: Type.Optional(
       Type.Union([Type.Literal('test'), Type.Literal('development')]),
     ),
+    STRIPE_BILLING_ENABLED: Type.Boolean({ default: false }),
+    STRIPE_SECRET_KEY: Type.Optional(Type.String({ minLength: 20 })),
+    STRIPE_WEBHOOK_SECRET: Type.Optional(Type.String({ minLength: 20 })),
+    STRIPE_ANNUAL_PRICE_ID: Type.Optional(Type.String({ minLength: 6 })),
+    STRIPE_PORTAL_CONFIGURATION_ID: Type.Optional(Type.String({ minLength: 4 })),
+    STRIPE_CHECKOUT_SUCCESS_URL: Type.Optional(Type.String({ minLength: 8 })),
+    STRIPE_CHECKOUT_CANCEL_URL: Type.Optional(Type.String({ minLength: 8 })),
+    STRIPE_PORTAL_RETURN_URL: Type.Optional(Type.String({ minLength: 8 })),
+    STRIPE_API_VERSION: Type.Optional(Type.Literal('2026-06-24.dahlia')),
+    STRIPE_EXPECTED_LIVEMODE: Type.Optional(Type.Boolean()),
     TRUST_PROXY: Type.Boolean({ default: false }),
   },
   { additionalProperties: false },
@@ -171,7 +184,54 @@ function sanitizeEnvErrorPath(path: string, message: string): string {
   if (path.includes('ACCOUNT_RECOVERY_DELIVERY_MODE')) {
     return `${path}: must be test or development when account recovery is enabled`;
   }
+  if (path.includes('STRIPE_SECRET_KEY')) {
+    return `${path}: must be a Stripe secret key when Stripe billing is enabled`;
+  }
+  if (path.includes('STRIPE_WEBHOOK_SECRET')) {
+    return `${path}: must be a Stripe webhook secret when Stripe billing is enabled`;
+  }
+  if (path.includes('STRIPE_ANNUAL_PRICE_ID')) {
+    return `${path}: must be a Stripe price id when Stripe billing is enabled`;
+  }
+  if (path.includes('STRIPE_PORTAL_CONFIGURATION_ID')) {
+    return `${path}: must be a Stripe billing portal configuration id when Stripe billing is enabled`;
+  }
+  if (path.includes('STRIPE_CHECKOUT_SUCCESS_URL')) {
+    return `${path}: must be an https URL when Stripe billing is enabled`;
+  }
+  if (path.includes('STRIPE_CHECKOUT_CANCEL_URL')) {
+    return `${path}: must be an https URL when Stripe billing is enabled`;
+  }
+  if (path.includes('STRIPE_PORTAL_RETURN_URL')) {
+    return `${path}: must be an https URL when Stripe billing is enabled`;
+  }
+  if (path.includes('STRIPE_API_VERSION')) {
+    return `${path}: must equal 2026-06-24.dahlia when Stripe billing is enabled`;
+  }
   return `${path}: ${message}`;
+}
+
+function isAbsoluteHttpsUrl(value: string, nodeEnv: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') {
+    return false;
+  }
+  if (value.includes('*')) {
+    return false;
+  }
+  if (parsed.hostname.length === 0) {
+    return false;
+  }
+  if (parsed.hostname === 'example.test') {
+    // Reserved test hostname.
+    return nodeEnv !== 'production';
+  }
+  return true;
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
@@ -196,6 +256,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     'ACCOUNT_RECOVERY_ENABLED',
   );
   const trustProxy = parseBooleanFlag(source.TRUST_PROXY, 'TRUST_PROXY');
+  const stripeBillingEnabled = parseBooleanFlag(
+    source.STRIPE_BILLING_ENABLED,
+    'STRIPE_BILLING_ENABLED',
+  );
   const nodeEnv = source.NODE_ENV ?? 'development';
 
   const candidate: Record<string, unknown> = {
@@ -216,6 +280,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     WEBAUTHN_REGISTRATION_ENABLED: webauthnRegistrationEnabled,
     PASSKEY_AUTHENTICATION_ENABLED: passkeyAuthenticationEnabled,
     ACCOUNT_RECOVERY_ENABLED: accountRecoveryEnabled,
+    STRIPE_BILLING_ENABLED: stripeBillingEnabled,
     TRUST_PROXY: trustProxy,
   };
 
@@ -516,6 +581,98 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     candidate.WEBAUTHN_RP_NAME = rpName;
     candidate.WEBAUTHN_ALLOWED_ORIGINS = source.WEBAUTHN_ALLOWED_ORIGINS;
     candidate.WEBAUTHN_CHALLENGE_HASH_KEY = source.WEBAUTHN_CHALLENGE_HASH_KEY;
+  }
+
+  if (stripeBillingEnabled) {
+    const secretKey = source.STRIPE_SECRET_KEY;
+    const webhookSecret = source.STRIPE_WEBHOOK_SECRET;
+    const priceId = source.STRIPE_ANNUAL_PRICE_ID;
+    const portalConfigId = source.STRIPE_PORTAL_CONFIGURATION_ID;
+    const checkoutSuccessUrl = source.STRIPE_CHECKOUT_SUCCESS_URL;
+    const checkoutCancelUrl = source.STRIPE_CHECKOUT_CANCEL_URL;
+    const portalReturnUrl = source.STRIPE_PORTAL_RETURN_URL;
+    const apiVersion = source.STRIPE_API_VERSION;
+    const expectedLivemodeRaw = source.STRIPE_EXPECTED_LIVEMODE;
+
+    if (!isNonEmptyString(secretKey) || secretKey.length < 20 || !secretKey.startsWith('sk_')) {
+      throw new Error(
+        'Invalid environment configuration: STRIPE_SECRET_KEY must be a Stripe secret key (starts with sk_, min length 20) when STRIPE_BILLING_ENABLED is true',
+      );
+    }
+    if (
+      !isNonEmptyString(webhookSecret) ||
+      webhookSecret.length < 20 ||
+      !webhookSecret.startsWith('whsec_')
+    ) {
+      throw new Error(
+        'Invalid environment configuration: STRIPE_WEBHOOK_SECRET must be a Stripe webhook secret (starts with whsec_, min length 20) when STRIPE_BILLING_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(priceId) || !priceId.startsWith('price_')) {
+      throw new Error(
+        'Invalid environment configuration: STRIPE_ANNUAL_PRICE_ID must start with price_ when STRIPE_BILLING_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(portalConfigId) || !portalConfigId.startsWith('bpc_')) {
+      throw new Error(
+        'Invalid environment configuration: STRIPE_PORTAL_CONFIGURATION_ID must start with bpc_ when STRIPE_BILLING_ENABLED is true',
+      );
+    }
+    for (const [name, url] of [
+      ['STRIPE_CHECKOUT_SUCCESS_URL', checkoutSuccessUrl],
+      ['STRIPE_CHECKOUT_CANCEL_URL', checkoutCancelUrl],
+      ['STRIPE_PORTAL_RETURN_URL', portalReturnUrl],
+    ] as const) {
+      if (!isNonEmptyString(url) || !isAbsoluteHttpsUrl(url, nodeEnv)) {
+        throw new Error(
+          `Invalid environment configuration: ${name} must be an absolute https URL when STRIPE_BILLING_ENABLED is true`,
+        );
+      }
+    }
+    if (apiVersion !== undefined && apiVersion !== TOWN_STRIPE_API_VERSION) {
+      throw new Error(
+        `Invalid environment configuration: STRIPE_API_VERSION must equal ${TOWN_STRIPE_API_VERSION} when STRIPE_BILLING_ENABLED is true`,
+      );
+    }
+
+    let expectedLivemode: boolean;
+    if (expectedLivemodeRaw === undefined || expectedLivemodeRaw === '') {
+      expectedLivemode = nodeEnv === 'production';
+    } else {
+      expectedLivemode = parseBooleanFlag(expectedLivemodeRaw, 'STRIPE_EXPECTED_LIVEMODE');
+    }
+    if (nodeEnv === 'production' && !expectedLivemode) {
+      throw new Error(
+        'Invalid environment configuration: STRIPE_EXPECTED_LIVEMODE must be true in production',
+      );
+    }
+    if (nodeEnv !== 'production' && expectedLivemode) {
+      throw new Error(
+        'Invalid environment configuration: STRIPE_EXPECTED_LIVEMODE must be false outside production',
+      );
+    }
+
+    if (!isNonEmptyString(source.CEREMONY_RATE_LIMIT_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: CEREMONY_RATE_LIMIT_HASH_KEY is required when STRIPE_BILLING_ENABLED is true',
+      );
+    }
+    if (source.CEREMONY_RATE_LIMIT_HASH_KEY.length < CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: CEREMONY_RATE_LIMIT_HASH_KEY must be at least ${String(CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH)} characters when STRIPE_BILLING_ENABLED is true`,
+      );
+    }
+
+    candidate.STRIPE_SECRET_KEY = secretKey;
+    candidate.STRIPE_WEBHOOK_SECRET = webhookSecret;
+    candidate.STRIPE_ANNUAL_PRICE_ID = priceId;
+    candidate.STRIPE_PORTAL_CONFIGURATION_ID = portalConfigId;
+    candidate.STRIPE_CHECKOUT_SUCCESS_URL = checkoutSuccessUrl;
+    candidate.STRIPE_CHECKOUT_CANCEL_URL = checkoutCancelUrl;
+    candidate.STRIPE_PORTAL_RETURN_URL = portalReturnUrl;
+    candidate.STRIPE_API_VERSION = TOWN_STRIPE_API_VERSION;
+    candidate.STRIPE_EXPECTED_LIVEMODE = expectedLivemode;
+    candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
   }
 
   if (!isNonEmptyString(candidate.DATABASE_URL)) {
