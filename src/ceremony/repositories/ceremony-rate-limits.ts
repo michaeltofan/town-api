@@ -34,6 +34,7 @@ const APPROVED_SCOPES = new Set<CeremonyRateLimitScope>([
   'passkey_registration_verify_session',
   'passkey_rename_account',
   'passkey_revoke_account',
+  'membership_inventory_account',
 ]);
 
 function assertApprovedScope(scope: CeremonyRateLimitScope): CeremonyRateLimitScope {

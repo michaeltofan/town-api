@@ -35,7 +35,12 @@ const expireLogic: TransitionLogic = {
     return { kind: 'apply' };
   },
   apply(ctx: TransitionContext) {
-    const entitlement = ctx.entitlement!;
+    const entitlement = ctx.entitlement;
+    if (!entitlement) {
+      throw new Error(
+        'expire.apply requires an existing entitlement; validate must reject earlier',
+      );
+    }
     return {
       status: 'expired' as const,
       accessUntil: entitlement.accessUntil,
@@ -59,10 +64,5 @@ export async function expireMembership(
   input: MembershipTransitionInput,
   deps: MembershipTransitionDeps = {},
 ): Promise<MembershipTransitionOutcome> {
-  return executeMembershipTransition(
-    db,
-    { ...input, eventType: 'expire' },
-    expireLogic,
-    deps,
-  );
+  return executeMembershipTransition(db, { ...input, eventType: 'expire' }, expireLogic, deps);
 }

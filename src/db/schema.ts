@@ -20,8 +20,9 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /**
- * TOWN schema namespace: civic foundation, account identity, and ceremony data foundations.
- * Live authentication routes, cookies, JWTs, membership, and payments remain out of scope.
+ * TOWN schema namespace: civic foundation, account identity, ceremony data, and membership
+ * entitlement foundations. Stripe SDK/network integration, payments, JWTs, and local
+ * verification runtime remain out of scope.
  */
 export const town = pgSchema('town');
 
@@ -494,10 +495,136 @@ export const identitySecurityEvents = town.table(
         'passkey_reauthentication_started',
         'passkey_reauthentication_succeeded',
         'passkey_reauthentication_failed',
-        'passkey_renamed'
+        'passkey_renamed',
+        'membership_created',
+        'membership_activated',
+        'membership_cancellation_scheduled',
+        'membership_reactivated',
+        'membership_expired',
+        'membership_event_replayed',
+        'membership_event_rejected',
+        'civic_participation_denied'
       )`,
     ),
     index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
+  ],
+);
+
+/**
+ * Membership entitlement — separate from account identity. One current entitlement per account.
+ * Provider references are reserved for future Stripe integration and must never be exposed publicly.
+ */
+export const membershipEntitlements = town.table(
+  'membership_entitlements',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    status: text('status').notNull(),
+    accessUntil: timestamp('access_until', { withTimezone: true, mode: 'string' }),
+    cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+    source: text('source').notNull(),
+    sourceCustomerId: text('source_customer_id'),
+    sourceSubscriptionId: text('source_subscription_id'),
+    activatedAt: timestamp('activated_at', { withTimezone: true, mode: 'string' }),
+    cancellationRequestedAt: timestamp('cancellation_requested_at', {
+      withTimezone: true,
+      mode: 'string',
+    }),
+    expiredAt: timestamp('expired_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+    version: bigint('version', { mode: 'number' }).notNull().default(1),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'membership_entitlements_account_id_fkey',
+    }).onDelete('restrict'),
+    unique('membership_entitlements_account_id_unique').on(table.accountId),
+    check(
+      'membership_entitlements_status_valid',
+      sql`${table.status} in ('inactive', 'active', 'cancelling', 'expired')`,
+    ),
+    check(
+      'membership_entitlements_source_valid',
+      sql`${table.source} in ('test_fixture', 'stripe')`,
+    ),
+    check('membership_entitlements_version_positive', sql`${table.version} >= 1`),
+    check(
+      'membership_entitlements_updated_after_created',
+      sql`${table.updatedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      'membership_entitlements_state_invariants',
+      sql`(
+        (${table.status} = 'inactive'
+          and ${table.accessUntil} is null
+          and ${table.cancelAtPeriodEnd} = false)
+        or (${table.status} = 'active'
+          and ${table.accessUntil} is not null
+          and ${table.cancelAtPeriodEnd} = false
+          and ${table.activatedAt} is not null
+          and ${table.expiredAt} is null)
+        or (${table.status} = 'cancelling'
+          and ${table.accessUntil} is not null
+          and ${table.cancelAtPeriodEnd} = true
+          and ${table.cancellationRequestedAt} is not null
+          and ${table.expiredAt} is null)
+        or (${table.status} = 'expired'
+          and ${table.accessUntil} is not null
+          and ${table.cancelAtPeriodEnd} = false
+          and ${table.expiredAt} is not null)
+      )`,
+    ),
+    uniqueIndex('membership_entitlements_stripe_subscription_unique')
+      .on(table.sourceSubscriptionId)
+      .where(sql`${table.source} = 'stripe' and ${table.sourceSubscriptionId} is not null`),
+    index('membership_entitlements_status_access_until_idx').on(table.status, table.accessUntil),
+  ],
+);
+
+/**
+ * Membership source-event idempotency ledger. Raw payloads are never stored.
+ */
+export const membershipSourceEvents = town.table(
+  'membership_source_events',
+  {
+    id: uuid('id').primaryKey(),
+    source: text('source').notNull(),
+    sourceEventId: text('source_event_id').notNull(),
+    eventType: text('event_type').notNull(),
+    accountId: uuid('account_id'),
+    payloadHash: text('payload_hash').notNull(),
+    effectiveAt: timestamp('effective_at', { withTimezone: true, mode: 'string' }).notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true, mode: 'string' }).notNull(),
+    result: text('result').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'membership_source_events_account_id_fkey',
+    }).onDelete('restrict'),
+    unique('membership_source_events_source_event_unique').on(table.source, table.sourceEventId),
+    check(
+      'membership_source_events_source_valid',
+      sql`${table.source} in ('test_fixture', 'stripe')`,
+    ),
+    check(
+      'membership_source_events_event_type_valid',
+      sql`${table.eventType} in ('activate', 'schedule_cancellation', 'expire', 'reactivate')`,
+    ),
+    check(
+      'membership_source_events_result_valid',
+      sql`${table.result} in ('applied', 'replayed', 'rejected', 'stale')`,
+    ),
+    check(
+      'membership_source_events_payload_hash_sha256',
+      sql`char_length(${table.payloadHash}) = 64`,
+    ),
+    index('membership_source_events_account_processed_idx').on(table.accountId, table.processedAt),
   ],
 );
 
@@ -692,7 +819,8 @@ export const ceremonyRateLimits = town.table(
         'passkey_registration_options_session',
         'passkey_registration_verify_session',
         'passkey_rename_account',
-        'passkey_revoke_account'
+        'passkey_revoke_account',
+        'membership_inventory_account'
       )`,
     ),
     check('ceremony_rate_limits_attempt_count_nonnegative', sql`${table.attemptCount} >= 0`),
@@ -729,6 +857,8 @@ export type IdentitySecurityEventRow = typeof identitySecurityEvents.$inferSelec
 export type SetupGrantRow = typeof setupGrants.$inferSelect;
 export type AccountSessionRow = typeof accountSessions.$inferSelect;
 export type CeremonyRateLimitRow = typeof ceremonyRateLimits.$inferSelect;
+export type MembershipEntitlementRow = typeof membershipEntitlements.$inferSelect;
+export type MembershipSourceEventRow = typeof membershipSourceEvents.$inferSelect;
 
 export type AccountStatus = 'pending_email' | 'pending_passkey' | 'active' | 'suspended' | 'closed';
 
@@ -776,7 +906,8 @@ export type CeremonyRateLimitScope =
   | 'passkey_registration_options_session'
   | 'passkey_registration_verify_session'
   | 'passkey_rename_account'
-  | 'passkey_revoke_account';
+  | 'passkey_revoke_account'
+  | 'membership_inventory_account';
 export type IdentitySecurityEventType =
   | 'email_verification_requested'
   | 'email_verified'
@@ -803,4 +934,21 @@ export type IdentitySecurityEventType =
   | 'passkey_reauthentication_started'
   | 'passkey_reauthentication_succeeded'
   | 'passkey_reauthentication_failed'
-  | 'passkey_renamed';
+  | 'passkey_renamed'
+  | 'membership_created'
+  | 'membership_activated'
+  | 'membership_cancellation_scheduled'
+  | 'membership_reactivated'
+  | 'membership_expired'
+  | 'membership_event_replayed'
+  | 'membership_event_rejected'
+  | 'civic_participation_denied';
+
+export type MembershipStatus = 'inactive' | 'active' | 'cancelling' | 'expired';
+export type MembershipSource = 'test_fixture' | 'stripe';
+export type MembershipSourceEventType =
+  'activate' | 'schedule_cancellation' | 'expire' | 'reactivate';
+export type MembershipSourceEventResult = 'applied' | 'replayed' | 'rejected' | 'stale';
+export type CivicAccessLevel = 'visitor' | 'read_only' | 'participant';
+export type LocalParticipationEligibility =
+  'eligible' | 'not_verified' | 'expired' | 'mismatched_community' | 'unavailable';

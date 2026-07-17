@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { actors } from '../db/schema.js';
 import { findAccountById } from '../identity/repositories/accounts.js';
+import { toIsoTimestamp } from '../lib/timestamps.js';
 import { evaluateCivicAccess, resolveEffectiveMembershipStatus } from './civic-access.js';
 import type { LocalParticipationEligibilityResolver } from './local-eligibility.js';
 import { findEntitlementByAccountId } from './repositories/entitlements.js';
@@ -30,24 +31,25 @@ export async function getAccountMembershipView(
     .where(eq(actors.accountId, input.accountId))
     .limit(1);
   const actor = actorRows[0] ?? null;
+  const communityId = input.communityId ?? actor?.communityId ?? undefined;
 
   const localEligibility =
-    actor && input.communityId
+    actor && communityId
       ? await Promise.resolve(
           input.localEligibilityResolver({
             accountId: input.accountId,
             actorId: actor.id,
-            communityId: input.communityId,
+            communityId,
           }),
         )
-      : 'unavailable';
+      : 'not_verified';
 
   const access = evaluateCivicAccess({
     session: input.session,
     account: account ? { id: account.id, status: account.status } : null,
     entitlement,
     actor,
-    ...(input.communityId !== undefined ? { communityId: input.communityId } : {}),
+    ...(communityId !== undefined ? { communityId } : {}),
     localEligibility,
     now: input.now,
   });
@@ -57,8 +59,11 @@ export async function getAccountMembershipView(
   return {
     membership: {
       status: effectiveStatus,
-      accessUntil: entitlement?.accessUntil ?? null,
-      cancelAtPeriodEnd: entitlement?.cancelAtPeriodEnd ?? false,
+      accessUntil: entitlement?.accessUntil ? toIsoTimestamp(entitlement.accessUntil) : null,
+      cancelAtPeriodEnd:
+        effectiveStatus === 'expired' || effectiveStatus === 'inactive'
+          ? false
+          : (entitlement?.cancelAtPeriodEnd ?? false),
     },
     access: {
       level: access.level,

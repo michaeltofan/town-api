@@ -5,4 +5,5 @@ package-lock.json
 docs/openapi.v1.json
 docs/account-identity-contract.v1.json
 docs/authentication-ceremony-foundation.v1.json
+docs/membership-foundation.v1.json
 drizzle/meta

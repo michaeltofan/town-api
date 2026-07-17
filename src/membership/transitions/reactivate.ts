@@ -14,7 +14,7 @@ const reactivateLogic: TransitionLogic = {
   eventType: 'reactivate',
   validate(ctx: TransitionContext) {
     const entitlement = ctx.entitlement;
-    if (!entitlement || entitlement.status !== 'cancelling') {
+    if (entitlement?.status !== 'cancelling') {
       return { kind: 'reject', reason: 'not_cancelling' };
     }
 
@@ -36,7 +36,12 @@ const reactivateLogic: TransitionLogic = {
     return { kind: 'apply' };
   },
   apply(ctx: TransitionContext) {
-    const entitlement = ctx.entitlement!;
+    const entitlement = ctx.entitlement;
+    if (!entitlement) {
+      throw new Error(
+        'reactivate.apply requires an existing entitlement; validate must reject earlier',
+      );
+    }
     return {
       status: 'active' as const,
       accessUntil: entitlement.accessUntil,

@@ -75,7 +75,7 @@ export function evaluateCivicAccess(input: {
     localEligibility: input.localEligibility,
   };
 
-  if (!input.account || input.account.id !== input.session.accountId) {
+  if (input.account?.id !== input.session.accountId) {
     return {
       ...base,
       denialReason: 'inactive_account',

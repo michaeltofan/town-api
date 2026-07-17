@@ -45,7 +45,7 @@ export async function reconcileExpiredMemberships(
   );
 
   for (const entitlement of candidates) {
-    const sourceEventId = `${prefix}${entitlement.accountId}:${entitlement.accessUntil}`;
+    const sourceEventId = `${prefix}${entitlement.accountId}:${entitlement.accessUntil ?? 'null'}`;
     const outcome = await expireMembership(
       db,
       {

@@ -4,7 +4,6 @@ import {
   membershipEntitlements,
   type MembershipEntitlementRow,
   type MembershipSource,
-  type MembershipStatus,
 } from '../../db/schema.js';
 
 type Db = Database['db'];
@@ -39,7 +38,7 @@ export async function lockEntitlementByAccountId(
     expired_at: string | null;
     created_at: string;
     updated_at: string;
-    version: number;
+    version: number | string;
   }>(sql`
     SELECT id, account_id, status, access_until, cancel_at_period_end, source,
            source_customer_id, source_subscription_id, activated_at,
@@ -55,10 +54,10 @@ export async function lockEntitlementByAccountId(
   return {
     id: row.id,
     accountId: row.account_id,
-    status: row.status as MembershipStatus,
+    status: row.status,
     accessUntil: row.access_until,
     cancelAtPeriodEnd: row.cancel_at_period_end,
-    source: row.source as MembershipSource,
+    source: row.source,
     sourceCustomerId: row.source_customer_id,
     sourceSubscriptionId: row.source_subscription_id,
     activatedAt: row.activated_at,
@@ -66,7 +65,9 @@ export async function lockEntitlementByAccountId(
     expiredAt: row.expired_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    version: row.version,
+    // Postgres BIGINT is returned as string by node-postgres for raw execute();
+    // coerce to a JS number so downstream arithmetic (version + 1) is numeric.
+    version: typeof row.version === 'string' ? Number(row.version) : row.version,
   };
 }
 
@@ -174,7 +175,7 @@ export async function findExpiredMembershipCandidates(
     expired_at: string | null;
     created_at: string;
     updated_at: string;
-    version: number;
+    version: number | string;
   }>(sql`
     SELECT id, account_id, status, access_until, cancel_at_period_end, source,
            source_customer_id, source_subscription_id, activated_at,
@@ -191,10 +192,10 @@ export async function findExpiredMembershipCandidates(
   return locked.rows.map((row) => ({
     id: row.id,
     accountId: row.account_id,
-    status: row.status as MembershipStatus,
+    status: row.status,
     accessUntil: row.access_until,
     cancelAtPeriodEnd: row.cancel_at_period_end,
-    source: row.source as MembershipSource,
+    source: row.source,
     sourceCustomerId: row.source_customer_id,
     sourceSubscriptionId: row.source_subscription_id,
     activatedAt: row.activated_at,
@@ -202,6 +203,6 @@ export async function findExpiredMembershipCandidates(
     expiredAt: row.expired_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    version: row.version,
+    version: typeof row.version === 'string' ? Number(row.version) : row.version,
   }));
 }

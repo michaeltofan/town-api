@@ -22,6 +22,8 @@ const EXPECTED_TOWN_TABLES = [
   'communities',
   'email_challenges',
   'identity_security_events',
+  'membership_entitlements',
+  'membership_source_events',
   'passkey_credentials',
   'recovery_grants',
   'setup_grants',

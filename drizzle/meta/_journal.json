@@ -71,6 +71,13 @@
       "when": 1784276400000,
       "tag": "0009_passkey_management_security_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784284423080,
+      "tag": "0010_membership_entitlement_access_runtime",
+      "breakpoints": true
     }
   ]
 }

@@ -15,9 +15,11 @@ import { confirmationRoutes } from './routes/confirmations.js';
 import { emailVerificationRoutes } from './routes/email-verifications.js';
 import { healthRoutes } from './routes/health.js';
 import { passkeyAuthenticationRoutes } from './routes/passkey-authentication.js';
+import { membershipRoutes } from './routes/membership.js';
 import { passkeyManagementRoutes } from './routes/passkey-management.js';
 import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { signalsRoutes } from './routes/signals.js';
+import type { LocalParticipationEligibilityResolver } from './membership/local-eligibility.js';
 
 export type BuildAppOptions = {
   env: Env;
@@ -55,6 +57,11 @@ export type BuildAppOptions = {
     now?: () => string;
     generateId?: () => string;
     generateToken?: () => string;
+  };
+  membership?: {
+    now?: () => string;
+    generateId?: () => string;
+    localEligibilityResolver?: LocalParticipationEligibilityResolver;
   };
 };
 
@@ -129,7 +136,16 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(healthRoutes);
   await app.register(communitiesRoutes);
   await app.register(signalsRoutes);
-  await app.register(confirmationRoutes, { env: options.env });
+  await app.register(confirmationRoutes, {
+    env: options.env,
+    ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
+    ...(options.membership?.generateId !== undefined
+      ? { generateId: options.membership.generateId }
+      : {}),
+    ...(options.membership?.localEligibilityResolver !== undefined
+      ? { localEligibilityResolver: options.membership.localEligibilityResolver }
+      : {}),
+  });
   await app.register(emailVerificationRoutes, {
     env: options.env,
     ...(options.emailVerification?.deliveryAdapter !== undefined
@@ -202,6 +218,16 @@ export async function buildApp(options: BuildAppOptions) {
       : {}),
     ...(options.passkeyAuthentication?.generateToken !== undefined
       ? { generateToken: options.passkeyAuthentication.generateToken }
+      : {}),
+  });
+  await app.register(membershipRoutes, {
+    env: options.env,
+    ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
+    ...(options.membership?.generateId !== undefined
+      ? { generateId: options.membership.generateId }
+      : {}),
+    ...(options.membership?.localEligibilityResolver !== undefined
+      ? { localEligibilityResolver: options.membership.localEligibilityResolver }
       : {}),
   });
 

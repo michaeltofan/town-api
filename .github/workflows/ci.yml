@@ -164,6 +164,9 @@ jobs:
       - name: Authentication ceremony contract check
         run: npm run auth:contract:check
 
+      - name: Membership contract check
+        run: npm run membership:contract:check
+
       - name: Build
         run: npm run build
 

@@ -14,7 +14,7 @@ const scheduleCancellationLogic: TransitionLogic = {
   eventType: 'schedule_cancellation',
   validate(ctx: TransitionContext) {
     const entitlement = ctx.entitlement;
-    if (!entitlement || entitlement.status !== 'active') {
+    if (entitlement?.status !== 'active') {
       return { kind: 'reject', reason: 'not_active' };
     }
 
@@ -36,7 +36,12 @@ const scheduleCancellationLogic: TransitionLogic = {
     return { kind: 'apply' };
   },
   apply(ctx: TransitionContext) {
-    const entitlement = ctx.entitlement!;
+    const entitlement = ctx.entitlement;
+    if (!entitlement) {
+      throw new Error(
+        'schedule-cancellation.apply requires an existing entitlement; validate must reject earlier',
+      );
+    }
     return {
       status: 'cancelling' as const,
       accessUntil: entitlement.accessUntil,

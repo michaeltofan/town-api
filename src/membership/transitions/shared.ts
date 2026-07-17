@@ -53,19 +53,17 @@ export type TransitionContext = {
 };
 
 export type TransitionValidation =
-  | { kind: 'apply' }
-  | { kind: 'reject'; reason: string }
-  | { kind: 'stale'; reason: string };
+  { kind: 'apply' } | { kind: 'reject'; reason: string } | { kind: 'stale'; reason: string };
 
 export type TransitionLogic = {
   eventType: MembershipSourceEventType;
   validate: (ctx: TransitionContext) => TransitionValidation;
-  apply: (
-    ctx: TransitionContext,
-  ) => Omit<
+  apply: (ctx: TransitionContext) => Omit<
     Parameters<typeof updateMembershipEntitlement>[1],
     'id' | 'updatedAt' | 'version'
-  > & { version: number };
+  > & {
+    version: number;
+  };
   appliedAuditEventType: IdentitySecurityEventType;
   replayedAuditEventType?: IdentitySecurityEventType;
   rejectedAuditEventType?: IdentitySecurityEventType;
@@ -441,22 +439,52 @@ async function runTransitionInTransaction(
   });
 }
 
+function isTransientPostgresConflict(error: unknown): boolean {
+  const cause = error instanceof Error && error.cause instanceof Error ? error.cause : undefined;
+  const candidates: unknown[] = [error, cause];
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'object') {
+      const code = (candidate as { code?: unknown }).code;
+      if (typeof code === 'string') {
+        // 40P01: deadlock_detected, 40001: serialization_failure.
+        if (code === '40P01' || code === '40001') {
+          return true;
+        }
+      }
+    }
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  const causeMessage = cause?.message ?? '';
+  return /deadlock detected|could not serialize access/i.test(`${message}${causeMessage}`);
+}
+
+const MAX_TRANSITION_RETRIES = 5;
+
 export async function executeMembershipTransition(
   db: Db,
   input: MembershipTransitionInput,
   logic: TransitionLogic,
   deps: MembershipTransitionDeps = {},
 ): Promise<MembershipTransitionOutcome> {
-  try {
-    return await runTransitionInTransaction(db, input, logic, deps);
-  } catch (error) {
-    if (!isMembershipSourceEventUniqueViolation(error)) {
+  // Concurrent transitions can encounter deadlocks or unique-violation races on
+  // membership_source_events. Retry a bounded number of times, letting the
+  // second pass see the winning transaction's committed state.
+  for (let attempt = 0; attempt <= MAX_TRANSITION_RETRIES; attempt += 1) {
+    try {
+      return await runTransitionInTransaction(db, input, logic, deps);
+    } catch (error) {
+      if (isMembershipSourceEventUniqueViolation(error)) {
+        return await findAndCompareAfterRace(db, input, logic, deps);
+      }
+      if (isTransientPostgresConflict(error) && attempt < MAX_TRANSITION_RETRIES) {
+        const delayMs = Math.floor(Math.random() * 25) + 5 * (attempt + 1);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
       throw error;
     }
-
-    const existing = await findAndCompareAfterRace(db, input, logic, deps);
-    return existing;
   }
+  throw new Error('executeMembershipTransition exhausted retry budget without result');
 }
 
 async function findAndCompareAfterRace(

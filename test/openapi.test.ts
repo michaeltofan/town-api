@@ -73,6 +73,25 @@ describe('OpenAPI contract', () => {
     expect(scheme?.description?.toLowerCase()).toContain('temporary');
     expect(scheme?.description?.toLowerCase()).toContain('not public authentication');
 
+    // Membership foundation: exactly one public membership route, no mutation routes.
+    const membershipPaths = Object.keys(document.paths).filter((p) => p.includes('membership'));
+    expect(membershipPaths).toEqual(['/v1/account/membership']);
+    const membership = document.paths['/v1/account/membership'] as Record<string, unknown>;
+    expect(membership.get).toBeDefined();
+    expect(membership.post).toBeUndefined();
+    expect(membership.put).toBeUndefined();
+    expect(membership.patch).toBeUndefined();
+    expect(membership.delete).toBeUndefined();
+
+    // Confirmation PUT is now session-authenticated (not TownControlKey).
+    const confirmationSecurity = JSON.stringify(confirmationPath.put.security ?? []);
+    expect(confirmationSecurity).toContain('sessionAuth');
+    expect(confirmationSecurity).toContain('mobileSessionAuth');
+    expect(confirmationSecurity).not.toContain('TownControlKey');
+    // Confirmation GET remains TownControlKey controlled.
+    const confirmationGetSecurity = JSON.stringify(confirmationPath.get.security ?? []);
+    expect(confirmationGetSecurity).toContain('TownControlKey');
+
     const serialized = serializeOpenApiDocument(document);
     expect(() => JSON.parse(serialized) as unknown).not.toThrow();
     expect(serialized).not.toMatch(/DATABASE_URL|postgres:\/\/|\/users|\/admin/i);

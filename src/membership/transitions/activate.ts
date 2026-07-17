@@ -29,8 +29,8 @@ const activateLogic: TransitionLogic = {
 
     const status = ctx.entitlement?.status ?? 'inactive';
 
-    if (status === 'active') {
-      const currentUntil = ctx.entitlement!.accessUntil;
+    if (status === 'active' && ctx.entitlement) {
+      const currentUntil = ctx.entitlement.accessUntil;
       if (!currentUntil) {
         return { kind: 'reject', reason: 'active_missing_access_until' };
       }
@@ -38,21 +38,29 @@ const activateLogic: TransitionLogic = {
         return { kind: 'stale', reason: 'would_reduce_access_until' };
       }
       if (
-        new Date(ctx.input.effectiveAt).getTime() < new Date(ctx.entitlement!.updatedAt).getTime()
+        new Date(ctx.input.effectiveAt).getTime() < new Date(ctx.entitlement.updatedAt).getTime()
       ) {
         return { kind: 'stale', reason: 'older_event_overrides_newer_state' };
       }
       return { kind: 'apply' };
     }
 
-    if (status === 'inactive' || status === 'expired' || status === 'cancelling' || !ctx.entitlement) {
+    if (
+      status === 'inactive' ||
+      status === 'expired' ||
+      status === 'cancelling' ||
+      !ctx.entitlement
+    ) {
       return { kind: 'apply' };
     }
 
     return { kind: 'reject', reason: 'invalid_status_for_activate' };
   },
   apply(ctx: TransitionContext) {
-    const accessUntil = ctx.input.accessUntil!;
+    const accessUntil = ctx.input.accessUntil;
+    if (!accessUntil) {
+      throw new Error('activate.apply requires accessUntil; validate must have rejected earlier');
+    }
     const previous = ctx.entitlement;
     const nextVersion = (previous?.version ?? 0) + 1;
 
@@ -64,7 +72,7 @@ const activateLogic: TransitionLogic = {
       sourceCustomerId: ctx.input.sourceCustomerId ?? previous?.sourceCustomerId ?? null,
       sourceSubscriptionId:
         ctx.input.sourceSubscriptionId ?? previous?.sourceSubscriptionId ?? null,
-      activatedAt: previous?.activatedAt ?? ctx.input.effectiveAt,
+      activatedAt: ctx.input.effectiveAt,
       cancellationRequestedAt: null,
       expiredAt: null,
       version: nextVersion,
@@ -80,10 +88,5 @@ export async function activateMembership(
   input: MembershipTransitionInput,
   deps: MembershipTransitionDeps = {},
 ): Promise<MembershipTransitionOutcome> {
-  return executeMembershipTransition(
-    db,
-    { ...input, eventType: 'activate' },
-    activateLogic,
-    deps,
-  );
+  return executeMembershipTransition(db, { ...input, eventType: 'activate' }, activateLogic, deps);
 }

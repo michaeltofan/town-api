@@ -20,7 +20,10 @@ export function accountNotFoundError(): MembershipInvariantError {
 }
 
 export function accountClosedError(): MembershipInvariantError {
-  return new MembershipInvariantError('ACCOUNT_CLOSED', 'Closed account cannot receive membership transitions');
+  return new MembershipInvariantError(
+    'ACCOUNT_CLOSED',
+    'Closed account cannot receive membership transitions',
+  );
 }
 
 export function invalidTransitionError(reason: string): MembershipInvariantError {
