@@ -527,7 +527,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       );
     }
 
-    const allowedOrigins = parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, nodeEnv);
+    const allowedOrigins = parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, {
+      nodeEnv,
+      appEnv,
+    });
     if (nodeEnv === 'production') {
       assertProductionWebAuthnPolicy(source.WEBAUTHN_RP_ID, allowedOrigins);
       if (source.WEBAUTHN_RP_ID === 'localhost') {
@@ -599,7 +602,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       );
     }
 
-    const allowedOrigins = parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, nodeEnv);
+    const allowedOrigins = parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, {
+      nodeEnv,
+      appEnv,
+    });
     if (nodeEnv === 'production') {
       assertProductionWebAuthnPolicy(source.WEBAUTHN_RP_ID, allowedOrigins);
       if (source.WEBAUTHN_RP_ID === 'localhost') {
@@ -697,7 +703,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       );
     }
 
-    const allowedOrigins = parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, nodeEnv);
+    const allowedOrigins = parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, {
+      nodeEnv,
+      appEnv,
+    });
     if (nodeEnv === 'production') {
       assertProductionWebAuthnPolicy(source.WEBAUTHN_RP_ID, allowedOrigins);
       if (source.WEBAUTHN_RP_ID === 'localhost') {
@@ -888,8 +897,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 
   // Canonical browser origin allowlist (WebAuthn + runtime CORS). Retain and
   // validate whenever set, even if ceremony features are disabled.
+  // Deployment host policy is classified by APP_ENV (not NODE_ENV).
   if (isNonEmptyString(source.WEBAUTHN_ALLOWED_ORIGINS)) {
-    parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, nodeEnv);
+    parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, { nodeEnv, appEnv });
     candidate.WEBAUTHN_ALLOWED_ORIGINS = source.WEBAUTHN_ALLOWED_ORIGINS;
   }
 

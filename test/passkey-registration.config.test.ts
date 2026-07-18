@@ -55,7 +55,9 @@ describe('WebAuthn registration environment config', () => {
   });
 
   it('rejects wildcard origins', () => {
-    expect(() => parseAllowedOrigins('https://*.towncivic.org', 'test')).toThrow(/wildcards/);
+    expect(() =>
+      parseAllowedOrigins('https://*.towncivic.org', { nodeEnv: 'test', appEnv: 'test' }),
+    ).toThrow(/wildcards/);
     expect(() =>
       loadEnv(webauthnEnv({ WEBAUTHN_ALLOWED_ORIGINS: 'https://*.towncivic.org' })),
     ).toThrow(/wildcards/);
