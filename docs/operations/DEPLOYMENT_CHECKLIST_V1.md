@@ -29,10 +29,12 @@ production deployment.
 - [ ] Container image built from Node.js 24 with production dependencies
       only.
 - [ ] Image published (Amsterdam region).
-- [ ] `npm run db:migrate` run from a controlled release step (advisory
-      lock acquired).
+- [ ] `npm run db:migrate:production` (or `node dist/scripts/db-migrate.js`)
+      run from a controlled one-off release step (advisory lock acquired).
+      Not from persistent API startup.
 - [ ] `npm run db:migrate:verify` returns `status: ok`, `detail: ok`, and
-      applied/expected counts match the journal (ordered hash+timestamp).
+      applied/expected counts match the journal (ordered hash+timestamp)
+      when run from a checkout that has `tsx` / dev tooling.
 - [ ] New container rolled; `/health/live` returns `200`.
 - [ ] `/health/ready` returns `200` with all three components `ok`.
 - [ ] `/health/build` returns the expected `environment` and `commitSha`.

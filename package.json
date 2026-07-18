@@ -23,8 +23,10 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate": "tsx scripts/db-migrate.ts",
+    "db:migrate:production": "node dist/scripts/db-migrate.js",
     "db:migrate:test": "tsx scripts/db-migrate-test.ts",
     "db:migrate:verify": "tsx scripts/db-migrate-verify.ts",
+
     "smoke:deployment": "tsx scripts/smoke-deployment.ts",
     "db:seed:foundation": "tsx scripts/seed-foundation-content.ts",
     "db:seed:controlled-actor": "tsx scripts/seed-controlled-actor.ts",
