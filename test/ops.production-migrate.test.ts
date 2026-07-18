@@ -25,6 +25,7 @@ describe('production compiled migration entrypoint', () => {
     expect(pkg.devDependencies.tsx).toBeDefined();
   });
 
+  // Full `tsc` build routinely exceeds Vitest's default 5000 ms in CI.
   it('compiles the migration entrypoint into dist/scripts/db-migrate.js', () => {
     execFileSync('npm', ['run', 'build'], {
       cwd: root,
@@ -58,7 +59,7 @@ describe('production compiled migration entrypoint', () => {
     }
     expect(failed).toBe(true);
     expect(stderr).toMatch(/DATABASE_URL is required for db:migrate/);
-  });
+  }, 60_000);
 
   it('production image contract ships dist, drizzle, and never auto-migrates', () => {
     const dockerfile = readFileSync(path.join(root, 'Dockerfile'), 'utf8');
