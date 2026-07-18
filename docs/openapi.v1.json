@@ -43,7 +43,7 @@
   "paths": {
     "/health/build": {
       "get": {
-        "description": "Returns the immutable runtime build identity: service name, semantic version from package.json, deployed commit SHA when present, resolved APP_ENV, Node.js runtime version, optional build timestamp, and the expected drizzle migration count derived from the shipped journal. Never returns secrets, connection strings, hostnames, or request-scoped data.",
+        "description": "Returns the immutable runtime build identity: service name, semantic version from package.json, the resolved effective deployment commit SHA when present (RAILWAY_GIT_COMMIT_SHA when set, otherwise APP_COMMIT_SHA), resolved APP_ENV, Node.js runtime version, optional build timestamp, and the expected drizzle migration count derived from the shipped journal. Never returns secrets, connection strings, hostnames, raw environment variables, or request-scoped data.",
         "responses": {
           "200": {
             "content": {

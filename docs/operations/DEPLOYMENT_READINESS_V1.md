@@ -54,7 +54,7 @@ validator prefer `APP_ENV` when both are set.
   "data": {
     "service": "town-api",
     "version": "<from package.json>",
-    "commitSha": "<APP_COMMIT_SHA or null>",
+    "commitSha": "<resolved effective commit SHA or null>",
     "environment": "development|test|staging|production",
     "nodeVersion": "<process.version>",
     "buildTimestamp": "<APP_BUILD_TIMESTAMP or null>",
@@ -65,7 +65,20 @@ validator prefer `APP_ENV` when both are set.
 
 Contract:
 
-- Never returns secrets, connection strings, hostnames, or per-request data.
+- Never returns secrets, connection strings, hostnames, raw environment
+  variables, or per-request data.
+- `commitSha` is the single resolved effective immutable deployment identity:
+  - `RAILWAY_GIT_COMMIT_SHA` when present and valid (authoritative for Railway
+    Git deployments; consumed from the runtime environment, not baked into the
+    Docker image);
+  - otherwise `APP_COMMIT_SHA` when present and valid (explicit fallback for
+    CI, tests, local controlled environments, or non-Git deploy mechanisms);
+  - otherwise `null` (intentional in development and test when neither is set).
+- Both values, when present, must be full 40-character lowercase hexadecimal
+  Git SHAs and must match exactly; mismatch fails closed at configuration load.
+- This document does not claim that `RAILWAY_GIT_COMMIT_SHA` has already been
+  activated or verified in live staging; removal of a manually maintained
+  Railway `APP_COMMIT_SHA` is a separately approved operational action.
 - `expectedMigrationCount` is derived from the shipped
   `drizzle/meta/_journal.json` at module load; it is a stable, non-secret
   build-time constant.
@@ -114,7 +127,9 @@ credentials, or Stripe state. The route never calls Stripe.
 `src/config/env.ts` rejects boot when the following invariants are violated:
 
 - `APP_ENV=production` or `NODE_ENV=production`:
-  - `APP_COMMIT_SHA` must be present, non-empty, no whitespace, ≤128 chars.
+  - At least one of `RAILWAY_GIT_COMMIT_SHA` or `APP_COMMIT_SHA` must be
+    present as a full 40-character lowercase hexadecimal Git SHA. If both are
+    set, they must match exactly.
   - `DATABASE_URL` must not contain `localhost`, `127.0.0.1`, or `town:town@`.
   - `WEBAUTHN_ALLOWED_ORIGINS` must not include `localhost` / `127.0.0.1`.
   - `WEBAUTHN_RP_ID` must not be `localhost`.
@@ -123,7 +138,8 @@ credentials, or Stripe state. The route never calls Stripe.
   - No environment value may equal a known CI hash-key placeholder (see
     `KNOWN_CI_HASH_KEY_PLACEHOLDERS` in `src/config/env.ts`).
 - `APP_ENV=staging`:
-  - `APP_COMMIT_SHA` must be present.
+  - At least one of `RAILWAY_GIT_COMMIT_SHA` or `APP_COMMIT_SHA` must be
+    present (same SHA format and match rules as production).
   - If `STRIPE_BILLING_ENABLED=true`, `STRIPE_EXPECTED_LIVEMODE` must be
     `false` and `STRIPE_SECRET_KEY` must not begin with `sk_live_`.
 
@@ -252,7 +268,10 @@ machine-readable JSON summary.
 Order for staging or production deployment:
 
 1. Merge to `main`.
-2. Build container image with `APP_COMMIT_SHA` set to the merge commit SHA.
+2. Build the container image (do not bake a commit SHA into the image). For
+   Railway Git deployments, `RAILWAY_GIT_COMMIT_SHA` is injected at runtime.
+   For CI or non-Git deploy mechanisms, set `APP_COMMIT_SHA` to the merge
+   commit SHA explicitly. If both are present they must match.
 3. Publish to the platform (Amsterdam region).
 4. Run `npm run db:migrate:production` (or `node dist/scripts/db-migrate.js`)
    against the target database from a controlled one-off release step. Fail

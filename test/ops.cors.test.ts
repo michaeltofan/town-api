@@ -41,7 +41,7 @@ describe('resolveCorsAllowedOrigins', () => {
         createTestEnv({
           NODE_ENV: 'development',
           APP_ENV: 'staging',
-          APP_COMMIT_SHA: 'abc123',
+          APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
           WEBAUTHN_ALLOWED_ORIGINS: PRODUCTION_ALLOWED_ORIGIN,
         }),
       ),

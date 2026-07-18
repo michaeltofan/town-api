@@ -43,7 +43,13 @@ const EnvSchema = Type.Object(
       ],
       { default: 'development' },
     ),
-    APP_COMMIT_SHA: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+    /** Explicit fallback commit identity (CI / non-Git deployments). Full 40-char lowercase hex. */
+    APP_COMMIT_SHA: Type.Optional(Type.String({ pattern: '^[0-9a-f]{40}$' })),
+    /**
+     * Railway-provided Git deployment commit SHA (runtime). Authoritative when set.
+     * Full 40-char lowercase hex. Not baked into the Docker image.
+     */
+    RAILWAY_GIT_COMMIT_SHA: Type.Optional(Type.String({ pattern: '^[0-9a-f]{40}$' })),
     APP_BUILD_TIMESTAMP: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
     READINESS_TIMEOUT_MS: Type.Integer({ minimum: 100, maximum: 60_000, default: 3_000 }),
     GRACEFUL_SHUTDOWN_TIMEOUT_MS: Type.Integer({
@@ -136,6 +142,41 @@ function parseInteger(value: string | undefined): number | undefined {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+/** Full Git commit SHA: exactly 40 lowercase hexadecimal characters. No silent normalization. */
+export const FULL_GIT_COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
+
+/**
+ * Parse an optional commit-SHA env value.
+ * Absent / empty → undefined. Present but not a full lowercase 40-char hex SHA → structured error.
+ * Does not trim, lowercase, or otherwise normalize invalid or abbreviated values.
+ */
+export function parseOptionalGitCommitSha(
+  raw: string | undefined,
+  fieldName: 'RAILWAY_GIT_COMMIT_SHA' | 'APP_COMMIT_SHA',
+): string | undefined {
+  if (raw === undefined || raw === '') {
+    return undefined;
+  }
+  if (!FULL_GIT_COMMIT_SHA_PATTERN.test(raw)) {
+    throw new Error(
+      `Invalid environment configuration: ${fieldName} must be a full 40-character lowercase hexadecimal Git commit SHA`,
+    );
+  }
+  return raw;
+}
+
+/**
+ * Resolve the effective immutable deployment commit SHA.
+ * Railway SHA is authoritative when present; otherwise APP_COMMIT_SHA.
+ * Call only after both values have been validated and mismatch-checked.
+ */
+export function resolveEffectiveCommitSha(env: {
+  RAILWAY_GIT_COMMIT_SHA?: string;
+  APP_COMMIT_SHA?: string;
+}): string | undefined {
+  return env.RAILWAY_GIT_COMMIT_SHA ?? env.APP_COMMIT_SHA;
 }
 
 function parseBooleanFlag(value: string | undefined, fieldName: string): boolean {
@@ -328,16 +369,18 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const appEnv = resolveAppEnv(source.APP_ENV, nodeEnv);
   const runtimeIsProduction = appEnv === 'production' || nodeEnv === 'production';
   const runtimeIsStaging = appEnv === 'staging';
-  const commitShaRaw = source.APP_COMMIT_SHA;
-  const commitSha = isNonEmptyString(commitShaRaw) ? commitShaRaw.trim() : undefined;
-  if (commitSha !== undefined && /\s/.test(commitSha)) {
+  const railwayCommitSha = parseOptionalGitCommitSha(
+    source.RAILWAY_GIT_COMMIT_SHA,
+    'RAILWAY_GIT_COMMIT_SHA',
+  );
+  const appCommitSha = parseOptionalGitCommitSha(source.APP_COMMIT_SHA, 'APP_COMMIT_SHA');
+  if (
+    railwayCommitSha !== undefined &&
+    appCommitSha !== undefined &&
+    railwayCommitSha !== appCommitSha
+  ) {
     throw new Error(
-      'Invalid environment configuration: APP_COMMIT_SHA must not contain whitespace',
-    );
-  }
-  if (commitSha !== undefined && commitSha.length > 128) {
-    throw new Error(
-      'Invalid environment configuration: APP_COMMIT_SHA must be 128 characters or fewer',
+      'Invalid environment configuration: RAILWAY_GIT_COMMIT_SHA and APP_COMMIT_SHA must match exactly when both are set',
     );
   }
   const buildTimestampRaw = source.APP_BUILD_TIMESTAMP;
@@ -346,7 +389,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const candidate: Record<string, unknown> = {
     NODE_ENV: nodeEnv,
     APP_ENV: appEnv,
-    ...(commitSha !== undefined ? { APP_COMMIT_SHA: commitSha } : {}),
+    ...(appCommitSha !== undefined ? { APP_COMMIT_SHA: appCommitSha } : {}),
+    ...(railwayCommitSha !== undefined ? { RAILWAY_GIT_COMMIT_SHA: railwayCommitSha } : {}),
     ...(buildTimestamp !== undefined ? { APP_BUILD_TIMESTAMP: buildTimestamp } : {}),
     READINESS_TIMEOUT_MS:
       source.READINESS_TIMEOUT_MS === undefined ? 3_000 : parseInteger(source.READINESS_TIMEOUT_MS),
@@ -770,9 +814,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
 
   if (runtimeIsProduction) {
-    if (commitSha === undefined) {
+    if (railwayCommitSha === undefined && appCommitSha === undefined) {
       throw new Error(
-        'Invalid environment configuration: APP_COMMIT_SHA is required when APP_ENV or NODE_ENV is production',
+        'Invalid environment configuration: missing deployment commit identity (RAILWAY_GIT_COMMIT_SHA or APP_COMMIT_SHA required when APP_ENV or NODE_ENV is production)',
       );
     }
     assertNoLocalDatabaseUrl(candidate.DATABASE_URL);
@@ -822,9 +866,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
 
   if (runtimeIsStaging) {
-    if (commitSha === undefined) {
+    if (railwayCommitSha === undefined && appCommitSha === undefined) {
       throw new Error(
-        'Invalid environment configuration: APP_COMMIT_SHA is required when APP_ENV is staging',
+        'Invalid environment configuration: missing deployment commit identity (RAILWAY_GIT_COMMIT_SHA or APP_COMMIT_SHA required when APP_ENV is staging)',
       );
     }
     if (stripeBillingEnabled) {
