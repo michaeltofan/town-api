@@ -35,6 +35,16 @@ describe('buildIdentityFromEnv', () => {
     expect(identity.buildTimestamp).toBe('2026-07-17T00:00:00Z');
   });
 
+  it('prefers RAILWAY_GIT_COMMIT_SHA over APP_COMMIT_SHA when both match', () => {
+    const sha = '0123456789abcdef0123456789abcdef01234567';
+    const env = createTestEnv({
+      RAILWAY_GIT_COMMIT_SHA: sha,
+      APP_COMMIT_SHA: sha,
+    });
+    const identity = buildIdentityFromEnv(env);
+    expect(identity.commitSha).toBe(sha);
+  });
+
   it('expected migration count matches drizzle journal exactly', () => {
     const env = createTestEnv();
     const identity = buildIdentityFromEnv(env);

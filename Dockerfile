@@ -17,6 +17,9 @@
 # NOTE: This Dockerfile alone does not configure any specific platform. It is
 # runtime-agnostic; the deployment platform is responsible for injecting the
 # required environment variables listed in `.env.example`.
+# Commit identity is NOT baked into the image. Railway Git deployments supply
+# RAILWAY_GIT_COMMIT_SHA at runtime; CI / non-Git mechanisms may set
+# APP_COMMIT_SHA explicitly.
 
 # ---------- Stage 1: dependencies ----------
 FROM node:24-bookworm-slim AS deps

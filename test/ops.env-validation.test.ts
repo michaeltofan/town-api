@@ -31,23 +31,23 @@ describe('deployment env fail-closed guards', () => {
       expect(env.APP_COMMIT_SHA).toBe(COMMIT_SHA);
     });
 
-    it('rejects missing APP_COMMIT_SHA', () => {
+    it('rejects missing deployment commit identity', () => {
       expect(() =>
         loadEnv({
           APP_ENV: 'production',
           DATABASE_URL: PROD_DATABASE_URL,
         }),
-      ).toThrow(/APP_COMMIT_SHA is required/);
+      ).toThrow(/missing deployment commit identity/);
     });
 
-    it('rejects APP_COMMIT_SHA with whitespace', () => {
+    it('rejects invalid APP_COMMIT_SHA', () => {
       expect(() =>
         loadEnv({
           APP_ENV: 'production',
           APP_COMMIT_SHA: 'has space',
           DATABASE_URL: PROD_DATABASE_URL,
         }),
-      ).toThrow(/APP_COMMIT_SHA/);
+      ).toThrow(/APP_COMMIT_SHA must be a full 40-character lowercase hexadecimal/);
     });
 
     it('rejects localhost DATABASE_URL', () => {
@@ -98,13 +98,23 @@ describe('deployment env fail-closed guards', () => {
       expect(env.APP_ENV).toBe('staging');
     });
 
-    it('rejects missing APP_COMMIT_SHA in staging', () => {
+    it('rejects missing deployment commit identity in staging', () => {
       expect(() =>
         loadEnv({
           APP_ENV: 'staging',
           DATABASE_URL: STG_DATABASE_URL,
         }),
-      ).toThrow(/APP_COMMIT_SHA is required/);
+      ).toThrow(/missing deployment commit identity/);
+    });
+
+    it('accepts staging with RAILWAY_GIT_COMMIT_SHA only', () => {
+      const env = loadEnv({
+        APP_ENV: 'staging',
+        RAILWAY_GIT_COMMIT_SHA: COMMIT_SHA,
+        DATABASE_URL: STG_DATABASE_URL,
+      });
+      expect(env.RAILWAY_GIT_COMMIT_SHA).toBe(COMMIT_SHA);
+      expect(env.APP_COMMIT_SHA).toBeUndefined();
     });
 
     it('rejects STRIPE_EXPECTED_LIVEMODE=true in staging', () => {

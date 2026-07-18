@@ -16,7 +16,11 @@ production deployment.
 ## Environment (per target)
 
 - [ ] `APP_ENV` set to `staging` or `production`.
-- [ ] `APP_COMMIT_SHA` set to the exact merge commit SHA.
+- [ ] Immutable deployment identity present: Railway Git deployments rely on
+      runtime `RAILWAY_GIT_COMMIT_SHA`; CI / non-Git mechanisms set
+      `APP_COMMIT_SHA` to the exact merge commit SHA. If both are set, they
+      must match. Removing a manually maintained Railway `APP_COMMIT_SHA` is a
+      separately approved operational action.
 - [ ] `APP_BUILD_TIMESTAMP` set (optional but recommended).
 - [ ] `DATABASE_URL` points at the target database (no local placeholders).
 - [ ] `READINESS_TIMEOUT_MS` and `GRACEFUL_SHUTDOWN_TIMEOUT_MS` reviewed.

@@ -173,5 +173,35 @@ describe('/health/build', () => {
     expect(serialized).not.toMatch(
       /postgres:|DATABASE_URL|password|127\.0\.0\.1|db\.internal|stg-secret|sk_|whsec_/i,
     );
+    expect(serialized).not.toMatch(/RAILWAY_GIT_COMMIT_SHA|APP_COMMIT_SHA/i);
+  });
+});
+
+describe('/health/build with RAILWAY_GIT_COMMIT_SHA', () => {
+  let app: AppInstance;
+
+  beforeAll(async () => {
+    app = await createTestApp({
+      envOverrides: {
+        APP_ENV: 'staging',
+        RAILWAY_GIT_COMMIT_SHA: 'abcdef0123456789abcdef0123456789abcdef01',
+        DATABASE_URL: 'postgres://town-stg:stg-secret@db.internal:5432/town',
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('reports the resolved Railway SHA as data.commitSha without raw env keys', async () => {
+    const response = await app.inject({ method: 'GET', url: '/health/build' });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      data: { commitSha: string | null; environment: string };
+    };
+    expect(body.data.commitSha).toBe('abcdef0123456789abcdef0123456789abcdef01');
+    expect(body.data.environment).toBe('staging');
+    expect(response.body).not.toMatch(/RAILWAY_GIT_COMMIT_SHA|APP_COMMIT_SHA|DATABASE_URL/i);
   });
 });

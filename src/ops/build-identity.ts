@@ -1,13 +1,17 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Env } from '../config/env.js';
+import { resolveEffectiveCommitSha, type Env } from '../config/env.js';
 import { EXPECTED_MIGRATION_COUNT } from '../db/migration-ledger.js';
 
 /**
  * Immutable runtime build identity for /health/build and structured logger bindings.
  * Assembled from validated env + package.json read once at module load. Never
  * returns secrets, connection strings, or dynamic per-request data.
+ *
+ * `commitSha` is the single resolved effective deployment identity:
+ * RAILWAY_GIT_COMMIT_SHA when present, otherwise APP_COMMIT_SHA, otherwise null
+ * (intentional in development/test when neither is set).
  */
 export type BuildIdentity = {
   readonly service: 'town-api';
@@ -46,7 +50,7 @@ export function buildIdentityFromEnv(env: Env): BuildIdentity {
   return {
     service: 'town-api',
     version: SERVICE_VERSION,
-    commitSha: env.APP_COMMIT_SHA ?? null,
+    commitSha: resolveEffectiveCommitSha(env) ?? null,
     environment: env.APP_ENV,
     nodeVersion: process.version,
     buildTimestamp: env.APP_BUILD_TIMESTAMP ?? null,
