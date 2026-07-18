@@ -29,6 +29,8 @@
     "smoke:deployment": "tsx scripts/smoke-deployment.ts",
     "db:seed:foundation": "tsx scripts/seed-foundation-content.ts",
     "db:seed:controlled-actor": "tsx scripts/seed-controlled-actor.ts",
+    "db:seed:staging": "tsx scripts/db-seed-staging.ts",
+    "db:seed:staging:production": "node dist/scripts/db-seed-staging.js",
     "identity:fixtures:load": "tsx scripts/load-identity-fixtures.ts",
     "identity:contract:generate": "tsx scripts/identity-contract.ts generate",
     "identity:contract:check": "tsx scripts/identity-contract.ts check",

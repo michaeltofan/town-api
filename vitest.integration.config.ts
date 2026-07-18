@@ -49,6 +49,7 @@ export default defineConfig({
       'test/billing.webhook.events.integration.test.ts',
       'test/billing.webhook.signature.test.ts',
       'test/ops.migration-ledger.integration.test.ts',
+      'test/ops.staging-seed.integration.test.ts',
     ],
     fileParallelism: false,
     poolOptions: {
