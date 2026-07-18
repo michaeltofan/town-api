@@ -9,6 +9,9 @@
 #     `npm run db:migrate:production` (node dist/scripts/db-migrate.js) from a
 #     controlled release step (advisory-locked in src/db/run-migrations.ts).
 #     The persistent API CMD never runs migrations.
+#   * Staging seed one-offs (never from API CMD) use
+#     `npm run db:seed:staging:production` (node dist/scripts/db-seed-staging.js),
+#     which is APP_ENV=staging-only, advisory-locked, and transactional.
 #   * Non-root runtime user.
 #
 # NOTE: This Dockerfile alone does not configure any specific platform. It is
