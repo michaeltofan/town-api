@@ -12,8 +12,10 @@ Slice 1 covers:
 - Enhanced readiness probe (`GET /health/ready`).
 - Environment validation with staging/production fail-closed guards.
 - Graceful shutdown on `SIGTERM` / `SIGINT`.
-- Advisory-locked migration runner (`npm run db:migrate`) and a non-mutating
-  ledger verifier (`npm run db:migrate:verify`).
+- Advisory-locked migration runner (`npm run db:migrate` locally via `tsx`;
+  `npm run db:migrate:production` / `node dist/scripts/db-migrate.js` in the
+  production image) and a non-mutating ledger verifier
+  (`npm run db:migrate:verify`).
 - Structured logging bindings and request-id validation.
 - A container image (`Dockerfile`) and `.dockerignore`.
 - A deployment smoke runner (`npm run smoke:deployment`).
@@ -149,14 +151,24 @@ production while only test/development delivery adapters exist.
 
 ## 8. Migration runner and verifier
 
-`npm run db:migrate` (`scripts/db-migrate.ts`):
+`npm run db:migrate` (`scripts/db-migrate.ts` → `src/db/run-migrations.ts`):
 
+- Local / CI entrypoint via `tsx`. Same safety controls as production.
 - Acquires a PostgreSQL advisory lock keyed by
   `hashtext('town-api-migrate')` before invoking drizzle's migrator, and
   releases it in `finally`.
 - Exits non-zero on failure. The success line contains no secrets.
 - Concurrent invocations serialize on the advisory lock, so only one migrate
   process at a time can advance the ledger.
+
+`npm run db:migrate:production` (`node dist/scripts/db-migrate.js`):
+
+- Production / one-off migration service entrypoint. Requires only Node and
+  production dependencies (no `tsx`, no TypeScript sources).
+- Compiles from `src/scripts/db-migrate.ts` into `dist/scripts/db-migrate.js`
+  and reuses `src/db/run-migrations.ts` (no duplicated migrate logic).
+- Image already ships `dist/`, `drizzle/`, and `package.json`. Migrations are
+  never invoked by the persistent API `CMD`.
 
 `npm run db:migrate:verify` (`scripts/db-migrate-verify.ts`):
 
@@ -207,8 +219,9 @@ startup. Migration is a deploy-time step.
 dependencies only, non-root user (`town`, uid 1001), `EXPOSE 3000`,
 `CMD ["node", "dist/server.js"]`. Migrations are NOT invoked in `CMD`. The
 image is platform-agnostic; the deployment platform must inject the
-environment variables listed in `.env.example` and run the migration step
-before rolling the new container.
+environment variables listed in `.env.example` and run the one-off
+migration command (`npm run db:migrate:production` or
+`node dist/scripts/db-migrate.js`) before rolling the new API container.
 
 ## 11. Smoke runner
 
@@ -241,9 +254,12 @@ Order for staging or production deployment:
 1. Merge to `main`.
 2. Build container image with `APP_COMMIT_SHA` set to the merge commit SHA.
 3. Publish to the platform (Amsterdam region).
-4. Run `npm run db:migrate` against the target database from a controlled
-   release step. Fail deploy if this fails.
-5. Run `npm run db:migrate:verify`. Fail deploy on mismatch.
+4. Run `npm run db:migrate:production` (or `node dist/scripts/db-migrate.js`)
+   against the target database from a controlled one-off release step. Fail
+   deploy if this fails. Do not run migrations from the persistent API
+   service startup.
+5. Run `npm run db:migrate:verify` when a full checkout with `tsx` is
+   available (CI / operator workstation). Fail deploy on mismatch.
 6. Roll the new container. `/health/live` must return `200` before the
    platform routes traffic; `/health/ready` must return `200` before the
    platform marks the release healthy.

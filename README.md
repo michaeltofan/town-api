@@ -845,7 +845,8 @@ Useful scripts:
 | -------------------------------------- | ------------------------------------------------ |
 | `npm run db:generate`                  | generate reviewable SQL                          |
 | `npm run db:check`                     | validate migration history                       |
-| `npm run db:migrate`                   | apply committed migrations                       |
+| `npm run db:migrate`                   | apply committed migrations (local/`tsx`)         |
+| `npm run db:migrate:production`        | apply migrations via compiled Node entrypoint    |
 | `npm run db:migrate:test`              | clean-DB migration verification                  |
 | `npm run db:migrate:verify`            | non-mutating drizzle ledger verification         |
 | `npm run smoke:deployment`             | deployment smoke checks (see docs/operations)    |

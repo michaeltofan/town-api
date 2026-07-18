@@ -5,8 +5,10 @@
 #   * Only production dependencies (`npm ci --omit=dev`).
 #   * Compiled `dist/` output.
 #   * Migrations shipped for readiness (drizzle/) but NOT executed at container
-#     start. Deployments must invoke `npm run db:migrate` from a controlled
-#     release step (advisory-locked in scripts/db-migrate.ts).
+#     start. One-off migration services must invoke
+#     `npm run db:migrate:production` (node dist/scripts/db-migrate.js) from a
+#     controlled release step (advisory-locked in src/db/run-migrations.ts).
+#     The persistent API CMD never runs migrations.
 #   * Non-root runtime user.
 #
 # NOTE: This Dockerfile alone does not configure any specific platform. It is
