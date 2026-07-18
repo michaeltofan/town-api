@@ -197,11 +197,18 @@ describe('/health/build with RAILWAY_GIT_COMMIT_SHA', () => {
   it('reports the resolved Railway SHA as data.commitSha without raw env keys', async () => {
     const response = await app.inject({ method: 'GET', url: '/health/build' });
     expect(response.statusCode).toBe(200);
-    const body = response.json() as {
-      data: { commitSha: string | null; environment: string };
-    };
-    expect(body.data.commitSha).toBe('abcdef0123456789abcdef0123456789abcdef01');
-    expect(body.data.environment).toBe('staging');
+    const body: unknown = response.json();
+    expect(body).toEqual({
+      data: {
+        service: 'town-api',
+        version: expect.any(String) as string,
+        commitSha: 'abcdef0123456789abcdef0123456789abcdef01',
+        environment: 'staging',
+        nodeVersion: process.version,
+        buildTimestamp: null,
+        expectedMigrationCount: EXPECTED_MIGRATION_COUNT,
+      },
+    });
     expect(response.body).not.toMatch(/RAILWAY_GIT_COMMIT_SHA|APP_COMMIT_SHA|DATABASE_URL/i);
   });
 });
