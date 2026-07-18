@@ -37,7 +37,10 @@ export function requirePasskeyManagementConfig(env: Env): PasskeyManagementConfi
   if (!allowedOriginsRaw) {
     throw new Error('Passkey management secrets are not configured');
   }
-  const allowedOrigins = parseAllowedOrigins(allowedOriginsRaw, env.NODE_ENV);
+  const allowedOrigins = parseAllowedOrigins(allowedOriginsRaw, {
+    nodeEnv: env.NODE_ENV,
+    appEnv: env.APP_ENV,
+  });
   if (env.NODE_ENV === 'production') {
     assertProductionWebAuthnPolicy(auth.rpId, allowedOrigins);
   }

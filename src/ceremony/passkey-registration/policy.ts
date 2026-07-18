@@ -27,3 +27,26 @@ export const FORBIDDEN_PRODUCTION_ORIGIN_HOST_PATTERNS = [
   'vercel.app',
   'netlify.app',
 ] as const;
+
+/** Public Railway HTTP service hostname suffix (`*.up.railway.app`). */
+export const RAILWAY_UP_STAGING_HOSTNAME_SUFFIX = '.up.railway.app';
+
+/**
+ * True when `hostname` is a service subdomain under Railway's
+ * `*.up.railway.app` public domain (one or more labels before the suffix).
+ * Rejects `up.railway.app` itself and lookalikes such as `evil-up.railway.app`.
+ */
+export function isRailwayUpStagingHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (!host.endsWith(RAILWAY_UP_STAGING_HOSTNAME_SUFFIX)) {
+    return false;
+  }
+  const prefix = host.slice(0, -RAILWAY_UP_STAGING_HOSTNAME_SUFFIX.length);
+  if (prefix.length === 0) {
+    return false;
+  }
+  if (prefix.startsWith('.') || prefix.endsWith('.') || prefix.includes('..')) {
+    return false;
+  }
+  return true;
+}

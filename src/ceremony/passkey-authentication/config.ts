@@ -50,7 +50,10 @@ export function requirePasskeyAuthenticationConfig(env: Env): PasskeyAuthenticat
     throw new Error('Session token hash key does not meet minimum length');
   }
 
-  const allowedOrigins = parseAllowedOrigins(allowedOriginsRaw, env.NODE_ENV);
+  const allowedOrigins = parseAllowedOrigins(allowedOriginsRaw, {
+    nodeEnv: env.NODE_ENV,
+    appEnv: env.APP_ENV,
+  });
   if (env.NODE_ENV === 'production') {
     assertProductionWebAuthnPolicy(rpId, allowedOrigins);
   }

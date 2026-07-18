@@ -47,6 +47,21 @@ describe('resolveCorsAllowedOrigins', () => {
       ),
     ).toThrow(/production origins are not allowed when APP_ENV is staging/);
   });
+
+  it('accepts a Railway *.up.railway.app origin when APP_ENV is staging and NODE_ENV is production', () => {
+    const railwayOrigin = 'https://town-public-staging-staging.up.railway.app';
+    expect(
+      resolveCorsAllowedOrigins(
+        createTestEnv({
+          NODE_ENV: 'production',
+          APP_ENV: 'staging',
+          APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+          DATABASE_URL: 'postgres://town-stg:stg-secret@db.internal:5432/town',
+          WEBAUTHN_ALLOWED_ORIGINS: railwayOrigin,
+        }),
+      ),
+    ).toEqual([railwayOrigin]);
+  });
 });
 
 describe('runtime CORS policy', () => {

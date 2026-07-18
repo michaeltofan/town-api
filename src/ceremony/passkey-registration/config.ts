@@ -2,6 +2,7 @@ import type { Env } from '../../config/env.js';
 import {
   DEFAULT_WEBAUTHN_RP_NAME,
   FORBIDDEN_PRODUCTION_ORIGIN_HOST_PATTERNS,
+  isRailwayUpStagingHostname,
   PRODUCTION_ALLOWED_ORIGIN,
   PRODUCTION_RP_ID,
   WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH,
@@ -15,6 +16,14 @@ export type WebAuthnRegistrationConfig = {
   challengeHashKey: string;
   rateLimitHashKey: string;
   setupGrantHashKey: string;
+};
+
+/** Deployment environment used for browser-origin allowlist policy. */
+export type OriginAppEnv = 'development' | 'test' | 'staging' | 'production';
+
+export type ParseAllowedOriginsOptions = {
+  readonly nodeEnv: string;
+  readonly appEnv: OriginAppEnv;
 };
 
 function isLocalhostOrigin(origin: string): boolean {
@@ -36,7 +45,22 @@ function assertNoWildcard(origin: string): void {
   }
 }
 
-function assertValidOrigin(origin: string, nodeEnv: string): void {
+function assertForbiddenPreviewHostname(host: string, appEnv: OriginAppEnv): void {
+  for (const pattern of FORBIDDEN_PRODUCTION_ORIGIN_HOST_PATTERNS) {
+    if (host === pattern.replace(/\.$/, '') || host.includes(pattern) || host.startsWith(pattern)) {
+      throw new Error(
+        `Invalid environment configuration: ${appEnv} WEBAUTHN_ALLOWED_ORIGINS rejects temporary, www, API, or preview origins`,
+      );
+    }
+  }
+  if (host.startsWith('www.') || host.startsWith('api.')) {
+    throw new Error(
+      `Invalid environment configuration: ${appEnv} WEBAUTHN_ALLOWED_ORIGINS rejects www and API origins`,
+    );
+  }
+}
+
+function assertValidOrigin(origin: string, options: ParseAllowedOriginsOptions): void {
   assertNoWildcard(origin);
   let url: URL;
   try {
@@ -58,6 +82,50 @@ function assertValidOrigin(origin: string, nodeEnv: string): void {
   }
 
   const isLocal = isLocalhostOrigin(origin);
+  const host = url.hostname.toLowerCase();
+  const { appEnv, nodeEnv } = options;
+
+  if (appEnv === 'production') {
+    if (isLocal) {
+      throw new Error(
+        'Invalid environment configuration: production WebAuthn configuration cannot allow localhost origins',
+      );
+    }
+    if (url.protocol !== 'https:') {
+      throw new Error(
+        'Invalid environment configuration: production WEBAUTHN_ALLOWED_ORIGINS must use https',
+      );
+    }
+    assertForbiddenPreviewHostname(host, 'production');
+    return;
+  }
+
+  if (appEnv === 'staging') {
+    if (isLocal) {
+      throw new Error(
+        'Invalid environment configuration: staging WEBAUTHN_ALLOWED_ORIGINS cannot allow localhost origins',
+      );
+    }
+    if (url.protocol !== 'https:') {
+      throw new Error(
+        'Invalid environment configuration: staging WEBAUTHN_ALLOWED_ORIGINS must use https',
+      );
+    }
+    if (url.port !== '') {
+      throw new Error(
+        'Invalid environment configuration: staging WEBAUTHN_ALLOWED_ORIGINS must not include an explicit port',
+      );
+    }
+    // Deployment policy: APP_ENV=staging may allow exact HTTPS *.up.railway.app
+    // service origins even when NODE_ENV=production.
+    if (isRailwayUpStagingHostname(host)) {
+      return;
+    }
+    assertForbiddenPreviewHostname(host, 'staging');
+    return;
+  }
+
+  // development / test — preserve prior non-deploy behavior (NODE_ENV-gated https).
   if (nodeEnv === 'production') {
     if (isLocal) {
       throw new Error(
@@ -69,43 +137,44 @@ function assertValidOrigin(origin: string, nodeEnv: string): void {
         'Invalid environment configuration: production WEBAUTHN_ALLOWED_ORIGINS must use https',
       );
     }
-    const host = url.hostname.toLowerCase();
-    for (const pattern of FORBIDDEN_PRODUCTION_ORIGIN_HOST_PATTERNS) {
-      if (
-        host === pattern.replace(/\.$/, '') ||
-        host.includes(pattern) ||
-        host.startsWith(pattern)
-      ) {
-        throw new Error(
-          'Invalid environment configuration: production WEBAUTHN_ALLOWED_ORIGINS rejects temporary, www, API, or preview origins',
-        );
-      }
-    }
-    if (host.startsWith('www.') || host.startsWith('api.')) {
-      throw new Error(
-        'Invalid environment configuration: production WEBAUTHN_ALLOWED_ORIGINS rejects www and API origins',
-      );
-    }
-  } else if (!isLocal && url.protocol !== 'https:') {
+    assertForbiddenPreviewHostname(host, 'production');
+    return;
+  }
+
+  if (!isLocal && url.protocol !== 'https:') {
     throw new Error(
       'Invalid environment configuration: WEBAUTHN_ALLOWED_ORIGINS requires https except explicit localhost development origins',
     );
   }
 }
 
-export function parseAllowedOrigins(raw: string, nodeEnv: string): string[] {
-  const parts = raw
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-  if (parts.length === 0) {
+/**
+ * Parse and validate the canonical browser-origin allowlist.
+ * Deployment classification (including Railway staging hosts) uses `appEnv`.
+ * `nodeEnv` is retained for development/test https/localhost behavior.
+ */
+export function parseAllowedOrigins(raw: string, options: ParseAllowedOriginsOptions): string[] {
+  const parts = raw.split(',');
+  const origins: string[] = [];
+  for (const part of parts) {
+    if (part.length === 0) {
+      continue;
+    }
+    if (part !== part.trim()) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_ALLOWED_ORIGINS entries must not include surrounding whitespace',
+      );
+    }
+    origins.push(part);
+  }
+  if (origins.length === 0) {
     throw new Error(
       'Invalid environment configuration: WEBAUTHN_ALLOWED_ORIGINS is required when enabled',
     );
   }
   const unique = new Set<string>();
-  for (const origin of parts) {
-    assertValidOrigin(origin, nodeEnv);
+  for (const origin of origins) {
+    assertValidOrigin(origin, options);
     if (unique.has(origin)) {
       throw new Error(
         'Invalid environment configuration: WEBAUTHN_ALLOWED_ORIGINS contains duplicates',
@@ -151,7 +220,10 @@ export function requireWebAuthnRegistrationConfig(env: Env): WebAuthnRegistratio
     throw new Error('WebAuthn challenge hash key does not meet minimum length');
   }
 
-  const allowedOrigins = parseAllowedOrigins(allowedOriginsRaw, env.NODE_ENV);
+  const allowedOrigins = parseAllowedOrigins(allowedOriginsRaw, {
+    nodeEnv: env.NODE_ENV,
+    appEnv: env.APP_ENV,
+  });
   if (env.NODE_ENV === 'production') {
     assertProductionWebAuthnPolicy(rpId, allowedOrigins);
   }

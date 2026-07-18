@@ -12,8 +12,8 @@ export const STAGING_ALLOWED_ORIGIN = 'https://staging.towncivic.org';
  * - No wildcards (enforced by `parseAllowedOrigins`).
  * - Empty when unset: browser Origins are rejected; no-Origin clients still work.
  * - Rejects staging/production origin mixtures when detectable.
- * - Production localhost rejection is enforced by `parseAllowedOrigins` when
- *   `NODE_ENV=production`, and by env boot guards for `APP_ENV=production`.
+ * - Deployment host policy (including Railway `*.up.railway.app` on staging)
+ *   is classified by `APP_ENV`, not `NODE_ENV`.
  */
 export function resolveCorsAllowedOrigins(env: Env): readonly string[] {
   const raw = env.WEBAUTHN_ALLOWED_ORIGINS;
@@ -21,7 +21,10 @@ export function resolveCorsAllowedOrigins(env: Env): readonly string[] {
     return [];
   }
 
-  const origins = parseAllowedOrigins(raw, env.NODE_ENV);
+  const origins = parseAllowedOrigins(raw, {
+    nodeEnv: env.NODE_ENV,
+    appEnv: env.APP_ENV,
+  });
   const hasProduction = origins.includes(PRODUCTION_ALLOWED_ORIGIN);
   const hasStaging = origins.includes(STAGING_ALLOWED_ORIGIN);
 

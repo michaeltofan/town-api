@@ -60,7 +60,10 @@ export function requireAccountRecoveryConfig(env: Env): AccountRecoveryConfig {
     throw new Error('WebAuthn challenge hash key does not meet minimum length');
   }
 
-  const allowedOrigins = parseAllowedOrigins(allowedOriginsRaw, env.NODE_ENV);
+  const allowedOrigins = parseAllowedOrigins(allowedOriginsRaw, {
+    nodeEnv: env.NODE_ENV,
+    appEnv: env.APP_ENV,
+  });
   if (env.NODE_ENV === 'production') {
     assertProductionWebAuthnPolicy(rpId, allowedOrigins);
   }
