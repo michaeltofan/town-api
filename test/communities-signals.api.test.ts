@@ -208,18 +208,12 @@ describe('communities and signals API', () => {
     });
     expect(invalidUuid.statusCode).toBe(400);
     const invalidBody = invalidUuid.json<{
-      statusCode: number;
-      error: string;
-      message: string;
-      requestId: string;
+      error: { code: string; message: string; requestId: string };
     }>();
-    expect(invalidBody.statusCode).toBe(400);
-    expect(typeof invalidBody.requestId).toBe('string');
-    expect(Object.keys(invalidBody).sort()).toEqual([
-      'error',
-      'message',
-      'requestId',
-      'statusCode',
-    ]);
+    expect(invalidBody.error.code).toBe('VALIDATION_ERROR');
+    expect(typeof invalidBody.error.message).toBe('string');
+    expect(typeof invalidBody.error.requestId).toBe('string');
+    expect(Object.keys(invalidBody).sort()).toEqual(['error']);
+    expect(Object.keys(invalidBody.error).sort()).toEqual(['code', 'message', 'requestId']);
   });
 });
