@@ -13,7 +13,7 @@ type FakeState = {
   ready: 'ready' | 'not_ready';
   buildCommit: string;
   buildEnvironment: string;
-  webhookMounted: boolean;
+  webhookStatus?: number;
   membershipStatus: number;
   allowedOrigin?: string;
 };
@@ -71,9 +71,10 @@ async function buildFakeApp(state: FakeState): Promise<{
   app.get('/v1/account/membership', (_req, reply) =>
     reply.status(state.membershipStatus).send({ error: 'unauthenticated' }),
   );
-  if (state.webhookMounted) {
-    app.post('/v1/billing/webhooks/stripe', (_req, reply) =>
-      reply.status(400).send({ error: 'invalid signature' }),
+  if (state.webhookStatus !== undefined) {
+    const webhookStatus = state.webhookStatus;
+    app.post('/v1/billing/stripe/webhook', (_req, reply) =>
+      reply.status(webhookStatus).send({ error: 'webhook' }),
     );
   }
 
@@ -93,7 +94,7 @@ describe('runSmoke', () => {
       ready: 'ready',
       buildCommit: 'abc',
       buildEnvironment: 'staging',
-      webhookMounted: true,
+      webhookStatus: 400,
       membershipStatus: 401,
       allowedOrigin: authorizedOrigin,
     });
@@ -117,6 +118,9 @@ describe('runSmoke', () => {
       expect(result.checks.find((c) => c.name === 'cors-unauthorized-origin')?.status).toBe(
         'passed',
       );
+      expect(result.checks.find((c) => c.name === 'stripe-webhook-invalid-signature')?.detail).toBe(
+        'invalid-signature-rejected',
+      );
     } finally {
       await app.close();
     }
@@ -127,7 +131,7 @@ describe('runSmoke', () => {
       ready: 'ready',
       buildCommit: 'abc',
       buildEnvironment: 'production',
-      webhookMounted: true,
+      webhookStatus: 400,
       membershipStatus: 401,
     });
     try {
@@ -149,7 +153,7 @@ describe('runSmoke', () => {
       ready: 'ready',
       buildCommit: 'abc',
       buildEnvironment: 'staging',
-      webhookMounted: true,
+      webhookStatus: 400,
       membershipStatus: 401,
     });
     try {
@@ -170,11 +174,99 @@ describe('runSmoke', () => {
       ready: 'not_ready',
       buildCommit: 'abc',
       buildEnvironment: 'staging',
-      webhookMounted: true,
+      webhookStatus: 400,
       membershipStatus: 401,
     });
     try {
       const result = await runSmoke({ baseUrl, environment: 'staging', fetchImpl });
+      expect(result.ok).toBe(false);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('passes unauthorized-route with 401 when authEnabled defaults to true', async () => {
+    const { app, fetchImpl, baseUrl } = await buildFakeApp({
+      ready: 'ready',
+      buildCommit: 'abc',
+      buildEnvironment: 'staging',
+      webhookStatus: 400,
+      membershipStatus: 401,
+    });
+    try {
+      const result = await runSmoke({ baseUrl, environment: 'staging', fetchImpl });
+      const check = result.checks.find((c) => c.name === 'unauthorized-route');
+      expect(check?.status).toBe('passed');
+      expect(check?.detail).toBe('401');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('passes unauthorized-route with 404 when authEnabled is false', async () => {
+    const { app, fetchImpl, baseUrl } = await buildFakeApp({
+      ready: 'ready',
+      buildCommit: 'abc',
+      buildEnvironment: 'staging',
+      webhookStatus: 404,
+      membershipStatus: 404,
+    });
+    try {
+      const result = await runSmoke({
+        baseUrl,
+        environment: 'staging',
+        authEnabled: false,
+        fetchImpl,
+      });
+      const check = result.checks.find((c) => c.name === 'unauthorized-route');
+      expect(check?.status).toBe('passed');
+      expect(check?.detail).toBe('route-not-mounted-flag-disabled');
+      expect(result.ok).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('fails unauthorized-route when authEnabled is true but status is 404', async () => {
+    const { app, fetchImpl, baseUrl } = await buildFakeApp({
+      ready: 'ready',
+      buildCommit: 'abc',
+      buildEnvironment: 'staging',
+      webhookStatus: 400,
+      membershipStatus: 404,
+    });
+    try {
+      const result = await runSmoke({
+        baseUrl,
+        environment: 'staging',
+        authEnabled: true,
+        fetchImpl,
+      });
+      const check = result.checks.find((c) => c.name === 'unauthorized-route');
+      expect(check?.status).toBe('failed');
+      expect(result.ok).toBe(false);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('fails unauthorized-route when authEnabled is false but status is 401', async () => {
+    const { app, fetchImpl, baseUrl } = await buildFakeApp({
+      ready: 'ready',
+      buildCommit: 'abc',
+      buildEnvironment: 'staging',
+      webhookStatus: 404,
+      membershipStatus: 401,
+    });
+    try {
+      const result = await runSmoke({
+        baseUrl,
+        environment: 'staging',
+        authEnabled: false,
+        fetchImpl,
+      });
+      const check = result.checks.find((c) => c.name === 'unauthorized-route');
+      expect(check?.status).toBe('failed');
       expect(result.ok).toBe(false);
     } finally {
       await app.close();
@@ -186,7 +278,7 @@ describe('runSmoke', () => {
       ready: 'ready',
       buildCommit: 'abc',
       buildEnvironment: 'staging',
-      webhookMounted: true,
+      webhookStatus: 400,
       membershipStatus: 200,
     });
     try {
@@ -215,7 +307,7 @@ describe('runSmoke', () => {
       ready: 'ready',
       buildCommit: 'abc',
       buildEnvironment: 'staging',
-      webhookMounted: true,
+      webhookStatus: 400,
       membershipStatus: 401,
     });
     try {
@@ -234,18 +326,72 @@ describe('runSmoke', () => {
     }
   });
 
-  it('marks the webhook check as skipped when not mounted', async () => {
+  it('passes webhook check with flag-disabled detail when route returns 404', async () => {
     const { app, fetchImpl, baseUrl } = await buildFakeApp({
       ready: 'ready',
       buildCommit: 'abc',
       buildEnvironment: 'staging',
-      webhookMounted: false,
       membershipStatus: 401,
     });
     try {
       const result = await runSmoke({ baseUrl, environment: 'staging', fetchImpl });
       const webhook = result.checks.find((c) => c.name === 'stripe-webhook-invalid-signature');
-      expect(webhook?.detail).toContain('webhook-not-mounted');
+      expect(webhook?.status).toBe('passed');
+      expect(webhook?.detail).toBe('webhook-not-mounted-flag-disabled');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('passes webhook check when invalid signature is rejected with 400', async () => {
+    const { app, fetchImpl, baseUrl } = await buildFakeApp({
+      ready: 'ready',
+      buildCommit: 'abc',
+      buildEnvironment: 'staging',
+      webhookStatus: 400,
+      membershipStatus: 401,
+    });
+    try {
+      const result = await runSmoke({ baseUrl, environment: 'staging', fetchImpl });
+      const webhook = result.checks.find((c) => c.name === 'stripe-webhook-invalid-signature');
+      expect(webhook?.status).toBe('passed');
+      expect(webhook?.detail).toBe('invalid-signature-rejected');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('fails webhook check when an invalid signature receives 2xx', async () => {
+    const { app, fetchImpl, baseUrl } = await buildFakeApp({
+      ready: 'ready',
+      buildCommit: 'abc',
+      buildEnvironment: 'staging',
+      webhookStatus: 200,
+      membershipStatus: 401,
+    });
+    try {
+      const result = await runSmoke({ baseUrl, environment: 'staging', fetchImpl });
+      const webhook = result.checks.find((c) => c.name === 'stripe-webhook-invalid-signature');
+      expect(webhook?.status).toBe('failed');
+      expect(result.ok).toBe(false);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('fails webhook check when the route returns 5xx', async () => {
+    const { app, fetchImpl, baseUrl } = await buildFakeApp({
+      ready: 'ready',
+      buildCommit: 'abc',
+      buildEnvironment: 'staging',
+      webhookStatus: 500,
+      membershipStatus: 401,
+    });
+    try {
+      const result = await runSmoke({ baseUrl, environment: 'staging', fetchImpl });
+      const webhook = result.checks.find((c) => c.name === 'stripe-webhook-invalid-signature');
+      expect(webhook?.status).toBe('failed');
+      expect(result.ok).toBe(false);
     } finally {
       await app.close();
     }

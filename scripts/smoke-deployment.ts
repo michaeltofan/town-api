@@ -42,6 +42,15 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   const expectCommit = args.get('expect-commit');
   const authorizedOrigin = args.get('authorized-origin');
   const unauthorizedOrigin = args.get('unauthorized-origin');
+  const authEnabledRaw = args.get('auth-enabled');
+  let authEnabled: boolean | undefined;
+  if (authEnabledRaw !== undefined) {
+    const normalized = authEnabledRaw.trim().toLowerCase();
+    if (normalized !== 'true' && normalized !== 'false') {
+      throw new Error('--auth-enabled must be true or false');
+    }
+    authEnabled = normalized === 'true';
+  }
   const parsed: ParsedArgs = {
     baseUrl,
     environment,
@@ -49,6 +58,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(timeoutMsRaw !== undefined ? { timeoutMs: Number.parseInt(timeoutMsRaw, 10) } : {}),
     ...(authorizedOrigin !== undefined ? { authorizedOrigin } : {}),
     ...(unauthorizedOrigin !== undefined ? { unauthorizedOrigin } : {}),
+    ...(authEnabled !== undefined ? { authEnabled } : {}),
   };
   return parsed;
 }
@@ -59,11 +69,15 @@ function printHelp(): void {
       'Usage: tsx scripts/smoke-deployment.ts \\',
       '  --base-url URL --environment ENV \\',
       '  [--expect-commit SHA] [--timeout-ms N] \\',
-      '  [--authorized-origin URL] [--unauthorized-origin URL]',
+      '  [--authorized-origin URL] [--unauthorized-origin URL] \\',
+      '  [--auth-enabled true|false]',
       '',
       'Runs a bounded set of deployment smoke checks against a running TOWN API.',
       'Emits a machine-readable JSON summary on the final line of stdout and',
       'exits non-zero on any failed check.',
+      '',
+      '--auth-enabled defaults to true (expect 401 on GET /v1/account/membership).',
+      'Pass false when PASSKEY_AUTHENTICATION_ENABLED is off (expect 404).',
       '',
     ].join('\n'),
   );

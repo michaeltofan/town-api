@@ -6,8 +6,9 @@
  * The runner performs a fixed, safe set of checks against a running instance:
  * transport (https unless localhost), /health/live shape, /health/ready
  * component shape, /health/build identity match, an unauthorized route
- * expecting 401, CORS unauthorized/authorized/null/preflight/no-origin,
- * and an invalid Stripe webhook signature. It never prints request/response
+ * expecting 401 (or 404 when authEnabled=false), CORS unauthorized/authorized/
+ * null/preflight/no-origin, and an invalid Stripe webhook signature on
+ * POST /v1/billing/stripe/webhook. It never prints request/response
  * bodies verbatim; leaked secret sentinels short-circuit to failure.
  */
 
@@ -33,6 +34,12 @@ export type SmokeOptions = {
   readonly timeoutMs?: number;
   readonly authorizedOrigin?: string;
   readonly unauthorizedOrigin?: string;
+  /**
+   * When true (default), GET /v1/account/membership must return 401.
+   * When false, the route is expected unmounted (PASSKEY_AUTHENTICATION_ENABLED=false)
+   * and must return 404.
+   */
+  readonly authEnabled?: boolean;
   readonly fetchImpl?: typeof fetch;
 };
 
@@ -210,17 +217,24 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
   });
 
   await runCheck('unauthorized-route', async () => {
+    const authEnabled = options.authEnabled !== false;
     const response = await withTimeout(
       fetchImpl(`${baseUrl}/v1/account/membership`, { method: 'GET' }),
       timeoutMs,
       'unauthorized-route',
     );
-    if (response.status !== 401) {
-      throw new Error(`unexpected status ${String(response.status)}`);
-    }
     const body = await readBounded(response);
     JSON.parse(body);
-    return '401';
+    if (authEnabled) {
+      if (response.status !== 401) {
+        throw new Error(`unexpected status ${String(response.status)}`);
+      }
+      return '401';
+    }
+    if (response.status !== 404) {
+      throw new Error(`unexpected status ${String(response.status)}`);
+    }
+    return 'route-not-mounted-flag-disabled';
   });
 
   await runCheck('cors-no-origin', async () => {
@@ -354,7 +368,7 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
 
   await runCheck('stripe-webhook-invalid-signature', async () => {
     const response = await withTimeout(
-      fetchImpl(`${baseUrl}/v1/billing/webhooks/stripe`, {
+      fetchImpl(`${baseUrl}/v1/billing/stripe/webhook`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -365,14 +379,22 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
       timeoutMs,
       'stripe-webhook-invalid-signature',
     );
-    if (response.status !== 400 && response.status !== 404) {
-      throw new Error(`unexpected status ${String(response.status)}`);
+    // Status-inferred: no --stripe-enabled flag. 404 = billing flag off;
+    // 400 = signature rejected before processing. Never accept 2xx/5xx.
+    if (response.status >= 200 && response.status < 300) {
+      throw new Error(`invalid signature must not be accepted (status ${String(response.status)})`);
+    }
+    if (response.status >= 500) {
+      throw new Error(`unexpected server error status ${String(response.status)}`);
     }
     if (response.status === 404) {
-      return 'webhook-not-mounted';
+      return 'webhook-not-mounted-flag-disabled';
     }
-    await readBounded(response);
-    return '400';
+    if (response.status === 400) {
+      await readBounded(response);
+      return 'invalid-signature-rejected';
+    }
+    throw new Error(`unexpected status ${String(response.status)}`);
   });
 
   const ok = checks.every((check) => check.status !== 'failed');
