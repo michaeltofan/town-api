@@ -143,9 +143,10 @@ credentials, or Stripe state. The route never calls Stripe.
   - If `STRIPE_BILLING_ENABLED=true`, `STRIPE_EXPECTED_LIVEMODE` must be
     `false` and `STRIPE_SECRET_KEY` must not begin with `sk_live_`.
 
-Existing Slice 2 (billing) guards remain in force:
-`EMAIL_VERIFICATION_ENABLED` / `ACCOUNT_RECOVERY_ENABLED` cannot be true in
-production while only test/development delivery adapters exist.
+Email verification may be enabled in production only with
+`EMAIL_VERIFICATION_DELIVERY_MODE=resend` (plus Resend credentials).
+`ACCOUNT_RECOVERY_ENABLED` cannot be true in production while only
+test/development delivery adapters exist.
 
 ## 7. Graceful shutdown
 

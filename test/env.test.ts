@@ -158,7 +158,7 @@ describe('loadEnv', () => {
     ).toThrow(/EMAIL_VERIFICATION_HASH_KEY is required/);
   });
 
-  it('rejects unsupported delivery mode and production enablement', () => {
+  it('rejects unsupported delivery mode and production non-resend enablement', () => {
     expect(() =>
       loadEnv({
         DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
@@ -168,7 +168,7 @@ describe('loadEnv', () => {
         CEREMONY_RATE_LIMIT_HASH_KEY: TEST_RATE_KEY,
         EMAIL_VERIFICATION_DELIVERY_MODE: 'smtp',
       }),
-    ).toThrow(/EMAIL_VERIFICATION_DELIVERY_MODE must be test or development/);
+    ).toThrow(/EMAIL_VERIFICATION_DELIVERY_MODE must be test, development, or resend/);
 
     expect(() =>
       loadEnv({
@@ -179,7 +179,91 @@ describe('loadEnv', () => {
         CEREMONY_RATE_LIMIT_HASH_KEY: TEST_RATE_KEY,
         EMAIL_VERIFICATION_DELIVERY_MODE: 'development',
       }),
-    ).toThrow(/cannot be true in production/);
+    ).toThrow(/requires EMAIL_VERIFICATION_DELIVERY_MODE=resend/);
+  });
+
+  it('requires Resend credentials when delivery mode is resend', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        NODE_ENV: 'test',
+        EMAIL_VERIFICATION_ENABLED: 'true',
+        EMAIL_VERIFICATION_HASH_KEY: TEST_HASH_KEY,
+        CEREMONY_RATE_LIMIT_HASH_KEY: TEST_RATE_KEY,
+        EMAIL_VERIFICATION_DELIVERY_MODE: 'resend',
+      }),
+    ).toThrow(/EMAIL_VERIFICATION_RESEND_API_KEY is required/);
+
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        NODE_ENV: 'test',
+        EMAIL_VERIFICATION_ENABLED: 'true',
+        EMAIL_VERIFICATION_HASH_KEY: TEST_HASH_KEY,
+        CEREMONY_RATE_LIMIT_HASH_KEY: TEST_RATE_KEY,
+        EMAIL_VERIFICATION_DELIVERY_MODE: 'resend',
+        EMAIL_VERIFICATION_RESEND_API_KEY: 're_short',
+        EMAIL_VERIFICATION_FROM_ADDRESS: 'verify@towncivic.org',
+      }),
+    ).toThrow(/EMAIL_VERIFICATION_RESEND_API_KEY is required/);
+
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        NODE_ENV: 'test',
+        EMAIL_VERIFICATION_ENABLED: 'true',
+        EMAIL_VERIFICATION_HASH_KEY: TEST_HASH_KEY,
+        CEREMONY_RATE_LIMIT_HASH_KEY: TEST_RATE_KEY,
+        EMAIL_VERIFICATION_DELIVERY_MODE: 'resend',
+        EMAIL_VERIFICATION_RESEND_API_KEY: 're_test_resend_api_key_ok',
+        EMAIL_VERIFICATION_FROM_ADDRESS: 'not-an-email',
+      }),
+    ).toThrow(/EMAIL_VERIFICATION_FROM_ADDRESS must be a valid email/);
+
+    const env = loadEnv({
+      DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+      NODE_ENV: 'test',
+      EMAIL_VERIFICATION_ENABLED: 'true',
+      EMAIL_VERIFICATION_HASH_KEY: TEST_HASH_KEY,
+      CEREMONY_RATE_LIMIT_HASH_KEY: TEST_RATE_KEY,
+      EMAIL_VERIFICATION_DELIVERY_MODE: 'resend',
+      EMAIL_VERIFICATION_RESEND_API_KEY: 're_test_resend_api_key_ok',
+      EMAIL_VERIFICATION_FROM_ADDRESS: 'verify@towncivic.org',
+      EMAIL_VERIFICATION_REPLY_TO: 'support@towncivic.org',
+    });
+    expect(env.EMAIL_VERIFICATION_DELIVERY_MODE).toBe('resend');
+    expect(env.EMAIL_VERIFICATION_FROM_ADDRESS).toBe('verify@towncivic.org');
+    expect(env.EMAIL_VERIFICATION_REPLY_TO).toBe('support@towncivic.org');
+  });
+
+  it('allows production enablement only with resend mode and credentials', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town-prod:prod-secret@db.internal:5432/town',
+        NODE_ENV: 'production',
+        APP_ENV: 'production',
+        APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+        EMAIL_VERIFICATION_ENABLED: 'true',
+        EMAIL_VERIFICATION_HASH_KEY: 'production-email-verification-hash-key-ok',
+        CEREMONY_RATE_LIMIT_HASH_KEY: 'production-ceremony-rate-limit-hash-key-ok',
+        EMAIL_VERIFICATION_DELIVERY_MODE: 'test',
+      }),
+    ).toThrow(/requires EMAIL_VERIFICATION_DELIVERY_MODE=resend/);
+
+    const env = loadEnv({
+      DATABASE_URL: 'postgres://town-prod:prod-secret@db.internal:5432/town',
+      NODE_ENV: 'production',
+      APP_ENV: 'production',
+      APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+      EMAIL_VERIFICATION_ENABLED: 'true',
+      EMAIL_VERIFICATION_HASH_KEY: 'production-email-verification-hash-key-ok',
+      CEREMONY_RATE_LIMIT_HASH_KEY: 'production-ceremony-rate-limit-hash-key-ok',
+      EMAIL_VERIFICATION_DELIVERY_MODE: 'resend',
+      EMAIL_VERIFICATION_RESEND_API_KEY: 're_prod_resend_api_key_okxx',
+      EMAIL_VERIFICATION_FROM_ADDRESS: 'verify@towncivic.org',
+    });
+    expect(env.EMAIL_VERIFICATION_DELIVERY_MODE).toBe('resend');
+    expect(env.EMAIL_VERIFICATION_RESEND_API_KEY).toBe('re_prod_resend_api_key_okxx');
   });
 
   it('rejects missing DATABASE_URL without leaking values', () => {

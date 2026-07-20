@@ -159,7 +159,7 @@
     ],
     "status": "implemented"
   },
-  "description": "Architecture contract for ceremony data/session foundation, email verification runtime, first-passkey WebAuthn registration runtime, passkey authentication session runtime, bounded account recovery runtime, and session-authenticated passkey management / security reauthentication runtime. Production email delivery, recovery login sessions, membership, and JWTs remain out of scope.",
+  "description": "Architecture contract for ceremony data/session foundation, email verification runtime (including Resend delivery), first-passkey WebAuthn registration runtime, passkey authentication session runtime, bounded account recovery runtime, and session-authenticated passkey management / security reauthentication runtime. Recovery login sessions, membership, and JWTs remain out of scope.",
   "domainSeparation": {
     "accountIdentity": "Account shell, verified email, passkeys, challenges, recovery grants",
     "authenticatedSession": "Opaque server-side account_sessions; not membership or civic entitlement",
@@ -180,7 +180,8 @@
     "createsSession": false,
     "deliveryModes": [
       "test",
-      "development"
+      "development",
+      "resend"
     ],
     "featureFlag": "EMAIL_VERIFICATION_ENABLED",
     "issues": [
@@ -196,7 +197,6 @@
     ]
   },
   "explicitExclusions": [
-    "production email provider",
     "recovery login / session issuance from recovery",
     "production recovery email delivery",
     "JWTs",

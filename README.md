@@ -304,29 +304,29 @@ Architecture contract: `docs/authentication-ceremony-foundation.v1.json`.
 
 Email verification proves control of an email address during account setup. It does **not** authenticate a session and does **not** activate an account.
 
-| Item                   | Policy                                                                   |
-| ---------------------- | ------------------------------------------------------------------------ |
-| Feature flag           | `EMAIL_VERIFICATION_ENABLED` (default `false`)                           |
-| Hash key               | `EMAIL_VERIFICATION_HASH_KEY` (HMAC-SHA-256; min 32 chars)               |
-| Rate-limit subject key | `CEREMONY_RATE_LIMIT_HASH_KEY` (min 32 chars)                            |
-| Delivery mode          | `test` or `development` only                                             |
-| Code                   | 6 decimal digits, crypto-secure, 10-minute TTL, max 5 attempts           |
-| Resend                 | invalidates prior active `verify_email` challenges (`revoked_at`)        |
-| Success transition     | `pending_email` → `pending_passkey`                                      |
-| Success authority      | one restricted setup grant (`initial_passkey_registration`, 15 minutes)  |
-| Anti-enumeration       | request always returns generic `202 VERIFICATION_REQUEST_ACCEPTED`       |
-| Trusted proxy          | `TRUST_PROXY` default `false` (do not trust arbitrary `X-Forwarded-For`) |
+| Item                   | Policy                                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------------------------- |
+| Feature flag           | `EMAIL_VERIFICATION_ENABLED` (default `false`)                                                  |
+| Hash key               | `EMAIL_VERIFICATION_HASH_KEY` (HMAC-SHA-256; min 32 chars)                                      |
+| Rate-limit subject key | `CEREMONY_RATE_LIMIT_HASH_KEY` (min 32 chars)                                                   |
+| Delivery mode          | `test`, `development`, or `resend`                                                              |
+| Code                   | 6 decimal digits, crypto-secure, 10-minute TTL, max 5 attempts                                  |
+| Resend                 | invalidates prior active `verify_email` challenges (`revoked_at`)                               |
+| Success transition     | `pending_email` → `pending_passkey`                                                             |
+| Success authority      | one restricted setup grant (`initial_passkey_registration`, 15 minutes)                         |
+| Anti-enumeration       | request always returns generic `202 VERIFICATION_REQUEST_ACCEPTED` plus a UUID `verificationId` |
+| Trusted proxy          | `TRUST_PROXY` default `false` (do not trust arbitrary `X-Forwarded-For`)                        |
 
 Implemented routes (also in live OpenAPI when registered):
 
-| Method | Path                                       | Behavior                                                                  |
-| ------ | ------------------------------------------ | ------------------------------------------------------------------------- |
-| `POST` | `/v1/account/email-verifications`          | Accept verification request; generic response; may create pending account |
-| `POST` | `/v1/account/email-verifications/complete` | Verify code; issue one-time setup grant token; generic failure shape      |
+| Method | Path                                       | Behavior                                                                                        |
+| ------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `POST` | `/v1/account/email-verifications`          | Accept verification request; generic response with `verificationId`; may create pending account |
+| `POST` | `/v1/account/email-verifications/complete` | Verify code; issue one-time setup grant token; generic failure shape                            |
 
 When the feature is disabled, both routes return the safe `404 Not Found` shape.
 
-Delivery adapters never send real email. Production cannot enable this feature while only test/development adapters exist.
+Delivery modes: in-memory `test` / `development` sinks, or `resend` (HTTPS POST to Resend). Feature remains disabled by default. Production (`NODE_ENV=production`) may enable only with `EMAIL_VERIFICATION_DELIVERY_MODE=resend` plus Resend credentials.
 
 Rate limits (persistent `town.ceremony_rate_limits`):
 
@@ -789,7 +789,6 @@ Explicitly out of scope for this slice:
 
 Still not implemented:
 
-- production email provider (Resend/SendGrid/SES/SMTP/etc.)
 - JWTs
 - recovery login / session issuance from recovery
 - production recovery email delivery
@@ -885,7 +884,6 @@ CI runs format/lint/typecheck/unit tests, migration checks, foundation + control
 
 This slice still excludes:
 
-- production email provider
 - JWTs
 - recovery login sessions / production recovery email
 - public password or social login

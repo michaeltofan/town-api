@@ -92,6 +92,9 @@ describe('email verification runtime API', () => {
     });
   });
 
+  const UUID_PATTERN =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+
   it('returns equivalent accepted responses for known and unknown emails', async () => {
     const unknown = await currentApp().inject({
       method: 'POST',
@@ -99,9 +102,11 @@ describe('email verification runtime API', () => {
       payload: { email: 'Brand.New+one@example.com' },
     });
     expect(unknown.statusCode).toBe(202);
-    expect(unknown.json()).toEqual({
-      data: { status: 'VERIFICATION_REQUEST_ACCEPTED' },
-    });
+    const unknownBody = unknown.json<{
+      data: { status: string; verificationId: string };
+    }>();
+    expect(unknownBody.data.status).toBe('VERIFICATION_REQUEST_ACCEPTED');
+    expect(unknownBody.data.verificationId).toMatch(UUID_PATTERN);
 
     const again = await currentApp().inject({
       method: 'POST',
@@ -110,7 +115,12 @@ describe('email verification runtime API', () => {
       payload: { email: 'Brand.New+one@example.com' },
     });
     expect(again.statusCode).toBe(202);
-    expect(again.json()).toEqual(unknown.json());
+    const againBody = again.json<{
+      data: { status: string; verificationId: string };
+    }>();
+    expect(againBody.data.status).toBe(unknownBody.data.status);
+    expect(againBody.data.verificationId).toMatch(UUID_PATTERN);
+    expect(Object.keys(againBody.data).sort()).toEqual(Object.keys(unknownBody.data).sort());
   });
 
   it('creates pending_email account and challenge without actor/passkey/session', async () => {
@@ -163,17 +173,23 @@ describe('email verification runtime API', () => {
 
   it('completes verification once, issues setup grant, and rejects replay', async () => {
     const email = 'Complete.User+ok@example.com';
-    await currentApp().inject({
+    const request = await currentApp().inject({
       method: 'POST',
       url: '/v1/account/email-verifications',
       payload: { email },
     });
-    const challenge = await latestChallenge();
+    expect(request.statusCode).toBe(202);
+    const verificationId = request.json<{
+      data: { verificationId: string };
+    }>().data.verificationId;
+    expect(verificationId).toMatch(
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/,
+    );
 
     const success = await currentApp().inject({
       method: 'POST',
       url: '/v1/account/email-verifications/complete',
-      payload: { verificationId: challenge.id, code: FIXED_CODE },
+      payload: { verificationId, code: FIXED_CODE },
     });
     expect(success.statusCode).toBe(200);
     expect(JSON.stringify(success.json())).toContain('"status":"EMAIL_VERIFIED"');
@@ -200,7 +216,7 @@ describe('email verification runtime API', () => {
     const replay = await currentApp().inject({
       method: 'POST',
       url: '/v1/account/email-verifications/complete',
-      payload: { verificationId: challenge.id, code: FIXED_CODE },
+      payload: { verificationId, code: FIXED_CODE },
     });
     expect(replay.statusCode).toBe(400);
     expect(replay.json()).toMatchObject({

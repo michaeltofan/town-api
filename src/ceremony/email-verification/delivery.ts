@@ -5,6 +5,8 @@ export type EmailVerificationDeliveryInput = {
   expiresAt: string;
   purpose: 'verify_email';
   outcomeCategory: 'verification_code' | 'existing_account_guidance' | 'suppressed' | 'unavailable';
+  /** Optional correlation id for structured delivery failure logs (never logged with the code). */
+  requestId?: string | null;
 };
 
 export type EmailVerificationDeliveryResult = {
@@ -15,7 +17,7 @@ export type EmailVerificationDeliveryResult = {
 };
 
 export type EmailVerificationDeliveryAdapter = {
-  readonly mode: 'test' | 'development';
+  readonly mode: 'test' | 'development' | 'resend';
   deliverVerificationCode(
     input: EmailVerificationDeliveryInput,
   ): Promise<EmailVerificationDeliveryResult>;

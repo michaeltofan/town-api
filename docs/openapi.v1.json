@@ -386,7 +386,7 @@
     },
     "/v1/account/email-verifications": {
       "post": {
-        "description": "Requests email verification for account setup. Always returns a generic accepted response and never discloses account existence. Does not create a session or activate an account. Disabled by default via EMAIL_VERIFICATION_ENABLED.",
+        "description": "Requests email verification for account setup. Always returns a generic accepted response with a verificationId and never discloses account existence. Does not create a session or activate an account. Disabled by default via EMAIL_VERIFICATION_ENABLED.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -428,10 +428,15 @@
                             "VERIFICATION_REQUEST_ACCEPTED"
                           ],
                           "type": "string"
+                        },
+                        "verificationId": {
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "status"
+                        "status",
+                        "verificationId"
                       ],
                       "type": "object"
                     }
