@@ -46,12 +46,14 @@ production deployment.
 ## Smoke
 
 - [ ] `npm run smoke:deployment -- --base-url https://api-staging.towncivic.org \
- --environment staging --expect-commit <sha>` passes.
+ --environment staging --expect-commit <sha> --auth-enabled false` passes.
 - [ ] `npm run smoke:deployment -- --base-url https://api.towncivic.org \
  --environment production --expect-commit <sha>` passes.
-- [ ] Unauthorized routes still return `401`.
-- [ ] Invalid Stripe webhook signatures still return `400` (once billing is
-      live per environment).
+- [ ] Unauthorized routes still return `401` when auth is enabled, or `404`
+      when `--auth-enabled false`.
+- [ ] Invalid Stripe webhook signatures on `POST /v1/billing/stripe/webhook`
+      still return `400` (once billing is live per environment), or `404` when
+      billing is disabled.
 
 ## Observability
 

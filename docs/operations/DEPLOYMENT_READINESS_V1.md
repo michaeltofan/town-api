@@ -250,13 +250,16 @@ bounded set of read-only checks:
 - `/health/ready` returns `status:ready` with `checks` object.
 - `/health/build` matches `--environment`; when `--expect-commit` is given,
   `commitSha` must match.
-- An unauthorized route (e.g. `GET /v1/account/membership`) returns `401`.
+- An unauthorized route (`GET /v1/account/membership`) returns `401` when
+  `--auth-enabled true` (default), or `404` when `--auth-enabled false`
+  (passkey authentication flag off).
 - CORS: no-Origin remains valid; literal `null` Origin is rejected;
   unauthorized Origin is rejected; configured authorized Origin is accepted
   with credentials; authorized preflight returns methods and bounded max-age
   (`--authorized-origin` / `--unauthorized-origin`).
-- The Stripe webhook endpoint rejects an invalid signature with `400`
-  (skipped harmlessly if the webhook route is not mounted).
+- `POST /v1/billing/stripe/webhook` with an invalid `Stripe-Signature` returns
+  `400` when billing is enabled, or `404` when `STRIPE_BILLING_ENABLED` is off.
+  A `2xx` or `5xx` response fails the check.
 - No response body includes a known secret sentinel (`sk_live_`, `whsec_`,
   `sk_test_`, `BEGIN PRIVATE KEY`, etc.); if it does, the check fails.
 
