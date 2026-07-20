@@ -1,6 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { DomainErrorResponseSchema } from '../../schemas/signals.js';
-import { ErrorResponseSchema } from '../../schemas/error.js';
+import { DomainErrorResponseSchema } from '../../schemas/error.js';
 
 const UuidSchema = Type.String({
   pattern:
@@ -66,12 +65,12 @@ export const PasskeyRegistrationRouteResponses = {
   options: {
     200: PasskeyRegistrationOptionsSuccessSchema,
     400: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
   verify: {
     200: PasskeyRegistrationVerifySuccessSchema,
     400: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
 } as const;
 

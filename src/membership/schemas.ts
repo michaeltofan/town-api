@@ -1,6 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { DomainErrorResponseSchema } from '../schemas/signals.js';
-import { ErrorResponseSchema } from '../schemas/error.js';
+import { DomainErrorResponseSchema } from '../schemas/error.js';
 
 export const MembershipStatusSchema = Type.Union([
   Type.Literal('inactive'),
@@ -53,7 +52,7 @@ export const AccountMembershipResponseSchema = Type.Object(
 export const MembershipRouteResponses = {
   accountMembership: {
     200: AccountMembershipResponseSchema,
-    400: ErrorResponseSchema,
+    400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
     403: DomainErrorResponseSchema,
     429: DomainErrorResponseSchema,

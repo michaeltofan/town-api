@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AppInstance } from '../src/app.js';
+import { ERROR_CODE } from '../src/schemas/error.js';
 import { createTestApp } from './helpers/app.js';
 
 describe('error responses', () => {
@@ -13,7 +14,7 @@ describe('error responses', () => {
     await app.close();
   });
 
-  it('unknown routes return a safe error format', async () => {
+  it('unknown routes return a safe domain error format', async () => {
     const response = await app.inject({
       method: 'GET',
       url: '/does-not-exist',
@@ -23,19 +24,17 @@ describe('error responses', () => {
     expect(response.headers['content-type']).toMatch(/application\/json/);
 
     const body = response.json<{
-      statusCode: number;
-      error: string;
-      message: string;
-      requestId: string;
+      error: { code: string; message: string; requestId: string };
     }>();
 
     expect(body).toEqual({
-      statusCode: 404,
-      error: 'Not Found',
-      message: 'Not Found',
-      requestId: expect.any(String) as string,
+      error: {
+        code: ERROR_CODE.NOT_FOUND,
+        message: 'Not Found.',
+        requestId: expect.any(String) as string,
+      },
     });
-    expect(Object.keys(body).sort()).toEqual(['error', 'message', 'requestId', 'statusCode']);
+    expect(Object.keys(body).sort()).toEqual(['error']);
     expect(JSON.stringify(body)).not.toMatch(/stack|node_modules|Error:/i);
   });
 
@@ -49,7 +48,7 @@ describe('error responses', () => {
     });
 
     expect(response.statusCode).toBe(404);
-    const body = response.json<{ requestId: string }>();
-    expect(body.requestId).toBe('test-request-id-123');
+    const body = response.json<{ error: { requestId: string } }>();
+    expect(body.error.requestId).toBe('test-request-id-123');
   });
 });

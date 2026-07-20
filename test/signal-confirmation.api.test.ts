@@ -87,8 +87,10 @@ describe('signal confirmation controlled GET (historical isolation)', () => {
       });
       expect(response.statusCode).toBe(404);
       expect(response.json()).toMatchObject({
-        statusCode: 404,
-        error: 'Not Found',
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Not Found.',
+        },
       });
       expect(JSON.stringify(response.json())).not.toContain(CONTROLLED_TEST_KEY);
     } finally {

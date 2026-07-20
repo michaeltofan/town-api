@@ -1,6 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { DomainErrorResponseSchema } from '../schemas/signals.js';
-import { ErrorResponseSchema } from '../schemas/error.js';
+import { DomainErrorResponseSchema } from '../schemas/error.js';
 
 export const EmptyBodySchema = Type.Object(
   {},
@@ -41,7 +40,7 @@ export const WebhookResponseSchema = Type.Object(
 export const BillingRouteResponses = {
   checkoutSession: {
     200: CheckoutSessionResponseSchema,
-    400: ErrorResponseSchema,
+    400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
     403: DomainErrorResponseSchema,
     409: DomainErrorResponseSchema,
@@ -51,7 +50,7 @@ export const BillingRouteResponses = {
   },
   portalSession: {
     200: PortalSessionResponseSchema,
-    400: ErrorResponseSchema,
+    400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
     403: DomainErrorResponseSchema,
     404: DomainErrorResponseSchema,
@@ -61,7 +60,7 @@ export const BillingRouteResponses = {
   },
   webhook: {
     200: WebhookResponseSchema,
-    400: ErrorResponseSchema,
+    400: DomainErrorResponseSchema,
     503: DomainErrorResponseSchema,
   },
 } as const;

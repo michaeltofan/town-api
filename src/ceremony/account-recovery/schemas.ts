@@ -1,6 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { DomainErrorResponseSchema } from '../../schemas/signals.js';
-import { ErrorResponseSchema } from '../../schemas/error.js';
+import { DomainErrorResponseSchema } from '../../schemas/error.js';
 
 const UuidSchema = Type.String({
   pattern:
@@ -107,23 +106,23 @@ export const AccountRecoveryPasskeyVerifySuccessSchema = Type.Object(
 export const AccountRecoveryRouteResponses = {
   request: {
     202: AccountRecoveryRequestAcceptedSchema,
-    400: ErrorResponseSchema,
-    404: ErrorResponseSchema,
+    400: DomainErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
   verifyEmail: {
     200: AccountRecoveryVerifyEmailSuccessSchema,
     400: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
   options: {
     200: AccountRecoveryPasskeyOptionsSuccessSchema,
     400: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
   verify: {
     200: AccountRecoveryPasskeyVerifySuccessSchema,
     400: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
 } as const;
 

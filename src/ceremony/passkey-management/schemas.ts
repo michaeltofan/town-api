@@ -1,6 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { DomainErrorResponseSchema } from '../../schemas/signals.js';
-import { ErrorResponseSchema } from '../../schemas/error.js';
+import { DomainErrorResponseSchema } from '../../schemas/error.js';
 import { PASSKEY_LABEL_MAX_CODE_POINTS } from './policy.js';
 
 const UuidSchema = Type.String({
@@ -256,14 +255,14 @@ export const PasskeyManagementRouteResponses = {
   inventory: {
     200: PasskeyInventorySuccessSchema,
     401: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
     429: DomainErrorResponseSchema,
   },
   reauthOptions: {
     200: PasskeyReauthenticationOptionsSuccessSchema,
     400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
     429: DomainErrorResponseSchema,
   },
   reauthVerify: {
@@ -273,7 +272,7 @@ export const PasskeyManagementRouteResponses = {
     ]),
     400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
     429: DomainErrorResponseSchema,
   },
   addPasskeyOptions: {
@@ -281,7 +280,7 @@ export const PasskeyManagementRouteResponses = {
     400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
     403: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
     429: DomainErrorResponseSchema,
   },
   addPasskeyVerify: {
@@ -289,7 +288,7 @@ export const PasskeyManagementRouteResponses = {
     400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
     403: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
     429: DomainErrorResponseSchema,
   },
   rename: {

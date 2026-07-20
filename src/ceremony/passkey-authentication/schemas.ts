@@ -1,6 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { DomainErrorResponseSchema } from '../../schemas/signals.js';
-import { ErrorResponseSchema } from '../../schemas/error.js';
+import { DomainErrorResponseSchema } from '../../schemas/error.js';
 import { ANONYMOUS_CLIENT_KEY_MAX_LENGTH, ANONYMOUS_CLIENT_KEY_MIN_LENGTH } from './policy.js';
 
 const UuidSchema = Type.String({
@@ -132,7 +131,7 @@ export const PasskeyAuthenticationRouteResponses = {
   options: {
     200: PasskeyAuthenticationOptionsSuccessSchema,
     400: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
   verify: {
     200: Type.Union([
@@ -140,14 +139,14 @@ export const PasskeyAuthenticationRouteResponses = {
       PasskeyAuthenticationVerifyMobileSuccessSchema,
     ]),
     400: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
   session: {
     200: Type.Union([
       SessionIntrospectionAuthenticatedSchema,
       SessionIntrospectionUnauthenticatedSchema,
     ]),
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
   rotate: {
     200: Type.Union([
@@ -156,17 +155,17 @@ export const PasskeyAuthenticationRouteResponses = {
     ]),
     400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
   logout: {
     200: SignedOutSuccessSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
   logoutAll: {
     200: SignedOutSuccessSchema,
     400: DomainErrorResponseSchema,
     401: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
 } as const;
 

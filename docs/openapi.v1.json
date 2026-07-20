@@ -452,25 +452,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -485,25 +488,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -631,25 +637,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -824,25 +833,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -1135,25 +1147,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -2011,25 +2026,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -2431,25 +2449,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -2602,25 +2623,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -2802,25 +2826,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -2908,25 +2935,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -2941,25 +2971,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -3068,25 +3101,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -3268,25 +3304,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -3419,25 +3458,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -3582,25 +3624,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -3906,25 +3951,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -4025,25 +4073,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -4180,25 +4231,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -4342,25 +4396,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -4593,25 +4650,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -4727,25 +4787,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -4920,25 +4983,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -5014,25 +5080,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -5324,25 +5393,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -5611,25 +5683,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -6128,25 +6203,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -6265,25 +6343,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }
@@ -6490,25 +6571,28 @@
                   "additionalProperties": false,
                   "properties": {
                     "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "requestId": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "maximum": 599,
-                      "minimum": 400,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "statusCode",
-                    "error",
-                    "message",
-                    "requestId"
+                    "error"
                   ],
                   "type": "object"
                 }

@@ -1,6 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { DomainErrorResponseSchema } from '../../schemas/signals.js';
-import { ErrorResponseSchema } from '../../schemas/error.js';
+import { DomainErrorResponseSchema } from '../../schemas/error.js';
 
 export const EmailVerificationRequestBodySchema = Type.Object(
   {
@@ -50,13 +49,13 @@ export const EmailVerificationCompleteSuccessSchema = Type.Object(
 export const EmailVerificationRouteResponses = {
   request: {
     202: EmailVerificationRequestAcceptedSchema,
-    400: ErrorResponseSchema,
-    404: ErrorResponseSchema,
+    400: DomainErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
   complete: {
     200: EmailVerificationCompleteSuccessSchema,
     400: DomainErrorResponseSchema,
-    404: ErrorResponseSchema,
+    404: DomainErrorResponseSchema,
   },
 } as const;
 
