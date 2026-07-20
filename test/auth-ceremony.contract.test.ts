@@ -78,7 +78,6 @@ describe('authentication ceremony architecture contract', () => {
     expect(document.explicitExclusions).toEqual(
       expect.arrayContaining([
         'JWTs',
-        'production email provider',
         'recovery login / session issuance from recovery',
         'membership',
       ]),
@@ -88,6 +87,7 @@ describe('authentication ceremony architecture contract', () => {
         'cookies',
         'passkey login / authentication assertions',
         'recovery runtime',
+        'production email provider',
       ]),
     );
   });

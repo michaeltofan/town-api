@@ -29,7 +29,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     contractVersion: '1.0.0',
     title: 'TOWN Authentication Ceremony Foundation V1',
     description:
-      'Architecture contract for ceremony data/session foundation, email verification runtime, first-passkey WebAuthn registration runtime, passkey authentication session runtime, bounded account recovery runtime, and session-authenticated passkey management / security reauthentication runtime. Production email delivery, recovery login sessions, membership, and JWTs remain out of scope.',
+      'Architecture contract for ceremony data/session foundation, email verification runtime (including Resend delivery), first-passkey WebAuthn registration runtime, passkey authentication session runtime, bounded account recovery runtime, and session-authenticated passkey management / security reauthentication runtime. Recovery login sessions, membership, and JWTs remain out of scope.',
     status: 'partially_implemented',
     implementedLiveRoutes: true,
     implementedRoutes: [
@@ -275,7 +275,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       activatesAccount: false,
       transitions: ['pending_email -> pending_passkey'],
       issues: ['restricted setup grant initial_passkey_registration'],
-      deliveryModes: ['test', 'development'],
+      deliveryModes: ['test', 'development', 'resend'],
     },
     webauthnRegistrationRuntime: {
       status: 'implemented',
@@ -495,7 +495,6 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       },
     },
     explicitExclusions: [
-      'production email provider',
       'recovery login / session issuance from recovery',
       'production recovery email delivery',
       'JWTs',

@@ -25,6 +25,10 @@ export const EmailVerificationRequestAcceptedSchema = Type.Object(
     data: Type.Object(
       {
         status: Type.Literal('VERIFICATION_REQUEST_ACCEPTED'),
+        verificationId: Type.String({
+          pattern:
+            '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+        }),
       },
       { additionalProperties: false },
     ),

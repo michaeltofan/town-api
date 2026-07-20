@@ -61,6 +61,7 @@ export type EmailVerificationDeps = {
 
 export type RequestVerificationResult = {
   status: 'VERIFICATION_REQUEST_ACCEPTED';
+  verificationId: string;
 };
 
 export type CompleteVerificationSuccess = {
@@ -180,10 +181,11 @@ export async function requestEmailVerification(
     ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
   });
 
-  const accepted: RequestVerificationResult = { status: 'VERIFICATION_REQUEST_ACCEPTED' };
-
   if (throttled) {
-    return accepted;
+    return {
+      status: 'VERIFICATION_REQUEST_ACCEPTED',
+      verificationId: generateId(),
+    };
   }
 
   const existingEmail = await findActiveEmailByNormalized(db, emailNormalized);
@@ -232,6 +234,7 @@ export async function requestEmailVerification(
         expiresAt: addMinutes(now, EMAIL_VERIFICATION_CODE_TTL_MINUTES),
         purpose: 'verify_email',
         outcomeCategory,
+        requestId: input.requestId ?? null,
       });
     } catch {
       // Delivery failures must not change the public accepted response.
@@ -247,7 +250,10 @@ export async function requestEmailVerification(
         deliveryOutcome: outcomeCategory,
       },
     });
-    return accepted;
+    return {
+      status: 'VERIFICATION_REQUEST_ACCEPTED',
+      verificationId: dummyId,
+    };
   }
 
   const latest = await findLatestEmailChallengeForSetup(db, {
@@ -269,7 +275,10 @@ export async function requestEmailVerification(
           deliveryOutcome: 'suppressed',
         },
       });
-      return accepted;
+      return {
+        status: 'VERIFICATION_REQUEST_ACCEPTED',
+        verificationId: generateId(),
+      };
     }
   }
 
@@ -309,6 +318,7 @@ export async function requestEmailVerification(
       expiresAt,
       purpose: 'verify_email',
       outcomeCategory: 'verification_code',
+      requestId: input.requestId ?? null,
     });
     if (!delivery.delivered) {
       deliveryOutcome = 'unavailable';
@@ -329,7 +339,10 @@ export async function requestEmailVerification(
     },
   });
 
-  return accepted;
+  return {
+    status: 'VERIFICATION_REQUEST_ACCEPTED',
+    verificationId: challengeId,
+  };
 }
 
 export async function completeEmailVerification(

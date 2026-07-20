@@ -5,6 +5,7 @@ import {
   createInMemoryTestDeliveryAdapter,
   type EmailVerificationDeliveryAdapter,
 } from '../ceremony/email-verification/delivery.js';
+import { createResendDeliveryAdapter } from '../ceremony/email-verification/resend-delivery.js';
 import {
   EmailVerificationCompleteBodySchema,
   EmailVerificationRequestBodySchema,
@@ -27,9 +28,29 @@ export type EmailVerificationRoutesOptions = {
   generateId?: () => string;
 };
 
-function createDeliveryAdapter(env: Env): EmailVerificationDeliveryAdapter {
+function createDeliveryAdapter(
+  env: Env,
+  log: { warn: (obj: object, msg?: string) => void },
+): EmailVerificationDeliveryAdapter {
   if (env.EMAIL_VERIFICATION_DELIVERY_MODE === 'development') {
     return createDevelopmentDeliveryAdapter();
+  }
+  if (env.EMAIL_VERIFICATION_DELIVERY_MODE === 'resend') {
+    const apiKey = env.EMAIL_VERIFICATION_RESEND_API_KEY;
+    const from = env.EMAIL_VERIFICATION_FROM_ADDRESS;
+    if (!apiKey || !from) {
+      throw new Error('Resend delivery requires API key and from address');
+    }
+    return createResendDeliveryAdapter({
+      apiKey,
+      from,
+      ...(env.EMAIL_VERIFICATION_REPLY_TO !== undefined
+        ? { replyTo: env.EMAIL_VERIFICATION_REPLY_TO }
+        : {}),
+      log: (event) => {
+        log.warn(event, 'email delivery failed');
+      },
+    });
   }
   return createInMemoryTestDeliveryAdapter();
 }
@@ -54,7 +75,7 @@ export const emailVerificationRoutes: FastifyPluginCallbackTypebox<
   EmailVerificationRoutesOptions
 > = (app, options, done) => {
   const { env } = options;
-  const delivery = options.deliveryAdapter ?? createDeliveryAdapter(env);
+  const delivery = options.deliveryAdapter ?? createDeliveryAdapter(env, app.log);
 
   const buildDeps = (): EmailVerificationDeps => ({
     env,
@@ -74,7 +95,7 @@ export const emailVerificationRoutes: FastifyPluginCallbackTypebox<
         tags: ['Account'],
         summary: 'Request account email verification',
         description:
-          'Requests email verification for account setup. Always returns a generic accepted response and never discloses account existence. Does not create a session or activate an account. Disabled by default via EMAIL_VERIFICATION_ENABLED.',
+          'Requests email verification for account setup. Always returns a generic accepted response with a verificationId and never discloses account existence. Does not create a session or activate an account. Disabled by default via EMAIL_VERIFICATION_ENABLED.',
         body: EmailVerificationRequestBodySchema,
         response: EmailVerificationRouteResponses.request,
       },
@@ -94,6 +115,7 @@ export const emailVerificationRoutes: FastifyPluginCallbackTypebox<
       return reply.status(202).send({
         data: {
           status: result.status,
+          verificationId: result.verificationId,
         },
       });
     },

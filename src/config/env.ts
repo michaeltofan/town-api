@@ -84,8 +84,11 @@ const EnvSchema = Type.Object(
       Type.String({ minLength: EMAIL_VERIFICATION_HASH_KEY_MIN_LENGTH }),
     ),
     EMAIL_VERIFICATION_DELIVERY_MODE: Type.Optional(
-      Type.Union([Type.Literal('test'), Type.Literal('development')]),
+      Type.Union([Type.Literal('test'), Type.Literal('development'), Type.Literal('resend')]),
     ),
+    EMAIL_VERIFICATION_RESEND_API_KEY: Type.Optional(Type.String({ minLength: 20 })),
+    EMAIL_VERIFICATION_FROM_ADDRESS: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
+    EMAIL_VERIFICATION_REPLY_TO: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
     CEREMONY_RATE_LIMIT_HASH_KEY: Type.Optional(
       Type.String({ minLength: CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH }),
     ),
@@ -142,6 +145,14 @@ function parseInteger(value: string | undefined): number | undefined {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+/** Minimal email-shape check (local@domain); not full RFC 5322. */
+function isEmailAddressShape(value: string): boolean {
+  if (value.length < 3 || value.length > 320) {
+    return false;
+  }
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 /** Full Git commit SHA: exactly 40 lowercase hexadecimal characters. No silent normalization. */
@@ -263,7 +274,16 @@ function sanitizeEnvErrorPath(path: string, message: string): string {
     return `${path}: must meet minimum length when email verification or WebAuthn registration is enabled`;
   }
   if (path.includes('EMAIL_VERIFICATION_DELIVERY_MODE')) {
-    return `${path}: must be test or development when email verification is enabled`;
+    return `${path}: must be test, development, or resend when email verification is enabled`;
+  }
+  if (path.includes('EMAIL_VERIFICATION_RESEND_API_KEY')) {
+    return `${path}: must meet minimum length when Resend delivery is configured`;
+  }
+  if (
+    path.includes('EMAIL_VERIFICATION_FROM_ADDRESS') ||
+    path.includes('EMAIL_VERIFICATION_REPLY_TO')
+  ) {
+    return `${path}: must be a valid email address when Resend delivery is configured`;
   }
   if (path.includes('WEBAUTHN_CHALLENGE_HASH_KEY')) {
     return `${path}: must meet minimum length when WebAuthn registration is enabled`;
@@ -439,11 +459,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
 
   if (emailVerificationEnabled) {
-    if (nodeEnv === 'production') {
-      throw new Error(
-        'Invalid environment configuration: EMAIL_VERIFICATION_ENABLED cannot be true in production while only test/development delivery adapters exist',
-      );
-    }
     if (!isNonEmptyString(source.EMAIL_VERIFICATION_HASH_KEY)) {
       throw new Error(
         'Invalid environment configuration: EMAIL_VERIFICATION_HASH_KEY is required when EMAIL_VERIFICATION_ENABLED is true',
@@ -465,10 +480,47 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       );
     }
     const deliveryMode = source.EMAIL_VERIFICATION_DELIVERY_MODE;
-    if (deliveryMode !== 'test' && deliveryMode !== 'development') {
+    if (deliveryMode !== 'test' && deliveryMode !== 'development' && deliveryMode !== 'resend') {
       throw new Error(
-        'Invalid environment configuration: EMAIL_VERIFICATION_DELIVERY_MODE must be test or development when EMAIL_VERIFICATION_ENABLED is true',
+        'Invalid environment configuration: EMAIL_VERIFICATION_DELIVERY_MODE must be test, development, or resend when EMAIL_VERIFICATION_ENABLED is true',
       );
+    }
+    if (nodeEnv === 'production' && deliveryMode !== 'resend') {
+      throw new Error(
+        'Invalid environment configuration: EMAIL_VERIFICATION_ENABLED in production requires EMAIL_VERIFICATION_DELIVERY_MODE=resend',
+      );
+    }
+    if (deliveryMode === 'resend') {
+      if (
+        !isNonEmptyString(source.EMAIL_VERIFICATION_RESEND_API_KEY) ||
+        source.EMAIL_VERIFICATION_RESEND_API_KEY.length < 20
+      ) {
+        throw new Error(
+          'Invalid environment configuration: EMAIL_VERIFICATION_RESEND_API_KEY is required (min length 20) when EMAIL_VERIFICATION_DELIVERY_MODE is resend',
+        );
+      }
+      if (
+        !isNonEmptyString(source.EMAIL_VERIFICATION_FROM_ADDRESS) ||
+        !isEmailAddressShape(source.EMAIL_VERIFICATION_FROM_ADDRESS)
+      ) {
+        throw new Error(
+          'Invalid environment configuration: EMAIL_VERIFICATION_FROM_ADDRESS must be a valid email address when EMAIL_VERIFICATION_DELIVERY_MODE is resend',
+        );
+      }
+      if (
+        source.EMAIL_VERIFICATION_REPLY_TO !== undefined &&
+        source.EMAIL_VERIFICATION_REPLY_TO !== '' &&
+        !isEmailAddressShape(source.EMAIL_VERIFICATION_REPLY_TO)
+      ) {
+        throw new Error(
+          'Invalid environment configuration: EMAIL_VERIFICATION_REPLY_TO must be a valid email address when set',
+        );
+      }
+      candidate.EMAIL_VERIFICATION_RESEND_API_KEY = source.EMAIL_VERIFICATION_RESEND_API_KEY;
+      candidate.EMAIL_VERIFICATION_FROM_ADDRESS = source.EMAIL_VERIFICATION_FROM_ADDRESS;
+      if (isNonEmptyString(source.EMAIL_VERIFICATION_REPLY_TO)) {
+        candidate.EMAIL_VERIFICATION_REPLY_TO = source.EMAIL_VERIFICATION_REPLY_TO;
+      }
     }
     candidate.EMAIL_VERIFICATION_HASH_KEY = source.EMAIL_VERIFICATION_HASH_KEY;
     candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
