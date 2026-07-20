@@ -130,9 +130,10 @@ describe('passkey authentication runtime API', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({
-      statusCode: 404,
-      error: 'Not Found',
-      message: 'Not Found',
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Not Found.',
+      },
     });
   });
 

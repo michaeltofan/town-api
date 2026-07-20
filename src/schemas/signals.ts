@@ -96,19 +96,5 @@ export const SignalIdParamsSchema = Type.Object(
   { additionalProperties: false, $id: 'SignalIdParams' },
 );
 
-export const DomainErrorResponseSchema = Type.Object(
-  {
-    error: Type.Object(
-      {
-        code: Type.String(),
-        message: Type.String(),
-        requestId: Type.String(),
-      },
-      { additionalProperties: false },
-    ),
-  },
-  { additionalProperties: false, $id: 'DomainErrorResponse' },
-);
-
 export type CommunitySignalsResponse = Static<typeof CommunitySignalsResponseSchema>;
 export type SignalDetailResponse = Static<typeof SignalDetailResponseSchema>;

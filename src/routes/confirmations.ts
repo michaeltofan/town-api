@@ -32,8 +32,8 @@ import {
 import { findEntitlementByAccountId } from '../membership/repositories/entitlements.js';
 import type { ParticipationDenialReason } from '../membership/types.js';
 import { ConfirmationPutBodySchema, ConfirmationResponseSchema } from '../schemas/confirmations.js';
-import { DomainErrorResponseSchema, SignalIdParamsSchema } from '../schemas/signals.js';
-import { ErrorResponseSchema } from '../schemas/error.js';
+import { SignalIdParamsSchema } from '../schemas/signals.js';
+import { DomainErrorResponseSchema } from '../schemas/error.js';
 
 export type ConfirmationRoutesOptions = {
   env: Env;
@@ -123,7 +123,7 @@ export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutes
         params: SignalIdParamsSchema,
         response: {
           200: ConfirmationResponseSchema,
-          400: ErrorResponseSchema,
+          400: DomainErrorResponseSchema,
           401: DomainErrorResponseSchema,
           403: DomainErrorResponseSchema,
           404: DomainErrorResponseSchema,
@@ -210,7 +210,7 @@ export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutes
         body: ConfirmationPutBodySchema,
         response: {
           200: ConfirmationResponseSchema,
-          400: ErrorResponseSchema,
+          400: DomainErrorResponseSchema,
           401: DomainErrorResponseSchema,
           403: DomainErrorResponseSchema,
           404: DomainErrorResponseSchema,

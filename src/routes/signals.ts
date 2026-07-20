@@ -8,11 +8,10 @@ import { communityNotFoundError, signalNotFoundError } from '../errors/app-error
 import { CommunitySlugParamsSchema } from '../schemas/communities.js';
 import {
   CommunitySignalsResponseSchema,
-  DomainErrorResponseSchema,
   SignalDetailResponseSchema,
   SignalIdParamsSchema,
 } from '../schemas/signals.js';
-import { ErrorResponseSchema } from '../schemas/error.js';
+import { DomainErrorResponseSchema } from '../schemas/error.js';
 import type { SignalRow } from '../db/schema.js';
 import { toIsoTimestamp } from '../lib/timestamps.js';
 
@@ -84,7 +83,7 @@ export const signalsRoutes: FastifyPluginCallbackTypebox = (app, _opts, done) =>
         params: SignalIdParamsSchema,
         response: {
           200: SignalDetailResponseSchema,
-          400: ErrorResponseSchema,
+          400: DomainErrorResponseSchema,
           404: DomainErrorResponseSchema,
         },
       },
