@@ -11,8 +11,8 @@ import {
 } from '../ceremony/passkey-authentication/session-transport.js';
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
 import { findVerifiedPrimaryEmailForAccount } from '../identity/repositories/emails.js';
-import { AppError } from '../errors/app-error.js';
 import {
+  AppError,
   billingCheckoutFailedError,
   billingCustomerNotAvailableError,
   billingManageExistingSubscriptionError,
@@ -20,6 +20,7 @@ import {
   billingPortalFailedError,
   membershipAlreadyActiveError,
 } from '../errors/app-error.js';
+import { ERROR_CODE } from '../schemas/error.js';
 import {
   isBillingCheckoutThrottled,
   isBillingPortalThrottled,
@@ -408,32 +409,23 @@ export const billingRoutes: FastifyPluginCallbackTypebox<BillingRoutesOptions> =
         }
         const signature = singleHeader(request.headers['stripe-signature']);
         if (typeof signature !== 'string' || signature.length === 0) {
-          return await reply.status(400).send({
-            statusCode: 400,
-            error: 'Bad Request',
-            message: 'Missing Stripe-Signature header.',
-            requestId: request.id,
-          });
+          // Domain envelope must match BillingRouteResponses.webhook[400]
+          // (DomainErrorResponseSchema). Flat bodies fail response serialization → 500.
+          throw new AppError(400, ERROR_CODE.BAD_REQUEST, 'Missing Stripe-Signature header.');
         }
         const rawBody = (request as FastifyRequest & { rawBody?: Buffer }).rawBody;
         if (!rawBody) {
-          return await reply.status(400).send({
-            statusCode: 400,
-            error: 'Bad Request',
-            message: 'Missing request body for webhook verification.',
-            requestId: request.id,
-          });
+          throw new AppError(
+            400,
+            ERROR_CODE.BAD_REQUEST,
+            'Missing request body for webhook verification.',
+          );
         }
         let event: Stripe.Event;
         try {
           event = adapter.constructWebhookEvent(rawBody, signature, billing.webhookSecret);
         } catch {
-          return await reply.status(400).send({
-            statusCode: 400,
-            error: 'Bad Request',
-            message: 'Stripe signature verification failed.',
-            requestId: request.id,
-          });
+          throw new AppError(400, ERROR_CODE.BAD_REQUEST, 'Stripe signature verification failed.');
         }
 
         await processStripeWebhookEvent(
