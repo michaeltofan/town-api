@@ -22,7 +22,9 @@ function toDomainErrorBody(code: string, message: string, requestId: string): Pu
 }
 
 function sendDomainError(
-  reply: { status: (code: number) => { type: (t: string) => { send: (body: unknown) => unknown } } },
+  reply: {
+    status: (code: number) => { type: (t: string) => { send: (body: unknown) => unknown } };
+  },
   statusCode: number,
   code: string,
   message: string,
