@@ -53,7 +53,7 @@ export class StagingSeedError extends Error {
   }
 }
 
-export type StagingSeedOutcome = 'seeded' | 'already_canonical' | 'reconciled';
+export type StagingSeedOutcome = 'seeded' | 'already_canonical' | 'reconciled' | 'completed_subset';
 
 export type StagingSeedResult = {
   readonly outcome: StagingSeedOutcome;
@@ -72,7 +72,7 @@ export type RunStagingSeedOptions = {
   readonly injectFailureAfterMutation?: boolean;
 };
 
-type BaselineKind = 'empty' | 'exact' | 'content_drift' | 'refuse';
+type BaselineKind = 'empty' | 'exact' | 'content_drift' | 'canonical_subset' | 'refuse';
 
 type BaselineAssessment = {
   readonly kind: BaselineKind;
@@ -268,6 +268,70 @@ async function canonicalIdentityPresent(db: Db): Promise<boolean> {
   return controlled?.accountId === null;
 }
 
+/**
+ * True when the DB holds a strict subset of the current manifest: every present
+ * community/signal matches its manifest row exactly (full-JSON compare), there
+ * are no non-canonical extras, the controlled actor matches, and the manifest
+ * still has communities and/or signals not yet inserted.
+ */
+async function presentRowsExactCanonicalSubset(db: Db): Promise<boolean> {
+  const communityRows = await db.select().from(communities);
+  const signalRows = await db.select().from(signals);
+
+  if (communityRows.length === 0 && signalRows.length === 0) {
+    return false;
+  }
+  if (
+    communityRows.length > EXPECTED_COMMUNITY_COUNT ||
+    signalRows.length > EXPECTED_SIGNAL_COUNT
+  ) {
+    return false;
+  }
+  if (
+    communityRows.length === EXPECTED_COMMUNITY_COUNT &&
+    signalRows.length === EXPECTED_SIGNAL_COUNT
+  ) {
+    return false;
+  }
+
+  const expectedCommunityById = new Map<string, CanonicalCommunity>(
+    FOUNDATION_COMMUNITIES.map((row) => [row.id, row]),
+  );
+  const expectedSignalById = new Map<string, CanonicalSignal>(
+    FOUNDATION_SIGNALS.map((row) => [row.id, row]),
+  );
+
+  for (const row of communityRows) {
+    const expected = expectedCommunityById.get(row.id);
+    if (!expected) {
+      return false;
+    }
+    if (JSON.stringify(normalizeCommunity(row)) !== JSON.stringify(expected)) {
+      return false;
+    }
+  }
+  for (const row of signalRows) {
+    const expected = expectedSignalById.get(row.id);
+    if (!expected) {
+      return false;
+    }
+    if (JSON.stringify(normalizeSignal(row)) !== JSON.stringify(expected)) {
+      return false;
+    }
+  }
+
+  const presentCommunityIds = new Set(communityRows.map((row) => row.id));
+  const presentSignalIds = new Set(signalRows.map((row) => row.id));
+  const missingFromManifest =
+    FOUNDATION_COMMUNITIES.some((row) => !presentCommunityIds.has(row.id)) ||
+    FOUNDATION_SIGNALS.some((row) => !presentSignalIds.has(row.id));
+  if (!missingFromManifest) {
+    return false;
+  }
+
+  return await controlledActorMatchesCanonical(db);
+}
+
 async function assessBaseline(db: Db): Promise<BaselineAssessment> {
   const counts = await readCounts(db);
 
@@ -353,6 +417,12 @@ async function assessBaseline(db: Db): Promise<BaselineAssessment> {
       refuseReason: 'unexpected_rows_prevent_exact_invariants',
       counts,
     };
+  }
+
+  // Prior exact-canonical staging baseline (e.g. 2/6) with an expanded
+  // manifest (e.g. 3/9): every present row matches, missing rows may be added.
+  if (await presentRowsExactCanonicalSubset(db)) {
+    return { kind: 'canonical_subset', counts };
   }
 
   if (canonicalCommunityPresent || canonicalSignalPresent || controlledPresent) {
@@ -508,7 +578,9 @@ export async function runStagingSeed(
     const mutateAction =
       baseline.kind === 'content_drift'
         ? 'reconcile_foundation_content'
-        : 'seed_foundation_and_controlled_actor';
+        : baseline.kind === 'canonical_subset'
+          ? 'complete_canonical_subset'
+          : 'seed_foundation_and_controlled_actor';
     logEvent('mutate', 'ok', { action: mutateAction, baseline: baseline.kind });
     const counts = await db.transaction(async (tx) => {
       const txDb = tx as unknown as Db;
@@ -520,7 +592,12 @@ export async function runStagingSeed(
       return await assertPostInvariants(txDb);
     });
 
-    const outcome: StagingSeedOutcome = baseline.kind === 'content_drift' ? 'reconciled' : 'seeded';
+    const outcome: StagingSeedOutcome =
+      baseline.kind === 'content_drift'
+        ? 'reconciled'
+        : baseline.kind === 'canonical_subset'
+          ? 'completed_subset'
+          : 'seeded';
     logEvent('postcheck', 'ok', { ...counts, outcome });
     logEvent('complete', 'ok', { outcome, ...counts });
     return { outcome, counts };

@@ -15,8 +15,16 @@ import {
   FOUNDATION_SIGNALS,
   FOUNDATION_SIGNAL_IDS,
 } from '../src/db/seeds/foundation-content.js';
+import { seedControlledActor } from '../src/db/seeds/seed-controlled-actor.js';
 import { seedFoundationContent } from '../src/db/seeds/seed-foundation.js';
 import { requireDatabaseUrl, resetAndMigrate } from './helpers/pg.js';
+
+const PRIOR_CANONICAL_COMMUNITIES = FOUNDATION_COMMUNITIES.filter(
+  (row) => row.id !== FOUNDATION_COMMUNITY_IDS.aradRo,
+);
+const PRIOR_CANONICAL_SIGNALS = FOUNDATION_SIGNALS.filter(
+  (row) => row.communityId !== FOUNDATION_COMMUNITY_IDS.aradRo,
+);
 
 describe('staging seed runner integration', () => {
   const databaseUrl = requireDatabaseUrl();
@@ -415,5 +423,143 @@ describe('staging seed runner integration', () => {
     const counts = await readCounts();
     expect(counts.confirmations).toBe(0);
     expect(counts.controlledActors).toBe(1);
+  });
+
+  async function seedPriorExactCanonicalSubset(): Promise<void> {
+    const database = createDatabase({
+      connectionString: databaseUrl,
+      poolMax: 2,
+      connectionTimeoutMs: 3000,
+      idleTimeoutMs: 1000,
+    });
+    try {
+      expect(PRIOR_CANONICAL_COMMUNITIES).toHaveLength(2);
+      expect(PRIOR_CANONICAL_SIGNALS).toHaveLength(6);
+      for (const community of PRIOR_CANONICAL_COMMUNITIES) {
+        await database.db.insert(communities).values({ ...community });
+      }
+      for (const signal of PRIOR_CANONICAL_SIGNALS) {
+        await database.db.insert(signals).values({ ...signal });
+      }
+      await seedControlledActor(database.db);
+    } finally {
+      await database.close();
+    }
+  }
+
+  it('completes an exact prior-canonical subset by inserting only missing manifest rows', async () => {
+    await seedPriorExactCanonicalSubset();
+    expect(await readCounts()).toEqual({
+      communities: 2,
+      signals: 6,
+      actors: 1,
+      controlledActors: 1,
+      confirmations: 0,
+    });
+
+    const result = await runStagingSeed({ env: stagingEnv });
+    expect(result.outcome).toBe('completed_subset');
+    expect(result.counts).toEqual({
+      communities: 3,
+      signals: 9,
+      actors: 1,
+      controlledActors: 1,
+      confirmations: 0,
+    });
+
+    const database = createDatabase({
+      connectionString: databaseUrl,
+      poolMax: 2,
+      connectionTimeoutMs: 3000,
+      idleTimeoutMs: 1000,
+    });
+    try {
+      const communityRows = await database.db.select().from(communities);
+      const signalRows = await database.db.select().from(signals);
+      expect(communityRows.map((row) => row.id).sort()).toEqual(
+        FOUNDATION_COMMUNITIES.map((row) => row.id).sort(),
+      );
+      expect(signalRows.map((row) => row.id).sort()).toEqual(
+        Object.values(FOUNDATION_SIGNAL_IDS).sort(),
+      );
+      const arad = communityRows.find((row) => row.id === FOUNDATION_COMMUNITY_IDS.aradRo);
+      expect(arad).toMatchObject({
+        slug: 'arad-ro',
+        defaultLocale: 'ro-RO',
+        timezone: 'Europe/Bucharest',
+      });
+      const aradSignals = signalRows.filter(
+        (row) => row.communityId === FOUNDATION_COMMUNITY_IDS.aradRo,
+      );
+      expect(aradSignals).toHaveLength(3);
+      expect(aradSignals.every((row) => row.locale === 'ro-RO')).toBe(true);
+    } finally {
+      await database.close();
+    }
+  });
+
+  it('refuses a prior-canonical subset when a present row has drifted content', async () => {
+    await seedPriorExactCanonicalSubset();
+    const database = createDatabase({
+      connectionString: databaseUrl,
+      poolMax: 2,
+      connectionTimeoutMs: 3000,
+      idleTimeoutMs: 1000,
+    });
+    try {
+      await database.db
+        .update(signals)
+        .set({ latestUpdate: 'Drifted prior-canonical wording must block subset completion' })
+        .where(eq(signals.id, FOUNDATION_SIGNAL_IDS.milanoSignal1));
+    } finally {
+      await database.close();
+    }
+
+    await expect(runStagingSeed({ env: stagingEnv })).rejects.toMatchObject({
+      code: 'PREFLIGHT_PARTIAL_CANONICAL',
+    } satisfies Partial<StagingSeedError>);
+
+    expect(await readCounts()).toEqual({
+      communities: 2,
+      signals: 6,
+      actors: 1,
+      controlledActors: 1,
+      confirmations: 0,
+    });
+
+    const verify = createDatabase({
+      connectionString: databaseUrl,
+      poolMax: 2,
+      connectionTimeoutMs: 3000,
+      idleTimeoutMs: 1000,
+    });
+    try {
+      const arad = await verify.db
+        .select()
+        .from(communities)
+        .where(eq(communities.id, FOUNDATION_COMMUNITY_IDS.aradRo));
+      expect(arad).toHaveLength(0);
+      const drifted = await verify.db
+        .select()
+        .from(signals)
+        .where(eq(signals.id, FOUNDATION_SIGNAL_IDS.milanoSignal1));
+      expect(drifted[0]?.latestUpdate).toBe(
+        'Drifted prior-canonical wording must block subset completion',
+      );
+    } finally {
+      await verify.close();
+    }
+  });
+
+  it('reruns as already_canonical after completing a prior-canonical subset', async () => {
+    await seedPriorExactCanonicalSubset();
+    const first = await runStagingSeed({ env: stagingEnv });
+    expect(first.outcome).toBe('completed_subset');
+    expect(first.counts.communities).toBe(3);
+    expect(first.counts.signals).toBe(9);
+
+    const second = await runStagingSeed({ env: stagingEnv });
+    expect(second.outcome).toBe('already_canonical');
+    expect(second.counts).toEqual(first.counts);
   });
 });
