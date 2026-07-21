@@ -74,8 +74,8 @@ describe('staging seed runner integration', () => {
     const result = await runStagingSeed({ env: stagingEnv });
     expect(result.outcome).toBe('seeded');
     expect(result.counts).toEqual({
-      communities: 2,
-      signals: 6,
+      communities: 3,
+      signals: 9,
       actors: 1,
       controlledActors: 1,
       confirmations: 0,
@@ -91,8 +91,8 @@ describe('staging seed runner integration', () => {
       const communityRows = await database.db.select().from(communities);
       const signalRows = await database.db.select().from(signals);
       const actorRows = await database.db.select().from(actors);
-      expect(communityRows).toHaveLength(2);
-      expect(signalRows).toHaveLength(6);
+      expect(communityRows).toHaveLength(3);
+      expect(signalRows).toHaveLength(9);
       expect(actorRows).toHaveLength(1);
       expect(actorRows[0]).toMatchObject({
         id: CONTROLLED_TEST_ACTOR_ID,
@@ -136,8 +136,8 @@ describe('staging seed runner integration', () => {
       expect(afterCommunities).toEqual(beforeCommunities);
       expect(afterSignals).toEqual(beforeSignals);
       expect(afterActors).toEqual(beforeActors);
-      expect(afterCommunities).toHaveLength(2);
-      expect(afterSignals).toHaveLength(6);
+      expect(afterCommunities).toHaveLength(3);
+      expect(afterSignals).toHaveLength(9);
       expect(afterActors).toHaveLength(1);
     } finally {
       await database.close();
@@ -198,8 +198,8 @@ describe('staging seed runner integration', () => {
     const result = await runStagingSeed({ env: stagingEnv });
     expect(result.outcome).toBe('reconciled');
     expect(result.counts).toEqual({
-      communities: 2,
-      signals: 6,
+      communities: 3,
+      signals: 9,
       actors: 1,
       controlledActors: 1,
       confirmations: 0,
@@ -235,7 +235,7 @@ describe('staging seed runner integration', () => {
       idleTimeoutMs: 1000,
     });
     try {
-      // Replace one canonical signal id while keeping total count at 6.
+      // Replace one canonical signal id while keeping total count at 9.
       await database.pool.query(`DELETE FROM town.signals WHERE id = $1`, [
         FOUNDATION_SIGNAL_IDS.milanoSignal1,
       ]);
@@ -410,8 +410,8 @@ describe('staging seed runner integration', () => {
 
   it('uses only the canonical foundation signal set after a successful seed', async () => {
     await runStagingSeed({ env: stagingEnv });
-    expect(FOUNDATION_SIGNALS).toHaveLength(6);
-    expect(FOUNDATION_COMMUNITIES).toHaveLength(2);
+    expect(FOUNDATION_SIGNALS).toHaveLength(9);
+    expect(FOUNDATION_COMMUNITIES).toHaveLength(3);
     const counts = await readCounts();
     expect(counts.confirmations).toBe(0);
     expect(counts.controlledActors).toBe(1);

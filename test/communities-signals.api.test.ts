@@ -28,8 +28,10 @@ function signalBySlug(slug: string): CanonicalSignal {
 
 const milano = communityBySlug('milano-it');
 const munich = communityBySlug('munich-de');
+const arad = communityBySlug('arad-ro');
 const milanoSignal1 = signalBySlug('milano-signal-1');
 const munichSignal1 = signalBySlug('munich-signal-1');
+const aradSignal1 = signalBySlug('arad-signal-1');
 
 describe('communities and signals API', () => {
   let app: AppInstance;
@@ -50,7 +52,7 @@ describe('communities and signals API', () => {
     expect(response.headers['content-type']).toMatch(/^application\/json/);
 
     const body = response.json<{ data: Record<string, unknown>[] }>();
-    expect(body.data).toHaveLength(2);
+    expect(body.data).toHaveLength(3);
     expect(body.data[0]).toEqual({
       id: milano.id,
       slug: 'milano-it',
@@ -71,10 +73,20 @@ describe('communities and signals API', () => {
       defaultLocale: 'de-DE',
       timezone: 'Europe/Berlin',
     });
+    expect(body.data[2]).toEqual({
+      id: arad.id,
+      slug: 'arad-ro',
+      position: 3,
+      countryCode: 'RO',
+      cityName: 'Arad',
+      displayName: 'Arad',
+      defaultLocale: 'ro-RO',
+      timezone: 'Europe/Bucharest',
+    });
     expect(JSON.stringify(body)).not.toMatch(/createdAt|updatedAt|"status"/);
   });
 
-  it('GET Milano and Munich signal lists return exact ordered published cards', async () => {
+  it('GET Milano, Munich, and Arad signal lists return exact ordered published cards', async () => {
     const milanoResponse = await app.inject({
       method: 'GET',
       url: '/v1/communities/milano-it/signals',
@@ -126,9 +138,30 @@ describe('communities and signals API', () => {
       'munich-signal-3',
     ]);
     expect(munichBody.data.signals.every((signal) => signal.locale === 'de-DE')).toBe(true);
+
+    const aradResponse = await app.inject({
+      method: 'GET',
+      url: '/v1/communities/arad-ro/signals',
+    });
+    expect(aradResponse.statusCode).toBe(200);
+    const aradBody = aradResponse.json<{
+      data: { community: Record<string, unknown>; signals: { slug: string; locale: string }[] };
+    }>();
+    expect(aradBody.data.community).toEqual({
+      id: arad.id,
+      slug: 'arad-ro',
+      displayName: 'Arad',
+      defaultLocale: 'ro-RO',
+    });
+    expect(aradBody.data.signals.map((signal) => signal.slug)).toEqual([
+      'arad-signal-1',
+      'arad-signal-2',
+      'arad-signal-3',
+    ]);
+    expect(aradBody.data.signals.every((signal) => signal.locale === 'ro-RO')).toBe(true);
   });
 
-  it('GET Italian and German signal detail return approved content contracts', async () => {
+  it('GET Italian, German, and Romanian signal detail return approved content contracts', async () => {
     const italian = await app.inject({
       method: 'GET',
       url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}`,
@@ -175,6 +208,15 @@ describe('communities and signals API', () => {
     const germanBody = german.json<{ data: { locale: string; headline: string } }>();
     expect(germanBody.data.locale).toBe('de-DE');
     expect(germanBody.data.headline).toBe(munichSignal1.headline);
+
+    const romanian = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.aradSignal1}`,
+    });
+    expect(romanian.statusCode).toBe(200);
+    const romanianBody = romanian.json<{ data: { locale: string; headline: string } }>();
+    expect(romanianBody.data.locale).toBe('ro-RO');
+    expect(romanianBody.data.headline).toBe(aradSignal1.headline);
   });
 
   it('returns domain 404 for missing community/signal and 400 for invalid UUID', async () => {

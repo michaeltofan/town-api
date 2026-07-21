@@ -1,7 +1,7 @@
 /**
  * Canonical civic foundation content for TOWN Communities and Signals Foundation V1.
  *
- * Source of truth: michaeltofan/town-public (main) FEED_SCENES for Milano and Munich.
+ * Source of truth: michaeltofan/town-public (main) FEED_SCENES for Milano, Munich, and Arad.
  * Author display names are prototype editorial metadata, not verified user accounts.
  * Image keys are relative prototype asset keys only (no binary/CDN/absolute URLs).
  *
@@ -75,6 +75,19 @@ export const FOUNDATION_COMMUNITIES = [
     displayName: 'München',
     defaultLocale: 'de-DE',
     timezone: 'Europe/Berlin',
+    status: 'active',
+    createdAt: '2026-07-01T08:00:00.000Z',
+    updatedAt: '2026-07-01T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000003',
+    slug: 'arad-ro',
+    position: 3,
+    countryCode: 'RO',
+    cityName: 'Arad',
+    displayName: 'Arad',
+    defaultLocale: 'ro-RO',
+    timezone: 'Europe/Bucharest',
     status: 'active',
     createdAt: '2026-07-01T08:00:00.000Z',
     updatedAt: '2026-07-01T08:00:00.000Z',
@@ -283,11 +296,113 @@ export const FOUNDATION_SIGNALS = [
     createdAt: '2026-07-12T08:00:00.000Z',
     updatedAt: '2026-07-12T08:00:00.000Z',
   },
+  {
+    id: '00000000-0000-4000-8000-000000000401',
+    communityId: '00000000-0000-4000-8000-000000000003',
+    slug: 'arad-signal-1',
+    position: 1,
+    locale: 'ro-RO',
+    category: 'MEDIU',
+    area: 'Pădurea Ceala',
+    headline: 'Moloz depozitat ilegal la marginea pădurii Ceala',
+    summary:
+      'Camioane cu moloz ajung în continuare pe malul Mureșului, lângă pădurea Ceala. Traseul rămâne deschis, fără barieră.',
+    description:
+      'La capătul străzii Mărului, în zona Alfa, transporturile de moloz continuă pe un traseu care trece inclusiv pe pista de biciclete, către malul Mureșului și marginea pădurii Ceala. Amenzile aplicate până acum nu au oprit depozitările, iar accesul camioanelor rămâne posibil în lipsa unei bariere.',
+    whyItMatters:
+      'Pădurea Ceala și malul Mureșului sunt printre puținele zone naturale de agrement ale orașului. Depozitarea necontrolată a molozului afectează peisajul, mediul și siguranța celor care folosesc pista de biciclete.',
+    whoIsAffected:
+      'Bicicliști, familii care se plimbă în zona Ceala, pescari, locuitorii cartierului Alfa și oricine folosește malul Mureșului pentru recreere.',
+    latestUpdate: 'Semnalul rămâne local și deschis. O barieră de acces nu a fost încă instalată.',
+    statusLabel: 'Stare civică: observat — în așteptarea atenției locale',
+    statusNote:
+      '„Observat” înseamnă că problema a fost recunoscută de comunitatea locală. Nu implică o procedură oficială și nici o intervenție deja începută.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-07-20',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Arad',
+    imageKey: 'assets/feed/arad_ceala_mures.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-07-20T08:00:00.000Z',
+    createdAt: '2026-07-20T08:00:00.000Z',
+    updatedAt: '2026-07-20T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000402',
+    communityId: '00000000-0000-4000-8000-000000000003',
+    slug: 'arad-signal-2',
+    position: 2,
+    locale: 'ro-RO',
+    category: 'INFRASTRUCTURĂ',
+    area: 'Petriș',
+    headline: 'Lucrările la Drumul Regelui avansează pe tronsonul Petriș–Vața',
+    summary:
+      'Pe cei 4 km din județul Arad se construiesc ziduri de sprijin și fundații continue. Termen de finalizare: aprilie 2028.',
+    description:
+      'Pe sectorul arădean al Drumului Regelui, între Petriș și limita cu județul Hunedoara, constructorul execută aproximativ 2,5 kilometri de ziduri de sprijin și 1.900 de metri de fundații continue. Lucrările stabilizează versanții și lărgesc platforma drumului montan.',
+    whyItMatters:
+      'Drumul Regelui va lega modern județele Arad și Hunedoara și va deschide accesul către Munții Zărandului, pe unul dintre cele mai spectaculoase trasee panoramice din vestul României.',
+    whoIsAffected:
+      'Locuitorii comunei Petriș și ai zonei montane, șoferii care circulă între cele două județe, turiștii care vizitează Munții Zărandului.',
+    latestUpdate:
+      'Lucrările avansează în ritm susținut. Proiectul are termen de finalizare în aprilie 2028.',
+    statusLabel: 'Stare civică: în lucru — intervenție publică în desfășurare',
+    statusNote:
+      '„În lucru” înseamnă că o intervenție publică este în desfășurare, cu termen asumat. Semnalul urmărește evoluția lucrărilor.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-07-21',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Arad',
+    imageKey: 'assets/feed/arad_drumul_regelui.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-07-21T08:00:00.000Z',
+    createdAt: '2026-07-21T08:00:00.000Z',
+    updatedAt: '2026-07-21T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000403',
+    communityId: '00000000-0000-4000-8000-000000000003',
+    slug: 'arad-signal-3',
+    position: 3,
+    locale: 'ro-RO',
+    category: 'SPAȚIU PUBLIC',
+    area: 'Strada Someșului',
+    headline: 'Strada Someșului rămâne neasfaltată, în ciuda unei sentințe definitive',
+    summary:
+      'Instanța a obligat Primăria să asfalteze strada. Trotuarele au fost realizate; carosabilul, încă nu.',
+    description:
+      'Strada Someșului este în continuare din pământ, deși o sentință definitivă din 2024 obligă Primăria la asfaltare și amenajarea trotuarelor. Trotuarele au fost realizate anul trecut; partea carosabilă așteaptă încă documentația tehnică și execuția.',
+    whyItMatters:
+      'O stradă de pământ într-o zonă cu impozite calculate pentru infrastructură completă ridică o întrebare simplă de echitate: locuitorii plătesc pentru condiții pe care nu le au.',
+    whoIsAffected:
+      'Locuitorii străzii Someșului și ai zonei — pietoni, familii, șoferi care folosesc zilnic o stradă fără asfalt, pe orice vreme.',
+    latestUpdate:
+      'Primăria a comunicat că strada este inclusă pe lista de asfaltare, investiția fiind în etapa documentației tehnico-economice.',
+    statusLabel: 'Stare civică: observat — hotărâre judecătorească în așteptarea executării',
+    statusNote:
+      'Semnalul privește o obligație stabilită printr-o hotărâre judecătorească definitivă, a cărei executare este încă în curs.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-07-21',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Arad',
+    imageKey: 'assets/feed/arad_strada_somesului.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-07-21T08:00:00.000Z',
+    createdAt: '2026-07-21T08:00:00.000Z',
+    updatedAt: '2026-07-21T08:00:00.000Z',
+  },
 ] as const satisfies readonly CanonicalSignal[];
 
 export const FOUNDATION_COMMUNITY_IDS = {
   milanoIt: '00000000-0000-4000-8000-000000000001',
   munichDe: '00000000-0000-4000-8000-000000000002',
+  aradRo: '00000000-0000-4000-8000-000000000003',
 } as const;
 
 export const FOUNDATION_SIGNAL_IDS = {
@@ -297,4 +412,7 @@ export const FOUNDATION_SIGNAL_IDS = {
   munichSignal1: '00000000-0000-4000-8000-000000000201',
   munichSignal2: '00000000-0000-4000-8000-000000000202',
   munichSignal3: '00000000-0000-4000-8000-000000000203',
+  aradSignal1: '00000000-0000-4000-8000-000000000401',
+  aradSignal2: '00000000-0000-4000-8000-000000000402',
+  aradSignal3: '00000000-0000-4000-8000-000000000403',
 } as const;

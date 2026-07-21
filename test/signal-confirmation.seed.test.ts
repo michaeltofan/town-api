@@ -55,8 +55,8 @@ describe('controlled actor seed', () => {
       const signalsAfter = await database.db.select({ value: count() }).from(signals);
       expect(communitiesAfter[0]?.value).toBe(communitiesBefore[0]?.value);
       expect(signalsAfter[0]?.value).toBe(signalsBefore[0]?.value);
-      expect(communitiesAfter[0]?.value).toBe(2);
-      expect(signalsAfter[0]?.value).toBe(6);
+      expect(communitiesAfter[0]?.value).toBe(3);
+      expect(signalsAfter[0]?.value).toBe(9);
 
       await database.db.insert(actors).values({
         id: '00000000-0000-4000-8000-000000000399',

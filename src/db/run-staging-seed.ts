@@ -10,7 +10,6 @@ import {
 } from './seeds/controlled-actor-content.js';
 import {
   FOUNDATION_COMMUNITIES,
-  FOUNDATION_COMMUNITY_IDS,
   FOUNDATION_SIGNAL_IDS,
   FOUNDATION_SIGNALS,
   type CanonicalCommunity,
@@ -379,29 +378,50 @@ async function assertPostInvariants(db: Db): Promise<StagingSeedResult['counts']
   const signalsOk = await signalsMatchCanonical(db);
   const actorOk = await controlledActorMatchesCanonical(db);
 
-  const milanoSignals = await db
-    .select()
-    .from(signals)
-    .where(eq(signals.communityId, FOUNDATION_COMMUNITY_IDS.milanoIt));
-  const munichSignals = await db
-    .select()
-    .from(signals)
-    .where(eq(signals.communityId, FOUNDATION_COMMUNITY_IDS.munichDe));
+  const signalsByCommunityId = new Map<string, (typeof signals.$inferSelect)[]>();
+  for (const community of FOUNDATION_COMMUNITIES) {
+    const communitySignals = await db
+      .select()
+      .from(signals)
+      .where(eq(signals.communityId, community.id));
+    signalsByCommunityId.set(community.id, communitySignals);
+  }
 
-  const orderingOk =
-    milanoSignals.length === 3 &&
-    munichSignals.length === 3 &&
-    [...milanoSignals]
-      .sort((a, b) => a.position - b.position)
-      .every((row, index) => row.position === index + 1) &&
-    [...munichSignals]
-      .sort((a, b) => a.position - b.position)
-      .every((row, index) => row.position === index + 1) &&
-    milanoSignals.every((row) => row.locale === 'it-IT') &&
-    munichSignals.every((row) => row.locale === 'de-DE') &&
-    Object.values(FOUNDATION_SIGNAL_IDS).every((id) =>
-      [...milanoSignals, ...munichSignals].some((row) => row.id === id),
+  const expectedSignalsByCommunityId = new Map<string, CanonicalSignal[]>();
+  for (const signal of FOUNDATION_SIGNALS) {
+    const bucket = expectedSignalsByCommunityId.get(signal.communityId) ?? [];
+    bucket.push(signal);
+    expectedSignalsByCommunityId.set(signal.communityId, bucket);
+  }
+
+  let orderingOk = true;
+  for (const community of FOUNDATION_COMMUNITIES) {
+    const expectedForCommunity = expectedSignalsByCommunityId.get(community.id) ?? [];
+    const actualForCommunity = signalsByCommunityId.get(community.id) ?? [];
+    if (actualForCommunity.length !== expectedForCommunity.length) {
+      orderingOk = false;
+      break;
+    }
+    const sorted = [...actualForCommunity].sort((a, b) => a.position - b.position);
+    const positionsContiguous = sorted.every((row, index) => row.position === index + 1);
+    const localesMatch = actualForCommunity.every((row) => row.locale === community.defaultLocale);
+    const expectedIdsPresent = expectedForCommunity.every((expected) =>
+      actualForCommunity.some((row) => row.id === expected.id),
     );
+    if (!positionsContiguous || !localesMatch || !expectedIdsPresent) {
+      orderingOk = false;
+      break;
+    }
+  }
+
+  const allCanonicalSignalIdsPresent = Object.values(FOUNDATION_SIGNAL_IDS).every((id) => {
+    const expected = FOUNDATION_SIGNALS.find((signal) => signal.id === id);
+    if (!expected) {
+      return false;
+    }
+    const communitySignals = signalsByCommunityId.get(expected.communityId) ?? [];
+    return communitySignals.some((row) => row.id === id);
+  });
 
   if (
     counts.communities !== EXPECTED_COMMUNITY_COUNT ||
@@ -412,7 +432,8 @@ async function assertPostInvariants(db: Db): Promise<StagingSeedResult['counts']
     !communitiesOk ||
     !signalsOk ||
     !actorOk ||
-    !orderingOk
+    !orderingOk ||
+    !allCanonicalSignalIdsPresent
   ) {
     throw new StagingSeedError(
       'POSTCHECK_INVARIANT_FAILED',
