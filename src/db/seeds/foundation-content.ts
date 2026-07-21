@@ -313,8 +313,7 @@ export const FOUNDATION_SIGNALS = [
       'Pădurea Ceala și malul Mureșului sunt printre puținele zone naturale de agrement ale orașului. Depozitarea necontrolată a molozului afectează peisajul, mediul și siguranța celor care folosesc pista de biciclete.',
     whoIsAffected:
       'Bicicliști, familii care se plimbă în zona Ceala, pescari, locuitorii cartierului Alfa și oricine folosește malul Mureșului pentru recreere.',
-    latestUpdate:
-      'Semnalul rămâne local și deschis. O barieră de acces nu a fost încă instalată.',
+    latestUpdate: 'Semnalul rămâne local și deschis. O barieră de acces nu a fost încă instalată.',
     statusLabel: 'Stare civică: observat — în așteptarea atenției locale',
     statusNote:
       '„Observat” înseamnă că problema a fost recunoscută de comunitatea locală. Nu implică o procedură oficială și nici o intervenție deja începută.',
