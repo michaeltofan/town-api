@@ -172,7 +172,7 @@ describe('staging seed runner integration', () => {
     });
   });
 
-  it('refuses conflicting canonical content before mutation', async () => {
+  it('reconciles text-only content drift on an otherwise canonical identity set', async () => {
     await runStagingSeed({ env: stagingEnv });
     const database = createDatabase({
       connectionString: databaseUrl,
@@ -183,8 +183,79 @@ describe('staging seed runner integration', () => {
     try {
       await database.db
         .update(signals)
-        .set({ headline: 'CONFlicting headline drift' })
+        .set({ latestUpdate: 'Stale prototype wording that must be reconciled' })
         .where(eq(signals.id, FOUNDATION_SIGNAL_IDS.milanoSignal1));
+
+      const drifted = await database.db
+        .select()
+        .from(signals)
+        .where(eq(signals.id, FOUNDATION_SIGNAL_IDS.milanoSignal1));
+      expect(drifted[0]?.latestUpdate).toBe('Stale prototype wording that must be reconciled');
+    } finally {
+      await database.close();
+    }
+
+    const result = await runStagingSeed({ env: stagingEnv });
+    expect(result.outcome).toBe('reconciled');
+    expect(result.counts).toEqual({
+      communities: 2,
+      signals: 6,
+      actors: 1,
+      controlledActors: 1,
+      confirmations: 0,
+    });
+
+    const verify = createDatabase({
+      connectionString: databaseUrl,
+      poolMax: 2,
+      connectionTimeoutMs: 3000,
+      idleTimeoutMs: 1000,
+    });
+    try {
+      const row = await verify.db
+        .select()
+        .from(signals)
+        .where(eq(signals.id, FOUNDATION_SIGNAL_IDS.milanoSignal1));
+      const expected = FOUNDATION_SIGNALS.find(
+        (signal) => signal.id === FOUNDATION_SIGNAL_IDS.milanoSignal1,
+      );
+      expect(row[0]?.latestUpdate).toBe(expected?.latestUpdate);
+      expect(row[0]?.latestUpdate).not.toMatch(/prototip|Prototyp/i);
+    } finally {
+      await verify.close();
+    }
+  });
+
+  it('refuses conflicting canonical identity when exact totals hide non-canonical IDs', async () => {
+    await runStagingSeed({ env: stagingEnv });
+    const database = createDatabase({
+      connectionString: databaseUrl,
+      poolMax: 2,
+      connectionTimeoutMs: 3000,
+      idleTimeoutMs: 1000,
+    });
+    try {
+      // Replace one canonical signal id while keeping total count at 6.
+      await database.pool.query(`DELETE FROM town.signals WHERE id = $1`, [
+        FOUNDATION_SIGNAL_IDS.milanoSignal1,
+      ]);
+      await database.pool.query(
+        `INSERT INTO town.signals (
+           id, community_id, slug, position, locale, category, area, headline, summary,
+           description, why_it_matters, who_is_affected, latest_update, status_label, status_note,
+           observed_label, observed_on, observed_precision, author_display_name, image_key,
+           image_focus_x, image_focus_y, publication_status, published_at, created_at, updated_at
+         )
+         SELECT
+           '00000000-0000-4000-8000-000000000199', community_id, 'non-canonical-signal', 99,
+           locale, category, area, headline, summary, description, why_it_matters, who_is_affected,
+           latest_update, status_label, status_note, observed_label, observed_on, observed_precision,
+           author_display_name, image_key, image_focus_x, image_focus_y, publication_status,
+           published_at, created_at, updated_at
+         FROM town.signals
+         WHERE id = $1`,
+        [FOUNDATION_SIGNAL_IDS.milanoSignal2],
+      );
     } finally {
       await database.close();
     }

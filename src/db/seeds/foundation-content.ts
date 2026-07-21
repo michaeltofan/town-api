@@ -100,7 +100,7 @@ export const FOUNDATION_SIGNALS = [
     whoIsAffected:
       'Famiglie con bambini, anziani, persone con mobilità ridotta e chi attraversa Città Studi a piedi nelle ore di punta.',
     latestUpdate:
-      'Il segnale resta locale e aperto. Nessuna conferma rilevante di intervento è ancora disponibile in questo prototipo.',
+      'Il segnale resta locale e aperto. Nessun intervento confermato risulta al momento.',
     statusLabel: 'Stato civico: osservato — in attesa di attenzione locale',
     statusNote:
       '«Osservato» significa che il problema è stato riconosciuto dalla comunità locale. Non implica una pratica ufficiale né un intervento già avviato.',
@@ -134,7 +134,7 @@ export const FOUNDATION_SIGNALS = [
     whoIsAffected:
       'Studenti, genitori, residenti della sera e chi usa questo tratto pedonale per raggiungere fermate e abitazioni vicine.',
     latestUpdate:
-      'I residenti riferiscono di aver già segnalato il Comune. In questo prototipo il segnale resta in monitoraggio locale.',
+      'Il segnale resta locale e aperto. Nessun intervento confermato risulta al momento.',
     statusLabel: 'Stato civico: segnalato — monitoraggio locale',
     statusNote:
       '«Segnalato» indica che il problema è stato portato all’attenzione locale. Non conferma riparazione, presa in carico formale o tempi di intervento.',
@@ -168,7 +168,7 @@ export const FOUNDATION_SIGNALS = [
     whoIsAffected:
       'Pedoni, ciclisti, residenti di Lorenteggio e chi attraversa l’area per lavoro o scuola.',
     latestUpdate:
-      'Il segnale resta aperto. In questo prototipo non risultano ancora indicazioni aggiornate su durata o percorso alternativo.',
+      'Il segnale resta locale e aperto. Nessun intervento confermato risulta al momento.',
     statusLabel: 'Stato civico: aperto — richiede chiarezza locale',
     statusNote:
       '«Aperto» significa che la situazione resta da chiarire per la comunità. Non implica una decisione amministrativa già conclusa.',
@@ -201,8 +201,7 @@ export const FOUNDATION_SIGNALS = [
       'Ein beschädigter Gehweg betrifft den Alltag im Viertel. Er macht einen häufig genutzten Weg unsicherer — besonders für Familien, ältere Menschen und alle, die zu Fuß unterwegs sind.',
     whoIsAffected:
       'Familien mit Kinderwagen, ältere Menschen, Personen mit eingeschränkter Mobilität und Fußgängerinnen und Fußgänger im täglichen Weg durch Schwabing.',
-    latestUpdate:
-      'Das Signal bleibt lokal und offen. In diesem Prototyp liegt noch keine bestätigte Maßnahme vor.',
+    latestUpdate: 'Das Signal bleibt lokal und offen. Derzeit liegt keine bestätigte Maßnahme vor.',
     statusLabel: 'Bürgerlicher Status: beobachtet — wartet auf lokale Aufmerksamkeit',
     statusNote:
       '„Beobachtet“ bedeutet, dass die lokale Gemeinschaft das Problem erkannt hat. Es bedeutet keine offizielle Akte und keinen bereits begonnenen Eingriff.',
@@ -235,8 +234,7 @@ export const FOUNDATION_SIGNALS = [
       'Gute Beleuchtung gehört zur alltäglichen Sicherheit im Quartier. Ein dunkler Schul- und Wohnweg betrifft nicht nur Komfort, sondern das Vertrauen in den öffentlichen Raum.',
     whoIsAffected:
       'Anwohnerinnen und Anwohner, Schülerinnen und Schüler, Abendgänger sowie alle, die diesen Fußweg zur Haltestelle nutzen.',
-    latestUpdate:
-      'Anwohner berichten, die Störung bereits gemeldet zu haben. In diesem Prototyp bleibt das Signal in lokaler Beobachtung.',
+    latestUpdate: 'Das Signal bleibt lokal und offen. Derzeit liegt keine bestätigte Maßnahme vor.',
     statusLabel: 'Bürgerlicher Status: gemeldet — lokale Beobachtung',
     statusNote:
       '„Gemeldet“ heißt, dass das Thema lokal sichtbar gemacht wurde. Es bestätigt keine Reparatur, keine formale Übernahme und keinen Zeitplan.',
@@ -269,8 +267,7 @@ export const FOUNDATION_SIGNALS = [
       'Öffentliche Bauarbeiten gehören zum Stadtleben. Ohne verständliche Hinweise und sichere Übergänge wird der Alltag im Viertel jedoch unnötig unsicher und unklar.',
     whoIsAffected:
       'Fußgänger, Radfahrer, Anwohner in Sendling und alle, die das Gebiet regelmäßig durchqueren.',
-    latestUpdate:
-      'Das Signal bleibt offen. In diesem Prototyp gibt es noch keine aktualisierte Angabe zu Dauer oder Ausweichweg.',
+    latestUpdate: 'Das Signal bleibt lokal und offen. Derzeit liegt keine bestätigte Maßnahme vor.',
     statusLabel: 'Bürgerlicher Status: offen — braucht lokale Klarheit',
     statusNote:
       '„Offen“ bedeutet, dass die Situation für die Gemeinschaft noch geklärt werden muss. Es bedeutet keine abgeschlossene behördliche Entscheidung.',

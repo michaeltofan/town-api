@@ -54,7 +54,7 @@ export class StagingSeedError extends Error {
   }
 }
 
-export type StagingSeedOutcome = 'seeded' | 'already_canonical';
+export type StagingSeedOutcome = 'seeded' | 'already_canonical' | 'reconciled';
 
 export type StagingSeedResult = {
   readonly outcome: StagingSeedOutcome;
@@ -73,7 +73,7 @@ export type RunStagingSeedOptions = {
   readonly injectFailureAfterMutation?: boolean;
 };
 
-type BaselineKind = 'empty' | 'exact' | 'refuse';
+type BaselineKind = 'empty' | 'exact' | 'content_drift' | 'refuse';
 
 type BaselineAssessment = {
   readonly kind: BaselineKind;
@@ -241,6 +241,34 @@ async function controlledActorMatchesCanonical(db: Db): Promise<boolean> {
   );
 }
 
+/**
+ * True when every canonical foundation / controlled-actor ID is present and the
+ * controlled actor remains unlinked. Used to permit text-only content reconcile
+ * without deleting rows or accepting non-canonical identity sets.
+ */
+async function canonicalIdentityPresent(db: Db): Promise<boolean> {
+  const communityRows = await db
+    .select({ id: communities.id })
+    .from(communities)
+    .where(inArray(communities.id, [...CANONICAL_COMMUNITY_IDS]));
+  if (communityRows.length !== EXPECTED_COMMUNITY_COUNT) {
+    return false;
+  }
+  const signalRows = await db
+    .select({ id: signals.id })
+    .from(signals)
+    .where(inArray(signals.id, [...CANONICAL_SIGNAL_IDS]));
+  if (signalRows.length !== EXPECTED_SIGNAL_COUNT) {
+    return false;
+  }
+  const controlledRows = await db
+    .select()
+    .from(actors)
+    .where(eq(actors.id, CONTROLLED_TEST_ACTOR_ID));
+  const controlled = controlledRows[0];
+  return controlled?.accountId === null;
+}
+
 async function assessBaseline(db: Db): Promise<BaselineAssessment> {
   const counts = await readCounts(db);
 
@@ -289,6 +317,10 @@ async function assessBaseline(db: Db): Promise<BaselineAssessment> {
     const actorOk = await controlledActorMatchesCanonical(db);
     if (communitiesOk && signalsOk && actorOk) {
       return { kind: 'exact', counts };
+    }
+    // Same identity set, drifted text/metadata → reconcile via upsert (never delete).
+    if (await canonicalIdentityPresent(db)) {
+      return { kind: 'content_drift', counts };
     }
     return {
       kind: 'refuse',
@@ -452,7 +484,11 @@ export async function runStagingSeed(
       return { outcome: 'already_canonical', counts };
     }
 
-    logEvent('mutate', 'ok', { action: 'seed_foundation_and_controlled_actor' });
+    const mutateAction =
+      baseline.kind === 'content_drift'
+        ? 'reconcile_foundation_content'
+        : 'seed_foundation_and_controlled_actor';
+    logEvent('mutate', 'ok', { action: mutateAction, baseline: baseline.kind });
     const counts = await db.transaction(async (tx) => {
       const txDb = tx as unknown as Db;
       await seedFoundationContent(txDb);
@@ -463,9 +499,10 @@ export async function runStagingSeed(
       return await assertPostInvariants(txDb);
     });
 
-    logEvent('postcheck', 'ok', { ...counts, outcome: 'seeded' });
-    logEvent('complete', 'ok', { outcome: 'seeded', ...counts });
-    return { outcome: 'seeded', counts };
+    const outcome: StagingSeedOutcome = baseline.kind === 'content_drift' ? 'reconciled' : 'seeded';
+    logEvent('postcheck', 'ok', { ...counts, outcome });
+    logEvent('complete', 'ok', { outcome, ...counts });
+    return { outcome, counts };
   } catch (error: unknown) {
     const code = error instanceof StagingSeedError ? error.code : 'UNEXPECTED';
     const message = error instanceof Error ? error.message : 'Staging seed failed';

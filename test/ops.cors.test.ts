@@ -35,7 +35,7 @@ describe('resolveCorsAllowedOrigins', () => {
     ).toThrow(/must not mix staging and production/);
   });
 
-  it('rejects production origins when APP_ENV is staging', () => {
+  it('rejects production origins when APP_ENV is staging by default', () => {
     expect(() =>
       resolveCorsAllowedOrigins(
         createTestEnv({
@@ -46,6 +46,62 @@ describe('resolveCorsAllowedOrigins', () => {
         }),
       ),
     ).toThrow(/production origins are not allowed when APP_ENV is staging/);
+  });
+
+  it('allows exact production web origin on staging when ALLOW_PRODUCTION_WEB_ORIGIN is true', () => {
+    expect(
+      resolveCorsAllowedOrigins(
+        createTestEnv({
+          NODE_ENV: 'production',
+          APP_ENV: 'staging',
+          APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+          DATABASE_URL: 'postgres://town-stg:stg-secret@db.internal:5432/town',
+          WEBAUTHN_ALLOWED_ORIGINS: PRODUCTION_ALLOWED_ORIGIN,
+          ALLOW_PRODUCTION_WEB_ORIGIN: 'true',
+        }),
+      ),
+    ).toEqual([PRODUCTION_ALLOWED_ORIGIN]);
+  });
+
+  it('still rejects staging/production mix even when ALLOW_PRODUCTION_WEB_ORIGIN is true', () => {
+    expect(() =>
+      resolveCorsAllowedOrigins(
+        createTestEnv({
+          NODE_ENV: 'development',
+          APP_ENV: 'staging',
+          APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+          WEBAUTHN_ALLOWED_ORIGINS: `${PRODUCTION_ALLOWED_ORIGIN},${STAGING_ALLOWED_ORIGIN}`,
+          ALLOW_PRODUCTION_WEB_ORIGIN: 'true',
+        }),
+      ),
+    ).toThrow(/must not mix staging and production/);
+  });
+
+  it('does not change production APP_ENV behavior when ALLOW_PRODUCTION_WEB_ORIGIN is true', () => {
+    expect(
+      resolveCorsAllowedOrigins(
+        createTestEnv({
+          NODE_ENV: 'production',
+          APP_ENV: 'production',
+          APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+          DATABASE_URL: 'postgres://town-prod:prod-secret@db.internal:5432/town',
+          WEBAUTHN_ALLOWED_ORIGINS: PRODUCTION_ALLOWED_ORIGIN,
+          ALLOW_PRODUCTION_WEB_ORIGIN: 'true',
+        }),
+      ),
+    ).toEqual([PRODUCTION_ALLOWED_ORIGIN]);
+    expect(() =>
+      resolveCorsAllowedOrigins(
+        createTestEnv({
+          NODE_ENV: 'production',
+          APP_ENV: 'production',
+          APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+          DATABASE_URL: 'postgres://town-prod:prod-secret@db.internal:5432/town',
+          WEBAUTHN_ALLOWED_ORIGINS: STAGING_ALLOWED_ORIGIN,
+          ALLOW_PRODUCTION_WEB_ORIGIN: 'true',
+        }),
+      ),
+    ).toThrow(/staging origins are not allowed when APP_ENV is production/);
   });
 
   it('accepts a Railway *.up.railway.app origin when APP_ENV is staging and NODE_ENV is production', () => {
@@ -188,6 +244,31 @@ describe('runtime CORS policy', () => {
         },
       });
       expect(response.headers['access-control-allow-origin']).toBeUndefined();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('reflects production web origin on staging when ALLOW_PRODUCTION_WEB_ORIGIN is true', async () => {
+    const app = await createTestApp({
+      database: createFakeDatabase({ ready: true }),
+      envOverrides: {
+        NODE_ENV: 'production',
+        APP_ENV: 'staging',
+        APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+        DATABASE_URL: 'postgres://town-stg:stg-secret@db.internal:5432/town',
+        WEBAUTHN_ALLOWED_ORIGINS: PRODUCTION_ALLOWED_ORIGIN,
+        ALLOW_PRODUCTION_WEB_ORIGIN: 'true',
+      },
+    });
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health/live',
+        headers: { origin: PRODUCTION_ALLOWED_ORIGIN },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['access-control-allow-origin']).toBe(PRODUCTION_ALLOWED_ORIGIN);
     } finally {
       await app.close();
     }

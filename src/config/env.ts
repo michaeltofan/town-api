@@ -79,6 +79,12 @@ const EnvSchema = Type.Object(
     CONTROLLED_CONFIRMATION_KEY: Type.Optional(Type.String({ minLength: 1 })),
     // UUID format is validated explicitly below; TypeBox FormatRegistry is not required here.
     CONTROLLED_TEST_ACTOR_ID: Type.Optional(Type.String({ minLength: 36, maxLength: 36 })),
+    /**
+     * Temporary staging-only override: when true, allows exact
+     * https://towncivic.org in WEBAUTHN_ALLOWED_ORIGINS under APP_ENV=staging.
+     * Default false (fail-closed). No effect when APP_ENV=production.
+     */
+    ALLOW_PRODUCTION_WEB_ORIGIN: Type.Boolean({ default: false }),
     EMAIL_VERIFICATION_ENABLED: Type.Boolean({ default: false }),
     EMAIL_VERIFICATION_HASH_KEY: Type.Optional(
       Type.String({ minLength: EMAIL_VERIFICATION_HASH_KEY_MIN_LENGTH }),
@@ -364,6 +370,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     source.CONTROLLED_CONFIRMATION_ENABLED,
     'CONTROLLED_CONFIRMATION_ENABLED',
   );
+  const allowProductionWebOrigin = parseBooleanFlag(
+    source.ALLOW_PRODUCTION_WEB_ORIGIN,
+    'ALLOW_PRODUCTION_WEB_ORIGIN',
+  );
   const emailVerificationEnabled = parseBooleanFlag(
     source.EMAIL_VERIFICATION_ENABLED,
     'EMAIL_VERIFICATION_ENABLED',
@@ -430,6 +440,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     DB_IDLE_TIMEOUT_MS:
       source.DB_IDLE_TIMEOUT_MS === undefined ? 30_000 : parseInteger(source.DB_IDLE_TIMEOUT_MS),
     CONTROLLED_CONFIRMATION_ENABLED: controlledEnabled,
+    ALLOW_PRODUCTION_WEB_ORIGIN: allowProductionWebOrigin,
     EMAIL_VERIFICATION_ENABLED: emailVerificationEnabled,
     WEBAUTHN_REGISTRATION_ENABLED: webauthnRegistrationEnabled,
     PASSKEY_AUTHENTICATION_ENABLED: passkeyAuthenticationEnabled,
