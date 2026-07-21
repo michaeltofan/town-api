@@ -83,10 +83,17 @@ describe('APP_ENV staging Railway origin policy', () => {
     ).toThrow(/production WEBAUTHN_ALLOWED_ORIGINS rejects temporary/);
   });
 
-  it('rejects the production origin under APP_ENV=staging', () => {
+  it('rejects the production origin under APP_ENV=staging by default', () => {
     expect(() => resolveCorsAllowedOrigins(stagingEnv(PRODUCTION_ALLOWED_ORIGIN))).toThrow(
       /production origins are not allowed when APP_ENV is staging/,
     );
+  });
+
+  it('permits the production web origin under APP_ENV=staging when ALLOW_PRODUCTION_WEB_ORIGIN=true', () => {
+    const env = stagingEnv(PRODUCTION_ALLOWED_ORIGIN, {
+      ALLOW_PRODUCTION_WEB_ORIGIN: 'true',
+    });
+    expect(resolveCorsAllowedOrigins(env)).toEqual([PRODUCTION_ALLOWED_ORIGIN]);
   });
 
   it('rejects http Railway staging origins', () => {

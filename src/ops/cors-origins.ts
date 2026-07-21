@@ -41,9 +41,13 @@ export function resolveCorsAllowedOrigins(env: Env): readonly string[] {
   }
 
   if (env.APP_ENV === 'staging' && hasProduction) {
-    throw new Error(
-      'Invalid environment configuration: production origins are not allowed when APP_ENV is staging',
-    );
+    // Fail-closed by default. Explicit temporary override permits only the
+    // exact production web origin (https://towncivic.org) on a staging API.
+    if (!env.ALLOW_PRODUCTION_WEB_ORIGIN) {
+      throw new Error(
+        'Invalid environment configuration: production origins are not allowed when APP_ENV is staging',
+      );
+    }
   }
 
   if (env.APP_ENV === 'production') {

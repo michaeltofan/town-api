@@ -54,6 +54,9 @@ describe('canonical foundation content lock', () => {
     expect(milanoOne?.summary).toContain('Le radici hanno sollevato il marciapiede');
     expect(milanoOne?.description).toContain('via Padova');
     expect(milanoOne?.statusLabel).toContain('osservato');
+    expect(milanoOne?.latestUpdate).toBe(
+      'Il segnale resta locale e aperto. Nessun intervento confermato risulta al momento.',
+    );
 
     const munichOne = FOUNDATION_SIGNALS.find(
       (signal) => signal.id === FOUNDATION_SIGNAL_IDS.munichSignal1,
@@ -73,5 +76,13 @@ describe('canonical foundation content lock', () => {
     });
     expect(munichOne?.summary).toContain('Unebene Platten');
     expect(munichOne?.statusNote).toContain('Beobachtet');
+    expect(munichOne?.latestUpdate).toBe(
+      'Das Signal bleibt lokal und offen. Derzeit liegt keine bestätigte Maßnahme vor.',
+    );
+
+    for (const signal of FOUNDATION_SIGNALS) {
+      expect(signal.latestUpdate).not.toMatch(/prototip|Prototyp/i);
+      expect(JSON.stringify(signal)).not.toMatch(/prototip|Prototyp/i);
+    }
   });
 });

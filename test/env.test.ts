@@ -23,6 +23,7 @@ describe('loadEnv', () => {
       DB_CONNECTION_TIMEOUT_MS: 5000,
       DB_IDLE_TIMEOUT_MS: 30000,
       CONTROLLED_CONFIRMATION_ENABLED: false,
+      ALLOW_PRODUCTION_WEB_ORIGIN: false,
       EMAIL_VERIFICATION_ENABLED: false,
       WEBAUTHN_REGISTRATION_ENABLED: false,
       PASSKEY_AUTHENTICATION_ENABLED: false,
@@ -67,6 +68,7 @@ describe('loadEnv', () => {
       DB_CONNECTION_TIMEOUT_MS: 1500,
       DB_IDLE_TIMEOUT_MS: 12000,
       CONTROLLED_CONFIRMATION_ENABLED: false,
+      ALLOW_PRODUCTION_WEB_ORIGIN: false,
       EMAIL_VERIFICATION_ENABLED: false,
       WEBAUTHN_REGISTRATION_ENABLED: false,
       PASSKEY_AUTHENTICATION_ENABLED: false,
@@ -131,6 +133,34 @@ describe('loadEnv', () => {
         CONTROLLED_CONFIRMATION_ENABLED: 'yes',
       }),
     ).toThrow(/CONTROLLED_CONFIRMATION_ENABLED must be true or false/);
+  });
+
+  it('defaults ALLOW_PRODUCTION_WEB_ORIGIN to false', () => {
+    const env = loadEnv({
+      DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+    });
+    expect(env.ALLOW_PRODUCTION_WEB_ORIGIN).toBe(false);
+  });
+
+  it('parses ALLOW_PRODUCTION_WEB_ORIGIN true/false and rejects invalid values', () => {
+    expect(
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        ALLOW_PRODUCTION_WEB_ORIGIN: 'true',
+      }).ALLOW_PRODUCTION_WEB_ORIGIN,
+    ).toBe(true);
+    expect(
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        ALLOW_PRODUCTION_WEB_ORIGIN: 'false',
+      }).ALLOW_PRODUCTION_WEB_ORIGIN,
+    ).toBe(false);
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        ALLOW_PRODUCTION_WEB_ORIGIN: 'yes',
+      }),
+    ).toThrow(/ALLOW_PRODUCTION_WEB_ORIGIN must be true or false/);
   });
 
   it('requires email verification hash keys and delivery mode when enabled', () => {
