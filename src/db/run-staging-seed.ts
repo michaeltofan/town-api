@@ -378,7 +378,7 @@ async function assertPostInvariants(db: Db): Promise<StagingSeedResult['counts']
   const signalsOk = await signalsMatchCanonical(db);
   const actorOk = await controlledActorMatchesCanonical(db);
 
-  const signalsByCommunityId = new Map<string, Array<typeof signals.$inferSelect>>();
+  const signalsByCommunityId = new Map<string, (typeof signals.$inferSelect)[]>();
   for (const community of FOUNDATION_COMMUNITIES) {
     const communitySignals = await db
       .select()
