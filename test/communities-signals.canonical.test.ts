@@ -7,7 +7,7 @@ import {
 
 describe('canonical foundation content lock', () => {
   it('locks community identifiers and metadata', () => {
-    expect(FOUNDATION_COMMUNITIES).toHaveLength(2);
+    expect(FOUNDATION_COMMUNITIES).toHaveLength(3);
     expect(FOUNDATION_COMMUNITIES[0]).toMatchObject({
       id: '00000000-0000-4000-8000-000000000001',
       slug: 'milano-it',
@@ -30,10 +30,21 @@ describe('canonical foundation content lock', () => {
       timezone: 'Europe/Berlin',
       status: 'active',
     });
+    expect(FOUNDATION_COMMUNITIES[2]).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000003',
+      slug: 'arad-ro',
+      position: 3,
+      countryCode: 'RO',
+      cityName: 'Arad',
+      displayName: 'Arad',
+      defaultLocale: 'ro-RO',
+      timezone: 'Europe/Bucharest',
+      status: 'active',
+    });
   });
 
-  it('locks Italian and German signal identity and approved copy fields', () => {
-    expect(FOUNDATION_SIGNALS).toHaveLength(6);
+  it('locks Italian, German, and Romanian signal identity and approved copy fields', () => {
+    expect(FOUNDATION_SIGNALS).toHaveLength(9);
 
     const milanoOne = FOUNDATION_SIGNALS.find(
       (signal) => signal.id === FOUNDATION_SIGNAL_IDS.milanoSignal1,
@@ -79,6 +90,25 @@ describe('canonical foundation content lock', () => {
     expect(munichOne?.latestUpdate).toBe(
       'Das Signal bleibt lokal und offen. Derzeit liegt keine bestätigte Maßnahme vor.',
     );
+
+    const aradOne = FOUNDATION_SIGNALS.find(
+      (signal) => signal.id === FOUNDATION_SIGNAL_IDS.aradSignal1,
+    );
+    expect(aradOne).toMatchObject({
+      slug: 'arad-signal-1',
+      position: 1,
+      locale: 'ro-RO',
+      category: 'MEDIU',
+      area: 'Pădurea Ceala',
+      headline: 'Moloz depozitat ilegal la marginea pădurii Ceala',
+      authorDisplayName: 'Redacția TOWN Arad',
+      observedLabel: 'Observat săptămâna aceasta',
+      imageKey: 'assets/feed/arad_ceala_mures.jpg',
+      imageFocusX: 50,
+      imageFocusY: 45,
+    });
+    expect(aradOne?.summary).toContain('Camioane cu moloz');
+    expect(aradOne?.description).toContain('pădurii Ceala');
 
     for (const signal of FOUNDATION_SIGNALS) {
       expect(signal.latestUpdate).not.toMatch(/prototip|Prototyp/i);

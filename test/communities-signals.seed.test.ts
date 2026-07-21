@@ -57,15 +57,19 @@ describe('foundation seed', () => {
     await pool.end();
   });
 
-  it('seeds exactly 2 communities and 6 signals with stable IDs/slugs/locales', async () => {
+  it('seeds exactly 3 communities and 9 signals with stable IDs/slugs/locales', async () => {
     const communityRows = await database.db.select().from(communities);
     const signalRows = await database.db.select().from(signals);
 
-    expect(communityRows).toHaveLength(2);
-    expect(signalRows).toHaveLength(6);
+    expect(communityRows).toHaveLength(3);
+    expect(signalRows).toHaveLength(9);
 
     expect(communityRows.map((row) => row.id).sort()).toEqual(
-      [FOUNDATION_COMMUNITY_IDS.milanoIt, FOUNDATION_COMMUNITY_IDS.munichDe].sort(),
+      [
+        FOUNDATION_COMMUNITY_IDS.milanoIt,
+        FOUNDATION_COMMUNITY_IDS.munichDe,
+        FOUNDATION_COMMUNITY_IDS.aradRo,
+      ].sort(),
     );
     expect(signalRows.map((row) => row.id).sort()).toEqual(
       Object.values(FOUNDATION_SIGNAL_IDS).sort(),
@@ -76,6 +80,9 @@ describe('foundation seed', () => {
       .sort((a, b) => a.position - b.position);
     const munichSignals = signalRows
       .filter((row) => row.communityId === FOUNDATION_COMMUNITY_IDS.munichDe)
+      .sort((a, b) => a.position - b.position);
+    const aradSignals = signalRows
+      .filter((row) => row.communityId === FOUNDATION_COMMUNITY_IDS.aradRo)
       .sort((a, b) => a.position - b.position);
 
     expect(milanoSignals.map((row) => row.slug)).toEqual([
@@ -88,10 +95,17 @@ describe('foundation seed', () => {
       'munich-signal-2',
       'munich-signal-3',
     ]);
+    expect(aradSignals.map((row) => row.slug)).toEqual([
+      'arad-signal-1',
+      'arad-signal-2',
+      'arad-signal-3',
+    ]);
     expect(milanoSignals.map((row) => row.position)).toEqual([1, 2, 3]);
     expect(munichSignals.map((row) => row.position)).toEqual([1, 2, 3]);
+    expect(aradSignals.map((row) => row.position)).toEqual([1, 2, 3]);
     expect(milanoSignals.every((row) => row.locale === 'it-IT')).toBe(true);
     expect(munichSignals.every((row) => row.locale === 'de-DE')).toBe(true);
+    expect(aradSignals.every((row) => row.locale === 'ro-RO')).toBe(true);
   });
 
   it('is idempotent and does not drift timestamps or create duplicates', async () => {
@@ -112,8 +126,8 @@ describe('foundation seed', () => {
       .map(normalizeSignal)
       .sort((a, b) => a.id.localeCompare(b.id));
 
-    expect(afterCommunities).toHaveLength(2);
-    expect(afterSignals).toHaveLength(6);
+    expect(afterCommunities).toHaveLength(3);
+    expect(afterSignals).toHaveLength(9);
     expect(afterCommunities).toEqual(beforeCommunities);
     expect(afterSignals).toEqual(beforeSignals);
   });

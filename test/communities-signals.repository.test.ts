@@ -38,7 +38,7 @@ describe('communities and signals repositories', () => {
 
   it('lists active communities ordered by position', async () => {
     const rows = await listActiveCommunities(database.db);
-    expect(rows.map((row) => row.slug)).toEqual(['milano-it', 'munich-de']);
+    expect(rows.map((row) => row.slug)).toEqual(['milano-it', 'munich-de', 'arad-ro']);
     expect(rows.every((row) => row.status === 'active')).toBe(true);
   });
 

@@ -28,11 +28,13 @@ This slice seeds exactly:
 | -------------- | ------- | ------- | ----------- |
 | `milano-it`    | Milano  | `it-IT` | 3 published |
 | `munich-de`    | München | `de-DE` | 3 published |
+| `arad-ro`      | Arad    | `ro-RO` | 3 published |
 
 Signal slugs:
 
 - `milano-signal-1` … `milano-signal-3`
 - `munich-signal-1` … `munich-signal-3`
+- `arad-signal-1` … `arad-signal-3`
 
 Canonical copy is taken from approved `town-public` feed/detail scenes and is not rewritten.
 
@@ -53,7 +55,7 @@ Seed behavior:
 
 - deterministic and idempotent controlled upserts by fixed IDs
 - no truncation / no deletion of unknown records
-- foundation seed yields exactly 2 communities and 6 signals
+- foundation seed yields exactly 3 communities and 9 signals
 - controlled actor seed yields exactly one Milano actor and **zero** confirmation rows
 - not executed by migrations or application startup
 
