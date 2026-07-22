@@ -12,9 +12,7 @@ export type TownObjectStorageAdapter = {
   }) => Promise<ObjectStoragePutResult>;
 };
 
-export type ObjectStoragePutResult =
-  | { ok: true }
-  | { ok: false; reason: 'sdk_error' };
+export type ObjectStoragePutResult = { ok: true } | { ok: false; reason: 'sdk_error' };
 
 export type ObjectStorageLogEvent = {
   event: 'object_storage_put_failed';
