@@ -29,6 +29,7 @@ describe('loadEnv', () => {
       PASSKEY_AUTHENTICATION_ENABLED: false,
       ACCOUNT_RECOVERY_ENABLED: false,
       STRIPE_BILLING_ENABLED: false,
+      OBJECT_STORAGE_ENABLED: false,
       TRUST_PROXY: false,
     });
   });
@@ -74,6 +75,7 @@ describe('loadEnv', () => {
       PASSKEY_AUTHENTICATION_ENABLED: false,
       ACCOUNT_RECOVERY_ENABLED: false,
       STRIPE_BILLING_ENABLED: false,
+      OBJECT_STORAGE_ENABLED: false,
       TRUST_PROXY: true,
     });
   });
@@ -328,5 +330,53 @@ describe('loadEnv', () => {
         DB_POOL_MAX: '0',
       }),
     ).toThrow(/Invalid environment configuration/);
+  });
+
+  it('rejects missing OBJECT_STORAGE_ENDPOINT when object storage is enabled', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        OBJECT_STORAGE_ENABLED: 'true',
+        OBJECT_STORAGE_BUCKET: 'town-media',
+        OBJECT_STORAGE_ACCESS_KEY_ID: 'access-key',
+        OBJECT_STORAGE_SECRET_ACCESS_KEY: 'secret-key',
+      }),
+    ).toThrow(/OBJECT_STORAGE_ENDPOINT is required/);
+  });
+
+  it('rejects missing OBJECT_STORAGE_BUCKET when object storage is enabled', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        OBJECT_STORAGE_ENABLED: 'true',
+        OBJECT_STORAGE_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
+        OBJECT_STORAGE_ACCESS_KEY_ID: 'access-key',
+        OBJECT_STORAGE_SECRET_ACCESS_KEY: 'secret-key',
+      }),
+    ).toThrow(/OBJECT_STORAGE_BUCKET is required/);
+  });
+
+  it('rejects missing OBJECT_STORAGE_ACCESS_KEY_ID when object storage is enabled', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        OBJECT_STORAGE_ENABLED: 'true',
+        OBJECT_STORAGE_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
+        OBJECT_STORAGE_BUCKET: 'town-media',
+        OBJECT_STORAGE_SECRET_ACCESS_KEY: 'secret-key',
+      }),
+    ).toThrow(/OBJECT_STORAGE_ACCESS_KEY_ID is required/);
+  });
+
+  it('rejects missing OBJECT_STORAGE_SECRET_ACCESS_KEY when object storage is enabled', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        OBJECT_STORAGE_ENABLED: 'true',
+        OBJECT_STORAGE_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
+        OBJECT_STORAGE_BUCKET: 'town-media',
+        OBJECT_STORAGE_ACCESS_KEY_ID: 'access-key',
+      }),
+    ).toThrow(/OBJECT_STORAGE_SECRET_ACCESS_KEY is required/);
   });
 });

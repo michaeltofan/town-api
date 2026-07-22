@@ -133,6 +133,11 @@ const EnvSchema = Type.Object(
     STRIPE_PORTAL_RETURN_URL: Type.Optional(Type.String({ minLength: 8 })),
     STRIPE_API_VERSION: Type.Optional(Type.Literal('2026-06-24.dahlia')),
     STRIPE_EXPECTED_LIVEMODE: Type.Optional(Type.Boolean()),
+    OBJECT_STORAGE_ENABLED: Type.Boolean({ default: false }),
+    OBJECT_STORAGE_ENDPOINT: Type.Optional(Type.String({ minLength: 1 })),
+    OBJECT_STORAGE_BUCKET: Type.Optional(Type.String({ minLength: 1 })),
+    OBJECT_STORAGE_ACCESS_KEY_ID: Type.Optional(Type.String({ minLength: 1 })),
+    OBJECT_STORAGE_SECRET_ACCESS_KEY: Type.Optional(Type.String({ minLength: 1 })),
     TRUST_PROXY: Type.Boolean({ default: false }),
   },
   { additionalProperties: false },
@@ -285,6 +290,12 @@ function sanitizeEnvErrorPath(path: string, message: string): string {
   if (path.includes('EMAIL_VERIFICATION_RESEND_API_KEY')) {
     return `${path}: must meet minimum length when Resend delivery is configured`;
   }
+  if (path.includes('OBJECT_STORAGE_ACCESS_KEY_ID')) {
+    return `${path}: must be a non-empty string when object storage is enabled`;
+  }
+  if (path.includes('OBJECT_STORAGE_SECRET_ACCESS_KEY')) {
+    return `${path}: must be a non-empty string when object storage is enabled`;
+  }
   if (
     path.includes('EMAIL_VERIFICATION_FROM_ADDRESS') ||
     path.includes('EMAIL_VERIFICATION_REPLY_TO')
@@ -391,6 +402,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     'ACCOUNT_RECOVERY_ENABLED',
   );
   const trustProxy = parseBooleanFlag(source.TRUST_PROXY, 'TRUST_PROXY');
+  const objectStorageEnabled = parseBooleanFlag(
+    source.OBJECT_STORAGE_ENABLED,
+    'OBJECT_STORAGE_ENABLED',
+  );
   const stripeBillingEnabled = parseBooleanFlag(
     source.STRIPE_BILLING_ENABLED,
     'STRIPE_BILLING_ENABLED',
@@ -446,8 +461,36 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     PASSKEY_AUTHENTICATION_ENABLED: passkeyAuthenticationEnabled,
     ACCOUNT_RECOVERY_ENABLED: accountRecoveryEnabled,
     STRIPE_BILLING_ENABLED: stripeBillingEnabled,
+    OBJECT_STORAGE_ENABLED: objectStorageEnabled,
     TRUST_PROXY: trustProxy,
   };
+
+  if (objectStorageEnabled) {
+    if (!isNonEmptyString(source.OBJECT_STORAGE_ENDPOINT)) {
+      throw new Error(
+        'Invalid environment configuration: OBJECT_STORAGE_ENDPOINT is required when OBJECT_STORAGE_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(source.OBJECT_STORAGE_BUCKET)) {
+      throw new Error(
+        'Invalid environment configuration: OBJECT_STORAGE_BUCKET is required when OBJECT_STORAGE_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(source.OBJECT_STORAGE_ACCESS_KEY_ID)) {
+      throw new Error(
+        'Invalid environment configuration: OBJECT_STORAGE_ACCESS_KEY_ID is required when OBJECT_STORAGE_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(source.OBJECT_STORAGE_SECRET_ACCESS_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: OBJECT_STORAGE_SECRET_ACCESS_KEY is required when OBJECT_STORAGE_ENABLED is true',
+      );
+    }
+    candidate.OBJECT_STORAGE_ENDPOINT = source.OBJECT_STORAGE_ENDPOINT;
+    candidate.OBJECT_STORAGE_BUCKET = source.OBJECT_STORAGE_BUCKET;
+    candidate.OBJECT_STORAGE_ACCESS_KEY_ID = source.OBJECT_STORAGE_ACCESS_KEY_ID;
+    candidate.OBJECT_STORAGE_SECRET_ACCESS_KEY = source.OBJECT_STORAGE_SECRET_ACCESS_KEY;
+  }
 
   if (controlledEnabled) {
     if (!isNonEmptyString(source.CONTROLLED_CONFIRMATION_KEY)) {
