@@ -240,6 +240,40 @@ export const signalConfirmations = town.table(
   ],
 );
 
+export const signalSubmissions = town.table(
+  'signal_submissions',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    actorId: uuid('actor_id').notNull(),
+    communityId: uuid('community_id').notNull(),
+    headline: text('headline').notNull(),
+    body: text('body').notNull(),
+    status: text('status').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'signal_submissions_account_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.actorId],
+      foreignColumns: [actors.id],
+      name: 'signal_submissions_actor_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.communityId],
+      foreignColumns: [communities.id],
+      name: 'signal_submissions_community_id_fkey',
+    }).onDelete('restrict'),
+    check('signal_submissions_status_valid', sql`${table.status} in ('pending_review')`),
+    index('signal_submissions_account_created_at_idx').on(table.accountId, table.createdAt),
+  ],
+);
+
 export const accountEmails = town.table(
   'account_emails',
   {
@@ -932,6 +966,7 @@ export type CommunityRow = typeof communities.$inferSelect;
 export type SignalRow = typeof signals.$inferSelect;
 export type ActorRow = typeof actors.$inferSelect;
 export type SignalConfirmationRow = typeof signalConfirmations.$inferSelect;
+export type SignalSubmissionRow = typeof signalSubmissions.$inferSelect;
 export type AccountRow = typeof accounts.$inferSelect;
 export type AccountEmailRow = typeof accountEmails.$inferSelect;
 export type PasskeyCredentialRow = typeof passkeyCredentials.$inferSelect;
@@ -1054,4 +1089,5 @@ export type MembershipSourceEventResult = 'applied' | 'replayed' | 'rejected' | 
 export type CivicAccessLevel = 'visitor' | 'read_only' | 'participant';
 export type LocalParticipationEligibility =
   'eligible' | 'not_verified' | 'expired' | 'mismatched_community' | 'unavailable';
+export type SignalSubmissionStatus = 'pending_review';
 export type StripeCheckoutAttemptStatus = 'creating' | 'open' | 'completed' | 'expired' | 'failed';

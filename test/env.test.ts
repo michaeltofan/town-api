@@ -31,6 +31,7 @@ describe('loadEnv', () => {
       LOCAL_ELIGIBILITY_ENABLED: false,
       STRIPE_BILLING_ENABLED: false,
       OBJECT_STORAGE_ENABLED: false,
+      SIGNAL_SUBMISSION_ENABLED: false,
       TRUST_PROXY: false,
     });
   });
@@ -78,6 +79,7 @@ describe('loadEnv', () => {
       LOCAL_ELIGIBILITY_ENABLED: false,
       STRIPE_BILLING_ENABLED: false,
       OBJECT_STORAGE_ENABLED: false,
+      SIGNAL_SUBMISSION_ENABLED: false,
       TRUST_PROXY: true,
     });
   });

@@ -139,6 +139,7 @@ const EnvSchema = Type.Object(
     OBJECT_STORAGE_BUCKET: Type.Optional(Type.String({ minLength: 1 })),
     OBJECT_STORAGE_ACCESS_KEY_ID: Type.Optional(Type.String({ minLength: 1 })),
     OBJECT_STORAGE_SECRET_ACCESS_KEY: Type.Optional(Type.String({ minLength: 1 })),
+    SIGNAL_SUBMISSION_ENABLED: Type.Boolean({ default: false }),
     TRUST_PROXY: Type.Boolean({ default: false }),
   },
   { additionalProperties: false },
@@ -411,6 +412,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     source.OBJECT_STORAGE_ENABLED,
     'OBJECT_STORAGE_ENABLED',
   );
+  const signalSubmissionEnabled = parseBooleanFlag(
+    source.SIGNAL_SUBMISSION_ENABLED,
+    'SIGNAL_SUBMISSION_ENABLED',
+  );
   const stripeBillingEnabled = parseBooleanFlag(
     source.STRIPE_BILLING_ENABLED,
     'STRIPE_BILLING_ENABLED',
@@ -468,6 +473,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     LOCAL_ELIGIBILITY_ENABLED: localEligibilityEnabled,
     STRIPE_BILLING_ENABLED: stripeBillingEnabled,
     OBJECT_STORAGE_ENABLED: objectStorageEnabled,
+    SIGNAL_SUBMISSION_ENABLED: signalSubmissionEnabled,
     TRUST_PROXY: trustProxy,
   };
 
