@@ -85,6 +85,13 @@
       "when": 1784295489554,
       "tag": "0011_stripe_billing_integration_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784788249627,
+      "tag": "0012_local_eligibility_verified_at",
+      "breakpoints": true
     }
   ]
 }

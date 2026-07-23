@@ -1,0 +1,1 @@
+ALTER TABLE "town"."actors" ADD COLUMN "local_eligibility_verified_at" timestamp with time zone;

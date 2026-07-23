@@ -9,10 +9,7 @@ import {
   evaluateCivicAccess,
   resolveEffectiveMembershipStatus,
 } from '../src/membership/civic-access.js';
-import {
-  createDefaultLocalEligibilityResolver,
-  createEligibleTestResolver,
-} from '../src/membership/local-eligibility.js';
+import { createDefaultLocalEligibilityResolver } from '../src/membership/local-eligibility.js';
 
 const NOW = '2026-07-17T12:00:00.000Z';
 const ACCOUNT_ID = '10000000-0000-4000-8000-000000000001';
@@ -43,6 +40,7 @@ function makeActor(overrides: Partial<ActorRow> = {}): ActorRow {
     displayLabel: 'Civic',
     communityId: COMMUNITY_ID,
     accountId: ACCOUNT_ID,
+    localEligibilityVerifiedAt: null,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -102,12 +100,7 @@ describe('resolveEffectiveMembershipStatus', () => {
 });
 
 describe('evaluateCivicAccess', () => {
-  const eligibleResolver = createEligibleTestResolver();
-  const eligibleLocal: LocalParticipationEligibility = eligibleResolver({
-    accountId: ACCOUNT_ID,
-    actorId: 'x',
-    communityId: COMMUNITY_ID,
-  }) as LocalParticipationEligibility;
+  const eligibleLocal: LocalParticipationEligibility = 'eligible';
 
   it('returns visitor when session is absent', () => {
     const result = evaluateCivicAccess({
@@ -239,24 +232,146 @@ describe('evaluateCivicAccess', () => {
 });
 
 describe('createDefaultLocalEligibilityResolver', () => {
-  it('is fail-closed in production', async () => {
-    const resolver = createDefaultLocalEligibilityResolver({ nodeEnv: 'production' });
+  const actorBound = {
+    id: '20000000-0000-4000-8000-000000000001',
+    communityId: COMMUNITY_ID,
+    localEligibilityVerifiedAt: NOW,
+  };
+
+  it('is fail-closed when LOCAL_ELIGIBILITY_ENABLED is false', async () => {
+    const resolver = createDefaultLocalEligibilityResolver({
+      localEligibilityEnabled: false,
+    });
     await expect(
-      Promise.resolve(resolver({ accountId: 'a', actorId: 'x', communityId: 'c' })),
+      Promise.resolve(
+        resolver({
+          accountId: 'a',
+          actorId: actorBound.id,
+          communityId: COMMUNITY_ID,
+          actor: actorBound,
+        }),
+      ),
     ).resolves.toBe('unavailable');
   });
 
-  it('is fail-closed in test', async () => {
-    const resolver = createDefaultLocalEligibilityResolver({ nodeEnv: 'test' });
+  it('derives eligible when enabled and community matches with verified_at', async () => {
+    const resolver = createDefaultLocalEligibilityResolver({
+      localEligibilityEnabled: true,
+    });
     await expect(
-      Promise.resolve(resolver({ accountId: 'a', actorId: 'x', communityId: 'c' })),
-    ).resolves.toBe('unavailable');
+      Promise.resolve(
+        resolver({
+          accountId: ACCOUNT_ID,
+          actorId: actorBound.id,
+          communityId: COMMUNITY_ID,
+          actor: actorBound,
+        }),
+      ),
+    ).resolves.toBe('eligible');
   });
 
-  it('is fail-closed in development', async () => {
-    const resolver = createDefaultLocalEligibilityResolver({ nodeEnv: 'development' });
+  it('derives not_verified when enabled and verified_at is null', async () => {
+    const resolver = createDefaultLocalEligibilityResolver({
+      localEligibilityEnabled: true,
+    });
     await expect(
-      Promise.resolve(resolver({ accountId: 'a', actorId: 'x', communityId: 'c' })),
-    ).resolves.toBe('unavailable');
+      Promise.resolve(
+        resolver({
+          accountId: ACCOUNT_ID,
+          actorId: actorBound.id,
+          communityId: COMMUNITY_ID,
+          actor: { ...actorBound, localEligibilityVerifiedAt: null },
+        }),
+      ),
+    ).resolves.toBe('not_verified');
+  });
+
+  it('derives mismatched_community when enabled and communities differ', async () => {
+    const resolver = createDefaultLocalEligibilityResolver({
+      localEligibilityEnabled: true,
+    });
+    await expect(
+      Promise.resolve(
+        resolver({
+          accountId: ACCOUNT_ID,
+          actorId: actorBound.id,
+          communityId: OTHER_COMMUNITY_ID,
+          actor: actorBound,
+        }),
+      ),
+    ).resolves.toBe('mismatched_community');
+  });
+
+  it('derives not_verified when enabled and actor is null', async () => {
+    const resolver = createDefaultLocalEligibilityResolver({
+      localEligibilityEnabled: true,
+    });
+    await expect(
+      Promise.resolve(
+        resolver({
+          accountId: ACCOUNT_ID,
+          actorId: actorBound.id,
+          communityId: COMMUNITY_ID,
+          actor: null,
+        }),
+      ),
+    ).resolves.toBe('not_verified');
+  });
+
+  it('derives not_verified when enabled and community_id is null', async () => {
+    const resolver = createDefaultLocalEligibilityResolver({
+      localEligibilityEnabled: true,
+    });
+    await expect(
+      Promise.resolve(
+        resolver({
+          accountId: ACCOUNT_ID,
+          actorId: actorBound.id,
+          communityId: COMMUNITY_ID,
+          actor: { ...actorBound, communityId: null, localEligibilityVerifiedAt: null },
+        }),
+      ),
+    ).resolves.toBe('not_verified');
+  });
+
+  it('never returns expired when enabled', async () => {
+    const resolver = createDefaultLocalEligibilityResolver({
+      localEligibilityEnabled: true,
+    });
+    const results = await Promise.all([
+      Promise.resolve(
+        resolver({
+          accountId: ACCOUNT_ID,
+          actorId: actorBound.id,
+          communityId: COMMUNITY_ID,
+          actor: null,
+        }),
+      ),
+      Promise.resolve(
+        resolver({
+          accountId: ACCOUNT_ID,
+          actorId: actorBound.id,
+          communityId: COMMUNITY_ID,
+          actor: { ...actorBound, communityId: null, localEligibilityVerifiedAt: null },
+        }),
+      ),
+      Promise.resolve(
+        resolver({
+          accountId: ACCOUNT_ID,
+          actorId: actorBound.id,
+          communityId: OTHER_COMMUNITY_ID,
+          actor: actorBound,
+        }),
+      ),
+      Promise.resolve(
+        resolver({
+          accountId: ACCOUNT_ID,
+          actorId: actorBound.id,
+          communityId: COMMUNITY_ID,
+          actor: actorBound,
+        }),
+      ),
+    ]);
+    expect(results).not.toContain('expired');
   });
 });

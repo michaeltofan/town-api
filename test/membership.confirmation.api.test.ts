@@ -228,7 +228,9 @@ describe('PUT /v1/signals/:signalId/confirmation (participant)', () => {
 
     beforeAll(async () => {
       ctx = await createMembershipTestApp({
-        localEligibilityResolver: createDefaultLocalEligibilityResolver({ nodeEnv: 'test' }),
+        localEligibilityResolver: createDefaultLocalEligibilityResolver({
+          localEligibilityEnabled: false,
+        }),
       });
     });
 

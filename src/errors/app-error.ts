@@ -46,6 +46,14 @@ export function membershipAlreadyActiveError(): AppError {
   return new AppError(409, 'MEMBERSHIP_ALREADY_ACTIVE', 'Membership is already active.');
 }
 
+export function localEligibilityAlreadyBoundError(): AppError {
+  return new AppError(
+    409,
+    'LOCAL_ELIGIBILITY_ALREADY_BOUND',
+    'Local eligibility is already bound to a different community.',
+  );
+}
+
 export function billingManageExistingSubscriptionError(): AppError {
   return new AppError(
     409,

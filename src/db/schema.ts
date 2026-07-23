@@ -181,6 +181,10 @@ export const actors = town.table(
     displayLabel: text('display_label').notNull(),
     communityId: uuid('community_id'),
     accountId: uuid('account_id'),
+    localEligibilityVerifiedAt: timestamp('local_eligibility_verified_at', {
+      withTimezone: true,
+      mode: 'string',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
   },

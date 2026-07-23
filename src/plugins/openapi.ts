@@ -33,7 +33,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Account',
           description:
-            'Account setup email verification, first-passkey WebAuthn registration, bounded account recovery, session-authenticated passkey management, and session-authenticated membership entitlement inventory read at GET /v1/account/membership. First-passkey registration requires SetupGrant. Passkey management (including add-passkey) requires an active Session only. Recovery grants are restricted authorization, not sessions. Membership inventory never exposes Stripe customer or subscription identifiers.',
+            'Account setup email verification, first-passkey WebAuthn registration, bounded account recovery, session-authenticated passkey management, session-authenticated membership entitlement inventory read at GET /v1/account/membership, and flag-gated set-once local eligibility bind at PUT /v1/account/eligibility. First-passkey registration requires SetupGrant. Passkey management (including add-passkey) requires an active Session only. Recovery grants are restricted authorization, not sessions. Membership inventory never exposes Stripe customer or subscription identifiers. LOCAL_ELIGIBILITY_ENABLED defaults to false.',
         },
         {
           name: 'Authentication',

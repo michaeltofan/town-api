@@ -88,6 +88,7 @@ export async function createCivicActor(
       displayLabel: input.displayLabel,
       communityId: input.communityId,
       accountId: null,
+      localEligibilityVerifiedAt: null,
       createdAt: input.createdAt,
       updatedAt: input.updatedAt,
     })
@@ -95,6 +96,36 @@ export async function createCivicActor(
   const row = rows[0];
   if (!row) {
     throw new Error('Failed to create civic actor');
+  }
+  return row;
+}
+
+/**
+ * Set-once community binding for local eligibility.
+ * Caller must hold the account row lock and decide bind vs idempotent vs conflict
+ * before invoking. Executes on the provided transaction handle only.
+ */
+export async function bindActorLocalEligibility(
+  db: Db,
+  input: {
+    actorId: string;
+    communityId: string;
+    verifiedAt: string;
+    updatedAt: string;
+  },
+): Promise<ActorRow> {
+  const updated = await db
+    .update(actors)
+    .set({
+      communityId: input.communityId,
+      localEligibilityVerifiedAt: input.verifiedAt,
+      updatedAt: input.updatedAt,
+    })
+    .where(eq(actors.id, input.actorId))
+    .returning();
+  const row = updated[0];
+  if (!row) {
+    throw new IdentityInvariantError('ACTOR_NOT_FOUND', 'Actor was not found');
   }
   return row;
 }

@@ -1,9 +1,15 @@
-import type { LocalParticipationEligibility } from '../db/schema.js';
+import type { ActorRow, LocalParticipationEligibility } from '../db/schema.js';
+
+export type LocalEligibilityActorView = Pick<
+  ActorRow,
+  'id' | 'communityId' | 'localEligibilityVerifiedAt'
+>;
 
 export type LocalParticipationEligibilityResolver = (input: {
   accountId: string;
   actorId: string;
   communityId: string;
+  actor: LocalEligibilityActorView | null;
 }) => Promise<LocalParticipationEligibility> | LocalParticipationEligibility;
 
 export const DefaultFailClosedLocalEligibilityResolver: LocalParticipationEligibilityResolver =
@@ -14,12 +20,29 @@ export function createEligibleTestResolver(): LocalParticipationEligibilityResol
   return () => 'eligible';
 }
 
+function deriveEnabledLocalEligibility(input: {
+  actor: LocalEligibilityActorView | null;
+  communityId: string;
+}): LocalParticipationEligibility {
+  const actor = input.actor;
+  if (actor?.communityId == null || actor.localEligibilityVerifiedAt == null) {
+    return 'not_verified';
+  }
+  if (actor.communityId !== input.communityId) {
+    return 'mismatched_community';
+  }
+  return 'eligible';
+}
+
 export function createDefaultLocalEligibilityResolver(input: {
-  nodeEnv?: string;
+  localEligibilityEnabled: boolean;
 }): LocalParticipationEligibilityResolver {
-  const nodeEnv = input.nodeEnv ?? process.env.NODE_ENV ?? 'development';
-  if (nodeEnv === 'production' || nodeEnv === 'test') {
+  if (!input.localEligibilityEnabled) {
     return DefaultFailClosedLocalEligibilityResolver;
   }
-  return DefaultFailClosedLocalEligibilityResolver;
+  return (resolveInput) =>
+    deriveEnabledLocalEligibility({
+      actor: resolveInput.actor,
+      communityId: resolveInput.communityId,
+    });
 }

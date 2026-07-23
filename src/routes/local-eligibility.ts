@@ -8,23 +8,21 @@ import {
   type SessionTransportExtraction,
 } from '../ceremony/passkey-authentication/session-transport.js';
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
-import { AppError } from '../errors/app-error.js';
+import { findActiveCommunityBySlug } from '../db/repositories/communities.js';
+import { AppError, communityNotFoundError } from '../errors/app-error.js';
+import { bindLocalEligibilityInTransaction } from '../membership/bind-service.js';
 import {
-  createDefaultLocalEligibilityResolver,
-  type LocalParticipationEligibilityResolver,
-} from '../membership/local-eligibility.js';
+  LocalEligibilityBindBodySchema,
+  LocalEligibilityRouteResponses,
+} from '../membership/local-eligibility-schemas.js';
 import {
-  isMembershipInventoryThrottled,
-  recordMembershipInventoryAttempt,
+  isLocalEligibilityBindThrottled,
+  recordLocalEligibilityBindAttempt,
 } from '../membership/rate-limits.js';
-import { getAccountMembershipView } from '../membership/read-service.js';
-import { MembershipRouteResponses } from '../membership/schemas.js';
 
-export type MembershipRoutesOptions = {
+export type LocalEligibilityRoutesOptions = {
   env: Env;
   now?: () => string;
-  generateId?: () => string;
-  localEligibilityResolver?: LocalParticipationEligibilityResolver;
 };
 
 function sessionNotAuthorizedError(): AppError {
@@ -80,18 +78,13 @@ function assertWebCsrf(input: {
   }
 }
 
-export const membershipRoutes: FastifyPluginCallbackTypebox<MembershipRoutesOptions> = (
+export const localEligibilityRoutes: FastifyPluginCallbackTypebox<LocalEligibilityRoutesOptions> = (
   app,
   options,
   done,
 ) => {
   const { env } = options;
   const now = () => (options.now ?? (() => new Date().toISOString()))();
-  const resolver: LocalParticipationEligibilityResolver =
-    options.localEligibilityResolver ??
-    createDefaultLocalEligibilityResolver({
-      localEligibilityEnabled: env.LOCAL_ELIGIBILITY_ENABLED,
-    });
 
   async function requireSession(request: {
     headers: {
@@ -100,7 +93,6 @@ export const membershipRoutes: FastifyPluginCallbackTypebox<MembershipRoutesOpti
       'sec-fetch-site'?: string | string[] | undefined;
     };
     cookies?: Record<string, string | undefined>;
-    mutative?: boolean;
   }): Promise<NonNullable<Awaited<ReturnType<typeof resolveActiveSession>>>> {
     rejectNonSessionSchemes(request.headers.authorization);
     const config = requirePasskeyManagementConfig(env);
@@ -112,7 +104,7 @@ export const membershipRoutes: FastifyPluginCallbackTypebox<MembershipRoutesOpti
     if (!extracted.ok) {
       throw sessionNotAuthorizedError();
     }
-    if (extracted.clientType === 'web' && request.mutative !== false) {
+    if (extracted.clientType === 'web') {
       assertWebCsrf({
         originHeader: singleHeader(request.headers.origin),
         secFetchSite: singleHeader(request.headers['sec-fetch-site']),
@@ -133,37 +125,42 @@ export const membershipRoutes: FastifyPluginCallbackTypebox<MembershipRoutesOpti
     return session;
   }
 
-  app.get(
-    '/v1/account/membership',
+  app.put(
+    '/v1/account/eligibility',
     {
       schema: {
         tags: ['Account'],
-        summary: 'Read the authenticated account membership entitlement and civic access view',
+        summary: 'Bind local participation eligibility to an active community (set-once)',
         description:
-          'Returns the effective membership status (inactive/active/cancelling/expired), accessUntil, cancelAtPeriodEnd, and the civic access level derived from membership, actor linkage, and fail-closed local eligibility. Requires an active web or mobile session. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes Stripe customer or subscription identifiers.',
+          "SET-ONCE SEMANTICS: this is deliberately not a replacing PUT. If the account has no community binding, the binding is created. If a binding already exists for the same community the request is idempotent and verifiedAt is NOT refreshed. If a binding exists for a different community the request is rejected with 409. Community transfer and re-verification are not supported by this endpoint.\n\nTRUST LIMITATION: the community in the request body is a client assertion. Local eligibility is determined on the client device and raw location data never reaches the server, so the server cannot independently validate the claim. Any session holder can assert any active community slug. This capability is gated behind LOCAL_ELIGIBILITY_ENABLED, which must remain false in any environment reachable by untrusted clients until either the server can validate eligibility evidence independently of the client's claim, or access is technically restricted to approved test accounts or a separate controlled environment.",
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
-        response: MembershipRouteResponses.accountMembership,
+        body: LocalEligibilityBindBodySchema,
+        response: LocalEligibilityRouteResponses.bind,
       },
     },
     async (request, reply) => {
+      if (!env.LOCAL_ELIGIBILITY_ENABLED) {
+        reply.callNotFound();
+        return;
+      }
       if (!env.PASSKEY_AUTHENTICATION_ENABLED) {
         reply.callNotFound();
         return;
       }
+
       const session = await requireSession({
         headers: request.headers,
         cookies: request.cookies,
-        mutative: false,
       });
 
       const config = requirePasskeyManagementConfig(env);
       const nowIso = now();
-      const throttled = await isMembershipInventoryThrottled(app.database.db, {
+      const throttled = await isLocalEligibilityBindThrottled(app.database.db, {
         rateLimitHashKey: config.rateLimitHashKey,
         accountId: session.accountId,
         now: nowIso,
       });
-      await recordMembershipInventoryAttempt(app.database.db, {
+      await recordLocalEligibilityBindAttempt(app.database.db, {
         rateLimitHashKey: config.rateLimitHashKey,
         accountId: session.accountId,
         now: nowIso,
@@ -174,14 +171,20 @@ export const membershipRoutes: FastifyPluginCallbackTypebox<MembershipRoutesOpti
         throw rateLimitedError();
       }
 
-      const view = await getAccountMembershipView(app.database.db, {
-        accountId: session.accountId,
-        session: { accountId: session.accountId },
-        localEligibilityResolver: resolver,
-        now: nowIso,
+      const community = await findActiveCommunityBySlug(app.database.db, request.body.community);
+      if (!community) {
+        throw communityNotFoundError();
+      }
+
+      const result = await app.database.db.transaction(async (tx) => {
+        return bindLocalEligibilityInTransaction(tx, {
+          accountId: session.accountId,
+          community,
+          now: nowIso,
+        });
       });
 
-      return await reply.status(200).send({ data: view });
+      return await reply.status(200).send({ data: result });
     },
   );
 
