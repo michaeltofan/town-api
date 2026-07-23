@@ -123,6 +123,7 @@ const EnvSchema = Type.Object(
     ACCOUNT_RECOVERY_DELIVERY_MODE: Type.Optional(
       Type.Union([Type.Literal('test'), Type.Literal('development')]),
     ),
+    LOCAL_ELIGIBILITY_ENABLED: Type.Boolean({ default: false }),
     STRIPE_BILLING_ENABLED: Type.Boolean({ default: false }),
     STRIPE_SECRET_KEY: Type.Optional(Type.String({ minLength: 20 })),
     STRIPE_WEBHOOK_SECRET: Type.Optional(Type.String({ minLength: 20 })),
@@ -401,6 +402,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     source.ACCOUNT_RECOVERY_ENABLED,
     'ACCOUNT_RECOVERY_ENABLED',
   );
+  const localEligibilityEnabled = parseBooleanFlag(
+    source.LOCAL_ELIGIBILITY_ENABLED,
+    'LOCAL_ELIGIBILITY_ENABLED',
+  );
   const trustProxy = parseBooleanFlag(source.TRUST_PROXY, 'TRUST_PROXY');
   const objectStorageEnabled = parseBooleanFlag(
     source.OBJECT_STORAGE_ENABLED,
@@ -460,6 +465,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     WEBAUTHN_REGISTRATION_ENABLED: webauthnRegistrationEnabled,
     PASSKEY_AUTHENTICATION_ENABLED: passkeyAuthenticationEnabled,
     ACCOUNT_RECOVERY_ENABLED: accountRecoveryEnabled,
+    LOCAL_ELIGIBILITY_ENABLED: localEligibilityEnabled,
     STRIPE_BILLING_ENABLED: stripeBillingEnabled,
     OBJECT_STORAGE_ENABLED: objectStorageEnabled,
     TRUST_PROXY: trustProxy,

@@ -15,6 +15,7 @@ function toActorInsert(row: CanonicalControlledActor): ActorRow {
     displayLabel: row.displayLabel,
     communityId: row.communityId,
     accountId: null,
+    localEligibilityVerifiedAt: null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -38,6 +39,7 @@ export async function seedControlledActor(db: Db): Promise<void> {
         displayLabel: values.displayLabel,
         communityId: values.communityId,
         accountId: null,
+        localEligibilityVerifiedAt: null,
         createdAt: values.createdAt,
         updatedAt: values.updatedAt,
       },

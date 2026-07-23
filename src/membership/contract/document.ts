@@ -102,8 +102,29 @@ export function generateMembershipContractDocument(): unknown {
     localEligibility: {
       values: ['eligible', 'not_verified', 'expired', 'mismatched_community', 'unavailable'],
       failClosedDefault: 'unavailable',
-      productionBehavior: 'never eligible; runtime resolver is not shipped in this slice',
+      featureFlag: 'LOCAL_ELIGIBILITY_ENABLED',
+      featureFlagDefault: false,
+      disabledBehavior:
+        'resolver always returns unavailable (byte-identical to prior fail-closed default)',
+      enabledDerivation: [
+        'not_verified when actor is null, community_id is null, or local_eligibility_verified_at is null',
+        'mismatched_community when actor.community_id differs from the community being evaluated',
+        'eligible when actor.community_id matches the evaluated community and local_eligibility_verified_at is set',
+        'expired is never returned by the runtime resolver',
+      ],
+      setOnceBindRoute: 'PUT /v1/account/eligibility',
+      setOnceSemantics: [
+        'null community_id creates the binding and sets local_eligibility_verified_at',
+        'same community_id is idempotent and does not refresh verified_at',
+        'different community_id returns 409 LOCAL_ELIGIBILITY_ALREADY_BOUND',
+        'community transfer and re-verification are not supported',
+      ],
+      trustLimitation:
+        'Request body community is a client assertion; raw location data never reaches the server; flag must remain false for untrusted clients until independent validation or controlled access exists',
+      productionBehavior:
+        'disabled by default via LOCAL_ELIGIBILITY_ENABLED=false; when disabled, resolver returns unavailable',
       testBehavior: 'test-only resolver may return eligible for participant coverage',
+      actorColumn: 'town.actors.local_eligibility_verified_at',
     },
     transitions: {
       activate: {
@@ -170,6 +191,7 @@ export function generateMembershipContractDocument(): unknown {
     routes: {
       publicMembershipRoutes: ['GET /v1/account/membership'],
       publicMembershipMutationRoutes: [],
+      localEligibilityBindRoute: 'PUT /v1/account/eligibility',
       participantSignalConfirmation: 'PUT /v1/signals/:signalId/confirmation',
       controlledSignalConfirmationRead: 'GET /v1/signals/:signalId/confirmation',
     },

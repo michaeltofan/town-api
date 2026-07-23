@@ -40,6 +40,7 @@ export async function getAccountMembershipView(
             accountId: input.accountId,
             actorId: actor.id,
             communityId,
+            actor,
           }),
         )
       : 'not_verified';

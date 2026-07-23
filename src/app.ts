@@ -23,6 +23,7 @@ import { passkeyManagementRoutes } from './routes/passkey-management.js';
 import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { signalsRoutes } from './routes/signals.js';
 import { billingRoutes } from './routes/billing.js';
+import { localEligibilityRoutes } from './routes/local-eligibility.js';
 import type { LocalParticipationEligibilityResolver } from './membership/local-eligibility.js';
 import type { TownStripeAdapter } from './billing/stripe-adapter.js';
 
@@ -282,6 +283,10 @@ export async function buildApp(options: BuildAppOptions) {
     ...(options.membership?.localEligibilityResolver !== undefined
       ? { localEligibilityResolver: options.membership.localEligibilityResolver }
       : {}),
+  });
+  await app.register(localEligibilityRoutes, {
+    env: options.env,
+    ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
   });
   await app.register(billingRoutes, {
     env: options.env,

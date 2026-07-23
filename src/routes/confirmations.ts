@@ -109,7 +109,9 @@ export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutes
   const generateId = options.generateId ?? (() => randomUUID());
   const resolver: LocalParticipationEligibilityResolver =
     options.localEligibilityResolver ??
-    createDefaultLocalEligibilityResolver({ nodeEnv: env.NODE_ENV });
+    createDefaultLocalEligibilityResolver({
+      localEligibilityEnabled: env.LOCAL_ELIGIBILITY_ENABLED,
+    });
 
   app.get(
     '/v1/signals/:signalId/confirmation',
@@ -248,6 +250,7 @@ export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutes
               accountId: session.accountId,
               actorId: actor.id,
               communityId: actor.communityId,
+              actor,
             }),
           )
         : 'not_verified';
