@@ -38,6 +38,10 @@ export function civicParticipationNotAuthorizedError(): AppError {
   );
 }
 
+export function rateLimitedError(): AppError {
+  return new AppError(429, 'RATE_LIMITED', 'Rate limit exceeded.');
+}
+
 export function billingNotAvailableError(): AppError {
   return new AppError(503, 'BILLING_NOT_AVAILABLE', 'Billing is not available at this time.');
 }

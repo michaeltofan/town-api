@@ -34,6 +34,8 @@ export type MembershipTestAppOptions = {
   generateId?: () => string;
   generateToken?: () => string;
   localEligibilityResolver?: LocalParticipationEligibilityResolver;
+  envOverrides?: Partial<NodeJS.ProcessEnv>;
+  poolMax?: number;
 };
 
 export async function createMembershipTestApp(
@@ -43,11 +45,13 @@ export async function createMembershipTestApp(
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   await resetMigrateSeedFoundationAndActor(pool);
 
-  const env = createPasskeyAuthenticationEnv();
+  const env = createPasskeyAuthenticationEnv({
+    ...(options.envOverrides ?? {}),
+  });
   const delivery = createInMemoryTestDeliveryAdapter();
   const database = createDatabase({
     connectionString: env.DATABASE_URL,
-    poolMax: env.DB_POOL_MAX,
+    poolMax: options.poolMax ?? env.DB_POOL_MAX,
     connectionTimeoutMs: env.DB_CONNECTION_TIMEOUT_MS,
     idleTimeoutMs: env.DB_IDLE_TIMEOUT_MS,
   });

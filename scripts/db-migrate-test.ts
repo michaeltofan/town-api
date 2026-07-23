@@ -28,6 +28,7 @@ const EXPECTED_TOWN_TABLES = [
   'recovery_grants',
   'setup_grants',
   'signal_confirmations',
+  'signal_submissions',
   'signals',
   'stripe_checkout_attempts',
   'stripe_customer_links',
