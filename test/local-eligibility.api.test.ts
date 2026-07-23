@@ -7,6 +7,7 @@ import type { Env } from '../src/config/env.js';
 import { createDatabase } from '../src/db/client.js';
 import { actors } from '../src/db/schema.js';
 import { FOUNDATION_COMMUNITY_IDS } from '../src/db/seeds/foundation-content.js';
+import { toIsoTimestamp } from '../src/lib/timestamps.js';
 import {
   createPasskeyAuthenticationEnv,
   registerActivePasskeyAccount,
@@ -15,7 +16,8 @@ import { loginMobileSession } from './helpers/passkey-management.js';
 import { requireDatabaseUrl, resetMigrateSeedFoundationAndActor } from './helpers/pg.js';
 
 const FIXED_NOW = '2026-07-23T12:00:00.000Z';
-const LATER_NOW = '2026-07-23T15:00:00.000Z';
+/** Within session idle window (60m) so the same session remains authorized. */
+const LATER_NOW = '2026-07-23T12:30:00.000Z';
 
 describe('PUT /v1/account/eligibility', () => {
   let app: AppInstance;
@@ -167,7 +169,7 @@ describe('PUT /v1/account/eligibility', () => {
       .where(eq(actors.accountId, registration.accountId))
       .limit(1);
     expect(rows[0]?.communityId).toBe(FOUNDATION_COMMUNITY_IDS.milanoIt);
-    expect(rows[0]?.localEligibilityVerifiedAt).toBe(FIXED_NOW);
+    expect(toIsoTimestamp(String(rows[0]?.localEligibilityVerifiedAt))).toBe(FIXED_NOW);
   });
 
   it('is idempotent for the same community and does not refresh verifiedAt', async () => {
@@ -199,7 +201,7 @@ describe('PUT /v1/account/eligibility', () => {
       .from(actors)
       .where(eq(actors.accountId, registration.accountId))
       .limit(1);
-    expect(rows[0]?.localEligibilityVerifiedAt).toBe(FIXED_NOW);
+    expect(toIsoTimestamp(String(rows[0]?.localEligibilityVerifiedAt))).toBe(FIXED_NOW);
     expect(rows[0]?.communityId).toBe(FOUNDATION_COMMUNITY_IDS.munichDe);
   });
 
