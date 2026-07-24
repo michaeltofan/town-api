@@ -29,3 +29,24 @@ export function accountClosedError(): MembershipInvariantError {
 export function invalidTransitionError(reason: string): MembershipInvariantError {
   return new MembershipInvariantError('INVALID_MEMBERSHIP_TRANSITION', reason);
 }
+
+export function civicActorNotLinkedError(): MembershipInvariantError {
+  return new MembershipInvariantError(
+    'CIVIC_ACTOR_NOT_LINKED',
+    'Linked civic actor was not found for the account',
+  );
+}
+
+export function localEligibilityPersistFailedError(): MembershipInvariantError {
+  return new MembershipInvariantError(
+    'LOCAL_ELIGIBILITY_PERSIST_FAILED',
+    'Local eligibility verification timestamp was not persisted',
+  );
+}
+
+export function localEligibilityBindingIncompleteError(): MembershipInvariantError {
+  return new MembershipInvariantError(
+    'LOCAL_ELIGIBILITY_BINDING_INCOMPLETE',
+    'Existing local eligibility binding is missing its verification timestamp',
+  );
+}

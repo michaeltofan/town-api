@@ -5,9 +5,12 @@ import { buildApp, type AppInstance } from '../src/app.js';
 import { createInMemoryTestDeliveryAdapter } from '../src/ceremony/email-verification/delivery.js';
 import type { Env } from '../src/config/env.js';
 import { createDatabase } from '../src/db/client.js';
+import { findActiveCommunityBySlug } from '../src/db/repositories/communities.js';
 import { actors } from '../src/db/schema.js';
 import { FOUNDATION_COMMUNITY_IDS } from '../src/db/seeds/foundation-content.js';
 import { toIsoTimestamp } from '../src/lib/timestamps.js';
+import { bindLocalEligibilityInTransaction } from '../src/membership/bind-service.js';
+import { MembershipInvariantError } from '../src/membership/errors.js';
 import {
   createPasskeyAuthenticationEnv,
   registerActivePasskeyAccount,
@@ -259,5 +262,130 @@ describe('PUT /v1/account/eligibility', () => {
     });
     expect(response.statusCode).toBe(500);
     expect(response.json()).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
+  });
+
+  function assertInternalErrorEnvelope(response: {
+    statusCode: number;
+    json: () => unknown;
+  }): void {
+    expect(response.statusCode).toBe(500);
+    const body = response.json() as {
+      error: { code: string; message: string; requestId: string };
+    };
+    expect(Object.keys(body).sort()).toEqual(['error']);
+    expect(Object.keys(body.error).sort()).toEqual(['code', 'message', 'requestId']);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+    expect(body.error.message).toBe('An unexpected error occurred.');
+    expect(typeof body.error.requestId).toBe('string');
+    expect(body.error.requestId.length).toBeGreaterThan(0);
+  }
+
+  it('throws the bounded ACCOUNT_NOT_FOUND invariant error when the account row is absent', async () => {
+    const community = await findActiveCommunityBySlug(app.database.db, 'milano-it');
+    expect(community).not.toBeNull();
+    if (!community) {
+      throw new Error('Foundation community milano-it must be seeded');
+    }
+
+    await expect(
+      app.database.db.transaction(async (tx) =>
+        bindLocalEligibilityInTransaction(tx, {
+          accountId: '11000000-0000-4000-8000-00000000dead',
+          community,
+          now: FIXED_NOW,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      name: 'MembershipInvariantError',
+      code: 'ACCOUNT_NOT_FOUND',
+    });
+  });
+
+  it('returns the declared 500 INTERNAL_ERROR envelope when the linked civic actor is missing', async () => {
+    clock.now = FIXED_NOW;
+    const { login, registration } = await registerAndLogin(
+      'eligibility.no-actor-envelope@example.com',
+    );
+    await app.database.db
+      .update(actors)
+      .set({ accountId: null })
+      .where(eq(actors.accountId, registration.accountId));
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/v1/account/eligibility',
+      headers: { authorization: `Session ${login.sessionToken}` },
+      payload: { community: 'milano-it' },
+    });
+    assertInternalErrorEnvelope(response);
+  });
+
+  it('throws the bounded LOCAL_ELIGIBILITY_PERSIST_FAILED invariant error when the persisted verified_at reads back null', async () => {
+    const community = await findActiveCommunityBySlug(app.database.db, 'milano-it');
+    expect(community).not.toBeNull();
+    if (!community) {
+      throw new Error('Foundation community milano-it must be seeded');
+    }
+
+    // Deterministic stand-in transaction handle passed through the existing
+    // `db` parameter seam of bindLocalEligibilityInTransaction. The real
+    // database cannot produce this state: the UPDATE ... RETURNING reflects
+    // the non-null verified_at it just set, so the defensive branch is only
+    // reachable when the returned row reads back null.
+    const actorRow = {
+      id: '11000000-0000-4000-8000-00000000ac10',
+      communityId: null,
+      localEligibilityVerifiedAt: null,
+    };
+    function createThenableChain(rows: unknown[]): Record<string, unknown> {
+      const chain: Record<string, unknown> = {};
+      const returnSelf = () => chain;
+      for (const method of ['from', 'where', 'limit', 'for', 'set', 'returning']) {
+        chain[method] = returnSelf;
+      }
+      chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(rows).then(resolve);
+      return chain;
+    }
+    const selectResults: unknown[][] = [
+      [{ id: '11000000-0000-4000-8000-00000000acc7' }],
+      [actorRow],
+    ];
+    const fakeTx = {
+      select: () => createThenableChain(selectResults.shift() ?? []),
+      update: () =>
+        createThenableChain([
+          { ...actorRow, communityId: community.id, localEligibilityVerifiedAt: null },
+        ]),
+    } as unknown as Parameters<typeof bindLocalEligibilityInTransaction>[0];
+
+    const error = await bindLocalEligibilityInTransaction(fakeTx, {
+      accountId: '11000000-0000-4000-8000-00000000acc7',
+      community,
+      now: FIXED_NOW,
+    }).then(
+      () => null,
+      (thrown: unknown) => thrown,
+    );
+    expect(error).toBeInstanceOf(MembershipInvariantError);
+    expect((error as MembershipInvariantError).code).toBe('LOCAL_ELIGIBILITY_PERSIST_FAILED');
+  });
+
+  it('returns the declared 500 INTERNAL_ERROR envelope when an existing binding is missing verified_at', async () => {
+    clock.now = FIXED_NOW;
+    const { login, registration } = await registerAndLogin(
+      'eligibility.binding-missing-verified-at@example.com',
+    );
+    await app.database.db
+      .update(actors)
+      .set({ communityId: FOUNDATION_COMMUNITY_IDS.milanoIt, localEligibilityVerifiedAt: null })
+      .where(eq(actors.accountId, registration.accountId));
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/v1/account/eligibility',
+      headers: { authorization: `Session ${login.sessionToken}` },
+      payload: { community: 'milano-it' },
+    });
+    assertInternalErrorEnvelope(response);
   });
 });
