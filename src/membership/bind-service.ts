@@ -2,6 +2,12 @@ import type { Database } from '../db/client.js';
 import type { CommunityRow } from '../db/schema.js';
 import { findActiveCivicActorByAccountId } from '../db/repositories/confirmations.js';
 import { localEligibilityAlreadyBoundError } from '../errors/app-error.js';
+import {
+  accountNotFoundError,
+  civicActorNotLinkedError,
+  localEligibilityBindingIncompleteError,
+  localEligibilityPersistFailedError,
+} from './errors.js';
 import { lockAccountById } from '../identity/repositories/accounts.js';
 import { bindActorLocalEligibility } from '../identity/repositories/actor-link.js';
 import { toIsoTimestamp } from '../lib/timestamps.js';
@@ -28,13 +34,13 @@ export async function bindLocalEligibilityInTransaction(
 ): Promise<LocalEligibilityBindResult> {
   const locked = await lockAccountById(db, input.accountId);
   if (!locked) {
-    throw new Error('Local eligibility bind requires an existing account');
+    throw accountNotFoundError();
   }
 
   const actor = await findActiveCivicActorByAccountId(db, input.accountId);
   if (!actor) {
     // Invariant: session-authenticated accounts must have a linked civic actor.
-    throw new Error('Linked civic actor missing for authenticated account');
+    throw civicActorNotLinkedError();
   }
 
   if (actor.communityId === null) {
@@ -46,7 +52,7 @@ export async function bindLocalEligibilityInTransaction(
     });
     const verifiedAt = updated.localEligibilityVerifiedAt;
     if (verifiedAt === null) {
-      throw new Error('Failed to persist local eligibility verified_at');
+      throw localEligibilityPersistFailedError();
     }
     return {
       community: {
@@ -61,7 +67,7 @@ export async function bindLocalEligibilityInTransaction(
   if (actor.communityId === input.community.id) {
     const verifiedAt = actor.localEligibilityVerifiedAt;
     if (verifiedAt === null) {
-      throw new Error('Local eligibility binding missing verified_at for bound community');
+      throw localEligibilityBindingIncompleteError();
     }
     return {
       community: {
