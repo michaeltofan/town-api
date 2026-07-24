@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { sql } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import type { Database } from '../db/client.js';
 import type { IdentitySecurityEventType } from '../db/schema.js';
@@ -324,6 +325,12 @@ async function handleCheckoutSessionCompleted(
   // Link the subscription reference on the entitlement without activating; invoice.paid drives activation.
   await deps.db.transaction(async (tx) => {
     const dbTx = tx as unknown as Db;
+    await dbTx.execute(sql`
+      SELECT id
+      FROM town.accounts
+      WHERE id = ${accountId}
+      FOR KEY SHARE
+    `);
     const entitlement = await lockEntitlementByAccountId(dbTx, accountId);
     if (entitlement && subscriptionId && entitlement.sourceSubscriptionId !== subscriptionId) {
       await updateMembershipEntitlement(dbTx, {

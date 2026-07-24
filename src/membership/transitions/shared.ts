@@ -147,6 +147,12 @@ async function readExistingOutcome(
     effectiveAt: string;
   },
 ): Promise<MembershipTransitionOutcome> {
+  await db.execute(sql`
+    SELECT id
+    FROM town.accounts
+    WHERE id = ${input.accountId}
+    FOR KEY SHARE
+  `);
   const entitlement = await lockEntitlementByAccountId(db, input.accountId);
   if (input.existingPayloadHash === input.payloadHash) {
     if (input.logic.replayedAuditEventType) {
