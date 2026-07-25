@@ -77,6 +77,33 @@ describe('membership contract', () => {
     expect(doc.stripeBoundary.webhookHandler).toBe('not implemented');
   });
 
+  it('records Google Play verification as internal-only and fail-closed', () => {
+    const doc = generateMembershipContractDocument() as {
+      googlePlayVerification: {
+        featureFlag: string;
+        featureFlagDefault: boolean;
+        api: string;
+        internalOperation: string;
+        publicRoutes: string[];
+        acceptedSubscriptionStates: string[];
+      };
+      googlePlayPreBinding: {
+        publicRoutes: string[];
+      };
+    };
+    expect(doc.googlePlayVerification.featureFlag).toBe('GOOGLE_PLAY_BILLING_ENABLED');
+    expect(doc.googlePlayVerification.featureFlagDefault).toBe(false);
+    expect(doc.googlePlayVerification.api).toBe('purchases.subscriptionsv2.get');
+    expect(doc.googlePlayVerification.internalOperation).toBe(
+      'verifyAndProvisionGooglePlayPurchase',
+    );
+    expect(doc.googlePlayVerification.publicRoutes).toEqual([]);
+    expect(doc.googlePlayVerification.acceptedSubscriptionStates).toEqual([
+      'SUBSCRIPTION_STATE_ACTIVE',
+    ]);
+    expect(doc.googlePlayPreBinding.publicRoutes).toEqual([]);
+  });
+
   it('records the payload-hash canonical key order and secret exclusions', () => {
     const doc = generateMembershipContractDocument() as {
       sourceEvents: {

@@ -134,6 +134,10 @@ const EnvSchema = Type.Object(
     STRIPE_PORTAL_RETURN_URL: Type.Optional(Type.String({ minLength: 8 })),
     STRIPE_API_VERSION: Type.Optional(Type.Literal('2026-06-24.dahlia')),
     STRIPE_EXPECTED_LIVEMODE: Type.Optional(Type.Boolean()),
+    GOOGLE_PLAY_BILLING_ENABLED: Type.Boolean({ default: false }),
+    GOOGLE_PLAY_PACKAGE_NAME: Type.Optional(Type.String({ minLength: 3 })),
+    GOOGLE_PLAY_SUBSCRIPTION_ID: Type.Optional(Type.String({ minLength: 1 })),
+    GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: Type.Optional(Type.String({ minLength: 32 })),
     OBJECT_STORAGE_ENABLED: Type.Boolean({ default: false }),
     OBJECT_STORAGE_ENDPOINT: Type.Optional(Type.String({ minLength: 1 })),
     OBJECT_STORAGE_BUCKET: Type.Optional(Type.String({ minLength: 1 })),
@@ -352,6 +356,15 @@ function sanitizeEnvErrorPath(path: string, message: string): string {
   if (path.includes('STRIPE_API_VERSION')) {
     return `${path}: must equal 2026-06-24.dahlia when Stripe billing is enabled`;
   }
+  if (path.includes('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON')) {
+    return `${path}: must be a valid Google Play service account JSON when Google Play billing is enabled`;
+  }
+  if (path.includes('GOOGLE_PLAY_PACKAGE_NAME')) {
+    return `${path}: must be a non-empty Android package name when Google Play billing is enabled`;
+  }
+  if (path.includes('GOOGLE_PLAY_SUBSCRIPTION_ID')) {
+    return `${path}: must be a non-empty subscription product id when Google Play billing is enabled`;
+  }
   return `${path}: ${message}`;
 }
 
@@ -420,6 +433,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     source.STRIPE_BILLING_ENABLED,
     'STRIPE_BILLING_ENABLED',
   );
+  const googlePlayBillingEnabled = parseBooleanFlag(
+    source.GOOGLE_PLAY_BILLING_ENABLED,
+    'GOOGLE_PLAY_BILLING_ENABLED',
+  );
   const nodeEnv = source.NODE_ENV ?? 'development';
   const appEnv = resolveAppEnv(source.APP_ENV, nodeEnv);
   const runtimeIsProduction = appEnv === 'production' || nodeEnv === 'production';
@@ -472,6 +489,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ACCOUNT_RECOVERY_ENABLED: accountRecoveryEnabled,
     LOCAL_ELIGIBILITY_ENABLED: localEligibilityEnabled,
     STRIPE_BILLING_ENABLED: stripeBillingEnabled,
+    GOOGLE_PLAY_BILLING_ENABLED: googlePlayBillingEnabled,
     OBJECT_STORAGE_ENABLED: objectStorageEnabled,
     SIGNAL_SUBMISSION_ENABLED: signalSubmissionEnabled,
     TRUST_PROXY: trustProxy,
@@ -934,6 +952,72 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     candidate.STRIPE_API_VERSION = STRIPE_API_VERSION;
     candidate.STRIPE_EXPECTED_LIVEMODE = expectedLivemode;
     candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
+  }
+
+  if (googlePlayBillingEnabled) {
+    const packageName = source.GOOGLE_PLAY_PACKAGE_NAME;
+    const subscriptionId = source.GOOGLE_PLAY_SUBSCRIPTION_ID;
+    const serviceAccountJson = source.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON;
+
+    if (
+      !isNonEmptyString(packageName) ||
+      packageName.length < 3 ||
+      !packageName.includes('.') ||
+      packageName.includes(' ')
+    ) {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_PACKAGE_NAME must be a non-empty Android package name when GOOGLE_PLAY_BILLING_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(subscriptionId) || subscriptionId.length < 1) {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_SUBSCRIPTION_ID must be a non-empty subscription product id when GOOGLE_PLAY_BILLING_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(serviceAccountJson) || serviceAccountJson.length < 32) {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_SERVICE_ACCOUNT_JSON must be a non-empty service account JSON string when GOOGLE_PLAY_BILLING_ENABLED is true',
+      );
+    }
+
+    let parsedAccount: unknown;
+    try {
+      parsedAccount = JSON.parse(serviceAccountJson) as unknown;
+    } catch {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_SERVICE_ACCOUNT_JSON must be valid JSON when GOOGLE_PLAY_BILLING_ENABLED is true',
+      );
+    }
+    if (
+      typeof parsedAccount !== 'object' ||
+      parsedAccount === null ||
+      Array.isArray(parsedAccount)
+    ) {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_SERVICE_ACCOUNT_JSON must be a JSON object when GOOGLE_PLAY_BILLING_ENABLED is true',
+      );
+    }
+    const accountRecord = parsedAccount as Record<string, unknown>;
+    const clientEmail = accountRecord.client_email;
+    const privateKey = accountRecord.private_key;
+    if (typeof clientEmail !== 'string' || clientEmail.length === 0 || !clientEmail.includes('@')) {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_SERVICE_ACCOUNT_JSON must include a valid client_email when GOOGLE_PLAY_BILLING_ENABLED is true',
+      );
+    }
+    if (
+      typeof privateKey !== 'string' ||
+      privateKey.length < 32 ||
+      !privateKey.includes('PRIVATE KEY')
+    ) {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_SERVICE_ACCOUNT_JSON must include a valid private_key when GOOGLE_PLAY_BILLING_ENABLED is true',
+      );
+    }
+
+    candidate.GOOGLE_PLAY_PACKAGE_NAME = packageName;
+    candidate.GOOGLE_PLAY_SUBSCRIPTION_ID = subscriptionId;
+    candidate.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = serviceAccountJson;
   }
 
   if (!isNonEmptyString(candidate.DATABASE_URL)) {

@@ -36,6 +36,7 @@ export default defineConfig({
       'test/membership.migration.test.ts',
       'test/membership.google-play.migration.test.ts',
       'test/membership.google-play-provision.integration.test.ts',
+      'test/membership.google-play.verify-and-provision.integration.test.ts',
       'test/membership.transitions.integration.test.ts',
       'test/membership.idempotency.integration.test.ts',
       'test/membership.stale.integration.test.ts',
