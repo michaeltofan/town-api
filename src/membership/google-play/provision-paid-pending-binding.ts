@@ -10,11 +10,13 @@ import { appendIdentitySecurityEvent } from '../../identity/repositories/securit
 import { accountNotFoundError } from '../errors.js';
 import { hashMembershipTransitionPayload } from '../payload-hash.js';
 import {
+  findEntitlementByAccountId,
   insertMembershipEntitlement,
   lockEntitlementByAccountId,
   updateMembershipEntitlement,
 } from '../repositories/entitlements.js';
 import {
+  findGooglePlayPurchaseLinkByToken,
   insertGooglePlayPurchaseLink,
   isGooglePlayPurchaseTokenUniqueViolation,
   lockGooglePlayPurchaseLinkByToken,
@@ -55,6 +57,11 @@ export type ProvisionGooglePlayPaidPendingBindingDeps = {
   generateId?: () => string;
   requestId?: string | null;
   processedAt?: string;
+  /**
+   * Test-only barrier: awaited after entitlement FOR UPDATE in
+   * runProvisionInTransaction, before purchase_link is locked.
+   */
+  afterEntitlementLock?: () => Promise<void>;
 };
 
 export type ProvisionGooglePlayPaidPendingBindingOutcome = {
@@ -191,7 +198,8 @@ async function readExistingProvisionOutcome(
   };
 }
 
-async function runProvisionInTransaction(
+/** @internal Exported for lock-order integration coverage. */
+export async function runProvisionInTransaction(
   db: Db,
   input: VerifiedGooglePlayPurchaseProvisionInput,
   deps: ProvisionGooglePlayPaidPendingBindingDeps,
@@ -260,6 +268,9 @@ async function runProvisionInTransaction(
     };
 
     let entitlement = await lockEntitlementByAccountId(dbTx, input.accountId);
+    if (deps.afterEntitlementLock) {
+      await deps.afterEntitlementLock();
+    }
     const existingPurchaseLink = await lockGooglePlayPurchaseLinkByToken(dbTx, input.purchaseToken);
 
     const reject = async (
@@ -541,17 +552,24 @@ export async function provisionGooglePlayPaidPendingBinding(
   throw new Error('provisionGooglePlayPaidPendingBinding exhausted retry budget without result');
 }
 
-async function findCommittedTokenConflict(
+/** @internal Exported for lock-order integration coverage. */
+export async function findCommittedTokenConflict(
   db: Db,
   input: VerifiedGooglePlayPurchaseProvisionInput,
+  options?: { afterPurchaseLinkRead?: () => Promise<void> },
 ): Promise<ProvisionGooglePlayPaidPendingBindingOutcome | null> {
   return db.transaction(async (tx) => {
     const dbTx = tx as unknown as Db;
-    const link = await lockGooglePlayPurchaseLinkByToken(dbTx, input.purchaseToken);
+    // Read-only rejection path: non-locking reads avoid reversing the
+    // canonical accounts -> entitlement -> purchase_link lock order.
+    const link = await findGooglePlayPurchaseLinkByToken(dbTx, input.purchaseToken);
     if (!link) {
       return null;
     }
-    const entitlement = await lockEntitlementByAccountId(dbTx, input.accountId);
+    if (options?.afterPurchaseLinkRead) {
+      await options.afterPurchaseLinkRead();
+    }
+    const entitlement = await findEntitlementByAccountId(dbTx, input.accountId);
     return {
       result: 'rejected',
       reason: 'purchase_token_already_correlated',
