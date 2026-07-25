@@ -13,7 +13,12 @@ import {
   evaluateCivicAccess,
   resolveEffectiveMembershipStatus,
 } from '../src/membership/civic-access.js';
-import { provisionGooglePlayPaidPendingBinding } from '../src/membership/google-play/provision-paid-pending-binding.js';
+import {
+  findCommittedTokenConflict,
+  provisionGooglePlayPaidPendingBinding,
+  runProvisionInTransaction,
+} from '../src/membership/google-play/provision-paid-pending-binding.js';
+import { insertMembershipEntitlement } from '../src/membership/repositories/entitlements.js';
 import { activateMembership } from '../src/membership/transitions/activate.js';
 import { requireDatabaseUrl, resetMigrateSeedFoundationAndActor } from './helpers/pg.js';
 
@@ -38,7 +43,7 @@ describe('Google Play paid_pending_binding provision foundation', () => {
     await resetMigrateSeedFoundationAndActor(pool);
     database = createDatabase({
       connectionString: url,
-      poolMax: 3,
+      poolMax: 5,
       connectionTimeoutMs: 3000,
       idleTimeoutMs: 1000,
     });
@@ -303,6 +308,107 @@ describe('Google Play paid_pending_binding provision foundation', () => {
       .where(eq(googlePlayPurchaseLinks.purchaseToken, token));
     expect(links).toHaveLength(1);
     expect(links[0]?.accountId).toBe(firstAccount);
+  });
+
+  it('conflict re-read and concurrent provision on same token do not deadlock', async () => {
+    const accountA1 = '11000000-0000-4000-8000-000000000509';
+    const accountA2 = '11000000-0000-4000-8000-000000000510';
+    const token = 'gp_token_conflict_lock_order_deadlock';
+    await createAccountShell(database.db, {
+      id: accountA1,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    await createAccountShell(database.db, {
+      id: accountA2,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+
+    const first = await provisionGooglePlayPaidPendingBinding(
+      database.db,
+      {
+        sourceEventId: 'gp_evt_conflict_lock_order_a1',
+        accountId: accountA1,
+        effectiveAt: NOW,
+        accessUntil: ACCESS_UNTIL,
+        purchaseToken: token,
+        packageName: PACKAGE_NAME,
+        subscriptionId: SUBSCRIPTION_ID,
+      },
+      { nodeEnv: 'test', processedAt: NOW },
+    );
+    expect(first.result).toBe('applied');
+
+    // Losing account already has an entitlement row so conflict re-read and
+    // concurrent provision contend on the same entitlement + purchase_link.
+    await insertMembershipEntitlement(database.db, {
+      id: randomUUID(),
+      accountId: accountA2,
+      status: 'inactive',
+      accessUntil: null,
+      cancelAtPeriodEnd: false,
+      source: 'test_fixture',
+      sourceCustomerId: null,
+      sourceSubscriptionId: null,
+      activatedAt: null,
+      cancellationRequestedAt: null,
+      expiredAt: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+      version: 1,
+    });
+
+    const a2Input = {
+      sourceEventId: 'gp_evt_conflict_lock_order_a2',
+      accountId: accountA2,
+      effectiveAt: NOW,
+      accessUntil: ACCESS_UNTIL,
+      purchaseToken: token,
+      packageName: PACKAGE_NAME,
+      subscriptionId: SUBSCRIPTION_ID,
+    };
+
+    let releaseConflict: () => void = () => undefined;
+    let releaseProvision: () => void = () => undefined;
+    const conflictMayProceed = new Promise<void>((resolve) => {
+      releaseConflict = resolve;
+    });
+    const provisionMayProceed = new Promise<void>((resolve) => {
+      releaseProvision = resolve;
+    });
+
+    const conflictPromise = findCommittedTokenConflict(database.db, a2Input, {
+      afterPurchaseLinkRead: async () => {
+        releaseProvision();
+        await conflictMayProceed;
+      },
+    });
+    const provisionPromise = runProvisionInTransaction(database.db, a2Input, {
+      nodeEnv: 'test',
+      processedAt: NOW,
+      afterEntitlementLock: async () => {
+        await provisionMayProceed;
+        releaseConflict();
+      },
+    });
+
+    const [conflictOutcome, provisionOutcome] = await Promise.all([
+      conflictPromise,
+      provisionPromise,
+    ]);
+
+    expect(conflictOutcome).not.toBeNull();
+    expect(conflictOutcome?.result).toBe('rejected');
+    expect(conflictOutcome?.reason).toBe('purchase_token_already_correlated');
+    expect(conflictOutcome?.purchaseLink?.purchaseToken).toBe(token);
+    expect(conflictOutcome?.purchaseLink?.accountId).toBe(accountA1);
+    expect(conflictOutcome?.entitlement?.accountId).toBe(accountA2);
+
+    expect(provisionOutcome.result).toBe('rejected');
+    expect(provisionOutcome.reason).toBe('purchase_token_already_correlated');
+    expect(provisionOutcome.purchaseLink?.purchaseToken).toBe(token);
+    expect(provisionOutcome.purchaseLink?.accountId).toBe(accountA1);
   });
 
   it('rolls back entitlement writes when purchase-link persistence fails mid-provision', async () => {
