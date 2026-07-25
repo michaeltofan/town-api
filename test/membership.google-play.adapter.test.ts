@@ -87,4 +87,54 @@ describe('Google Play Android Publisher adapter', () => {
       httpStatus: 404,
     });
   });
+
+  it('calls subscriptions.acknowledge with bearer auth', async () => {
+    const getAccessToken = vi.fn(() => Promise.resolve('ya29.test-token'));
+    const request = vi.fn((url: string, init?: RequestInit) => {
+      expect(url).toContain(
+        '/applications/com.town.town_safe_space_mobile/purchases/subscriptions/town_annual_membership/tokens/',
+      );
+      expect(url).toContain(encodeURIComponent('token/with spaces'));
+      expect(url.endsWith(':acknowledge')).toBe(true);
+      expect(init?.method).toBe('POST');
+      expect(init?.headers).toMatchObject({
+        Authorization: 'Bearer ya29.test-token',
+      });
+      expect(init?.body).toBe('{}');
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const adapter = createOfficialGooglePlayAndroidPublisherAdapter({
+      serviceAccountJson: SERVICE_ACCOUNT_JSON,
+      getAccessToken,
+      request,
+    });
+    const result = await adapter.acknowledgeSubscription({
+      packageName: 'com.town.town_safe_space_mobile',
+      subscriptionId: 'town_annual_membership',
+      purchaseToken: 'token/with spaces',
+    });
+    expect(result).toEqual({ status: 'acknowledged' });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(getAccessToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws a bounded error when acknowledge returns non-success', async () => {
+    const adapter = createOfficialGooglePlayAndroidPublisherAdapter({
+      serviceAccountJson: SERVICE_ACCOUNT_JSON,
+      getAccessToken: () => Promise.resolve('ya29.test-token'),
+      request: () => Promise.resolve(new Response('unavailable', { status: 503 })),
+    });
+    await expect(
+      adapter.acknowledgeSubscription({
+        packageName: 'com.town.town_safe_space_mobile',
+        subscriptionId: 'town_annual_membership',
+        purchaseToken: 'token',
+      }),
+    ).rejects.toMatchObject({
+      name: 'GooglePlayAndroidPublisherError',
+      code: 'GOOGLE_PLAY_HTTP_ERROR',
+      httpStatus: 503,
+    });
+  });
 });

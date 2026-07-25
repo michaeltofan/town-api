@@ -33,6 +33,7 @@ export type GooglePlayVerifyPurchaseResult =
   | {
       ok: true;
       verified: VerifiedGooglePlayPurchaseProvisionInput;
+      acknowledgementState?: string;
     }
   | {
       ok: false;
@@ -137,5 +138,8 @@ export async function verifyGooglePlayPurchase(input: {
       packageName: configuredPackageName,
       subscriptionId: lineItem.productId,
     },
+    ...(remote.acknowledgementState !== undefined
+      ? { acknowledgementState: remote.acknowledgementState }
+      : {}),
   };
 }

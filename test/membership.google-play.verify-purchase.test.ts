@@ -53,6 +53,10 @@ describe('verifyGooglePlayPurchase', () => {
         called = true;
         return Promise.reject(new Error('should not be called'));
       },
+      acknowledgeSubscription: () => {
+        called = true;
+        return Promise.reject(new Error('should not be called'));
+      },
     };
     const result = await verifyGooglePlayPurchase({
       purchase: {
@@ -154,6 +158,10 @@ describe('verifyGooglePlayPurchase', () => {
       config: enabledConfig(),
       adapter: {
         getSubscriptionV2: () => {
+          called = true;
+          return Promise.reject(new Error('should not be called'));
+        },
+        acknowledgeSubscription: () => {
           called = true;
           return Promise.reject(new Error('should not be called'));
         },

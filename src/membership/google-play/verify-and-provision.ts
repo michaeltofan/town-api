@@ -5,6 +5,7 @@ import {
   type ProvisionGooglePlayPaidPendingBindingDeps,
   type ProvisionGooglePlayPaidPendingBindingOutcome,
 } from './provision-paid-pending-binding.js';
+import { GOOGLE_PLAY_ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED } from './subscription-purchase-v2.js';
 import {
   verifyGooglePlayPurchase,
   type GooglePlayVerifyPurchaseConfig,
@@ -18,9 +19,13 @@ export type VerifyAndProvisionGooglePlayPurchaseDeps = ProvisionGooglePlayPaidPe
   config: GooglePlayVerifyPurchaseConfig;
 };
 
+export type GooglePlayAcknowledgementStatus = 'acknowledged' | 'already_acknowledged' | 'failed';
+
 export type VerifyAndProvisionGooglePlayPurchaseOutcome =
   | (ProvisionGooglePlayPaidPendingBindingOutcome & {
       verification: 'verified';
+      acknowledgement?: GooglePlayAcknowledgementStatus;
+      acknowledgementReason?: string;
     })
   | {
       result: 'rejected';
@@ -28,12 +33,52 @@ export type VerifyAndProvisionGooglePlayPurchaseOutcome =
       verification: 'failed';
     };
 
+function isDurableProvisionSuccess(
+  outcome: ProvisionGooglePlayPaidPendingBindingOutcome,
+): outcome is ProvisionGooglePlayPaidPendingBindingOutcome & {
+  result: 'applied' | 'replayed';
+} {
+  return outcome.result === 'applied' || outcome.result === 'replayed';
+}
+
+async function acknowledgeAfterDurableProvision(input: {
+  adapter: TownGooglePlayAndroidPublisherAdapter;
+  packageName: string;
+  subscriptionId: string;
+  purchaseToken: string;
+  acknowledgementState: string | undefined;
+}): Promise<{
+  acknowledgement: GooglePlayAcknowledgementStatus;
+  acknowledgementReason?: string;
+}> {
+  if (input.acknowledgementState === GOOGLE_PLAY_ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED) {
+    return { acknowledgement: 'already_acknowledged' };
+  }
+
+  try {
+    const result = await input.adapter.acknowledgeSubscription({
+      packageName: input.packageName,
+      subscriptionId: input.subscriptionId,
+      purchaseToken: input.purchaseToken,
+    });
+    return { acknowledgement: result.status };
+  } catch (error) {
+    void error;
+    return {
+      acknowledgement: 'failed',
+      acknowledgementReason: 'google_play_acknowledgement_transport_failed',
+    };
+  }
+}
+
 /**
  * Verify a Google Play purchase via Android Publisher subscriptionsv2.get, then
  * provision paid_pending_binding through the existing internal provisioner.
+ * After a durable applied/replayed provision outcome, acknowledge the purchase.
  *
- * Never bypasses verification. Never exposes a public route. Fail-closed when
- * disabled, misconfigured, or when Google verification fails.
+ * Never bypasses verification. Never acknowledges after verification failure,
+ * provision rejection, or rollback. Fail-closed when disabled, misconfigured,
+ * or when Google verification fails.
  */
 export async function verifyAndProvisionGooglePlayPurchase(
   db: Db,
@@ -61,8 +106,24 @@ export async function verifyAndProvisionGooglePlayPurchase(
     ...(deps.processedAt !== undefined ? { processedAt: deps.processedAt } : {}),
   });
 
+  if (!isDurableProvisionSuccess(outcome)) {
+    return {
+      ...outcome,
+      verification: 'verified',
+    };
+  }
+
+  const acknowledgement = await acknowledgeAfterDurableProvision({
+    adapter: deps.adapter,
+    packageName: verified.verified.packageName,
+    subscriptionId: verified.verified.subscriptionId,
+    purchaseToken: verified.verified.purchaseToken,
+    acknowledgementState: verified.acknowledgementState,
+  });
+
   return {
     ...outcome,
     verification: 'verified',
+    ...acknowledgement,
   };
 }

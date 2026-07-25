@@ -105,3 +105,11 @@ export function googlePlayPurchaseAlreadyBoundError(): AppError {
     'Google Play purchase is already bound to an account.',
   );
 }
+
+export function googlePlayPurchaseAcknowledgeFailedError(): AppError {
+  return new AppError(
+    502,
+    'GOOGLE_PLAY_PURCHASE_ACKNOWLEDGE_FAILED',
+    'Google Play purchase could not be acknowledged.',
+  );
+}

@@ -116,6 +116,7 @@ describe('membership contract', () => {
     ]);
     expect(doc.googlePlayVerification.exclusions).not.toContain('public Fastify purchase routes');
     expect(doc.googlePlayVerification.exclusions).toContain('RTDN');
+    expect(doc.googlePlayVerification.exclusions).not.toContain('purchase acknowledgement');
     expect(doc.googlePlayPreBinding.publicRoutes).toEqual([]);
     expect(doc.googlePlayPurchaseIngress.route).toBe('POST /v1/billing/google-play/purchases');
     expect(doc.googlePlayPurchaseIngress.featureFlag).toBe('GOOGLE_PLAY_BILLING_ENABLED');
@@ -128,8 +129,44 @@ describe('membership contract', () => {
     expect(doc.googlePlayPurchaseIngress.responsePolicy.join(' ')).toContain(
       'never returns purchase tokens',
     );
-    expect(doc.googlePlayPurchaseIngress.exclusions).toContain('purchase acknowledgement');
+    expect(doc.googlePlayPurchaseIngress.exclusions).not.toContain('purchase acknowledgement');
     expect(doc.googlePlayPurchaseIngress.exclusions).toContain('binding finalization to active');
+  });
+
+  it('records Google Play purchase acknowledgement after durable provision only', () => {
+    const doc = generateMembershipContractDocument() as {
+      googlePlayPurchaseAcknowledgement: {
+        api: string;
+        adapter: string;
+        internalOperation: string;
+        when: string;
+        neverWhen: string[];
+        persistence: string;
+        exclusions: string[];
+      };
+    };
+    expect(doc.googlePlayPurchaseAcknowledgement.api).toBe('purchases.subscriptions.acknowledge');
+    expect(doc.googlePlayPurchaseAcknowledgement.adapter).toBe(
+      'TownGooglePlayAndroidPublisherAdapter',
+    );
+    expect(doc.googlePlayPurchaseAcknowledgement.internalOperation).toBe(
+      'verifyAndProvisionGooglePlayPurchase',
+    );
+    expect(doc.googlePlayPurchaseAcknowledgement.when).toContain('applied or replayed');
+    expect(doc.googlePlayPurchaseAcknowledgement.neverWhen).toEqual(
+      expect.arrayContaining([
+        'failed verification',
+        'rejected purchase',
+        'cross-account purchase-token protection',
+        'transaction rollback',
+        'provisioning failure',
+      ]),
+    );
+    expect(doc.googlePlayPurchaseAcknowledgement.persistence).toContain('no schema change');
+    expect(doc.googlePlayPurchaseAcknowledgement.exclusions).toContain('RTDN');
+    expect(doc.googlePlayPurchaseAcknowledgement.exclusions).toContain(
+      'binding finalization to active',
+    );
   });
 
   it('records the payload-hash canonical key order and secret exclusions', () => {
