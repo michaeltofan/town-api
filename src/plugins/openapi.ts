@@ -43,7 +43,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Billing',
           description:
-            'Stripe billing runtime for TOWN membership. Checkout and Customer Portal endpoints require an active session; the webhook endpoint verifies raw Stripe signatures. Never exposes Stripe customer, subscription, invoice, or payment identifiers in public API responses; only Stripe-issued Checkout and Portal URLs are returned.',
+            'Stripe and Google Play billing runtime for TOWN membership. Checkout, Customer Portal, and Google Play purchase ingress require an active session; the Stripe webhook endpoint verifies raw Stripe signatures. Never exposes Stripe customer/subscription/invoice identifiers, Google Play purchase tokens, or Google verification payloads in public API responses; only Stripe-issued Checkout/Portal URLs and bounded membership status are returned. Google Play purchase ingress is flag-gated by GOOGLE_PLAY_BILLING_ENABLED and does not acknowledge purchases, process RTDN, or finalize binding to active.',
         },
       ],
       components: {

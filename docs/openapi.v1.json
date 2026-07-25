@@ -5973,6 +5973,409 @@
         ]
       }
     },
+    "/v1/billing/google-play/purchases": {
+      "post": {
+        "description": "Accepts a Google Play purchase token from an active web or mobile session, verifies it via Android Publisher purchases.subscriptionsv2.get, and provisions paid_pending_binding through the internal Google Play provisioner. Feature-gated by GOOGLE_PLAY_BILLING_ENABLED (fail-closed when disabled). SetupGrant, RecoveryGrant, and Bearer are rejected. Never returns purchase tokens, Google verification payloads, or provider identifiers. Does not acknowledge purchases, process RTDN, or finalize binding to active.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "packageName": {
+                    "maxLength": 255,
+                    "minLength": 3,
+                    "type": "string"
+                  },
+                  "purchaseToken": {
+                    "maxLength": 4096,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "subscriptionId": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "purchaseToken"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "membership": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "accessUntil": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "cancelAtPeriodEnd": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "inactive"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "active"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "cancelling"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "expired"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "paid_pending_binding"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "accessUntil",
+                            "cancelAtPeriodEnd"
+                          ],
+                          "type": "object"
+                        },
+                        "result": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "applied"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "replayed"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "result",
+                        "membership"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Verify and provision a Google Play purchase for the authenticated account",
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
     "/v1/billing/stripe/webhook": {
       "post": {
         "description": "Signature-verified Stripe webhook. Requires a raw JSON body and a valid Stripe-Signature header. Feature-gated by STRIPE_BILLING_ENABLED. Returns { received: true } for all applied/replayed/ignored outcomes. Rejects mismatched signatures with 400 without hitting the processor.",
@@ -7362,7 +7765,7 @@
       "name": "Authentication"
     },
     {
-      "description": "Stripe billing runtime for TOWN membership. Checkout and Customer Portal endpoints require an active session; the webhook endpoint verifies raw Stripe signatures. Never exposes Stripe customer, subscription, invoice, or payment identifiers in public API responses; only Stripe-issued Checkout and Portal URLs are returned.",
+      "description": "Stripe and Google Play billing runtime for TOWN membership. Checkout, Customer Portal, and Google Play purchase ingress require an active session; the Stripe webhook endpoint verifies raw Stripe signatures. Never exposes Stripe customer/subscription/invoice identifiers, Google Play purchase tokens, or Google verification payloads in public API responses; only Stripe-issued Checkout/Portal URLs and bounded membership status are returned. Google Play purchase ingress is flag-gated by GOOGLE_PLAY_BILLING_ENABLED and does not acknowledge purchases, process RTDN, or finalize binding to active.",
       "name": "Billing"
     }
   ]

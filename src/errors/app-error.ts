@@ -81,3 +81,27 @@ export function billingCustomerNotAvailableError(): AppError {
 export function billingPortalFailedError(): AppError {
   return new AppError(502, 'BILLING_PORTAL_FAILED', 'Billing portal could not be started.');
 }
+
+export function googlePlayBillingNotAvailableError(): AppError {
+  return new AppError(
+    503,
+    'GOOGLE_PLAY_BILLING_NOT_AVAILABLE',
+    'Google Play billing is not available at this time.',
+  );
+}
+
+export function googlePlayPurchaseRejectedError(): AppError {
+  return new AppError(
+    400,
+    'GOOGLE_PLAY_PURCHASE_REJECTED',
+    'Google Play purchase could not be verified.',
+  );
+}
+
+export function googlePlayPurchaseAlreadyBoundError(): AppError {
+  return new AppError(
+    409,
+    'GOOGLE_PLAY_PURCHASE_ALREADY_BOUND',
+    'Google Play purchase is already bound to an account.',
+  );
+}
