@@ -89,13 +89,14 @@ describe('OpenAPI contract', () => {
     expect(membership.patch).toBeUndefined();
     expect(membership.delete).toBeUndefined();
 
-    // Billing foundation: exactly three public billing routes.
+    // Billing foundation: Stripe checkout/portal/webhook plus Google Play purchase ingress.
     const billingPaths = Object.keys(document.paths)
       .filter((p) => p.includes('/v1/billing'))
       .sort();
     expect(billingPaths).toEqual([
       '/v1/billing/checkout-session',
       '/v1/billing/customer-portal-session',
+      '/v1/billing/google-play/purchases',
       '/v1/billing/stripe/webhook',
     ]);
     const checkout = document.paths['/v1/billing/checkout-session'] as Record<string, unknown>;
@@ -104,11 +105,17 @@ describe('OpenAPI contract', () => {
     const portal = document.paths['/v1/billing/customer-portal-session'] as Record<string, unknown>;
     expect(portal.post).toBeDefined();
     expect(portal.get).toBeUndefined();
+    const googlePlayPurchase = document.paths['/v1/billing/google-play/purchases'] as Record<
+      string,
+      unknown
+    >;
+    expect(googlePlayPurchase.post).toBeDefined();
+    expect(googlePlayPurchase.get).toBeUndefined();
     const webhook = document.paths['/v1/billing/stripe/webhook'] as Record<string, unknown>;
     expect(webhook.post).toBeDefined();
     expect(webhook.get).toBeUndefined();
 
-    // Billing security: session-authenticated for checkout/portal, no security for webhook (signature verified inline).
+    // Billing security: session-authenticated for checkout/portal/Google Play, no security for webhook (signature verified inline).
     const checkoutPost = checkout.post as { security?: unknown[] };
     const checkoutSecurity = JSON.stringify(checkoutPost.security ?? []);
     expect(checkoutSecurity).toContain('sessionAuth');
@@ -119,6 +126,17 @@ describe('OpenAPI contract', () => {
     expect(portalSecurity).toContain('sessionAuth');
     expect(portalSecurity).toContain('mobileSessionAuth');
     expect(portalSecurity).not.toContain('TownControlKey');
+    const googlePlayPost = googlePlayPurchase.post as {
+      security?: unknown[];
+      description?: string;
+    };
+    const googlePlaySecurity = JSON.stringify(googlePlayPost.security ?? []);
+    expect(googlePlaySecurity).toContain('sessionAuth');
+    expect(googlePlaySecurity).toContain('mobileSessionAuth');
+    expect(googlePlaySecurity).not.toContain('TownControlKey');
+    expect(googlePlayPost.description?.toLowerCase()).toContain('purchase token');
+    expect(googlePlayPost.description?.toLowerCase()).toContain('paid_pending_binding');
+    expect(googlePlayPost.description?.toLowerCase()).toContain('does not acknowledge');
 
     // Confirmation PUT is now session-authenticated (not TownControlKey).
     const confirmationSecurity = JSON.stringify(confirmationPath.put.security ?? []);

@@ -62,9 +62,11 @@
     "payment card handling",
     "production email provider",
     "JWTs",
-    "membership mutation routes exposed to the public",
+    "membership mutation routes other than the session-authenticated Google Play purchase ingress",
     "membership pricing, catalog, or checkout",
     "local verification runtime",
+    "Google Play RTDN / Pub/Sub / acknowledgement / voided purchases",
+    "binding finalization from paid_pending_binding to active",
     "Redis",
     "Railway",
     "web integration",
@@ -78,7 +80,35 @@
     "publicRoutes": [],
     "source": "google_play",
     "table": "town.google_play_purchase_links",
-    "trustBoundary": "Input is trusted only after the server-side Google Play verifier validates the purchase via Android Publisher subscriptionsv2.get and then calls the internal provisioner; no client-controlled route in this foundation"
+    "trustBoundary": "Input is trusted only after the server-side Google Play verifier validates the purchase via Android Publisher subscriptionsv2.get and then calls the internal provisioner; the session-authenticated purchase ingress never bypasses verification"
+  },
+  "googlePlayPurchaseIngress": {
+    "auth": "active web or mobile Session only; SetupGrant, RecoveryGrant, and Bearer rejected",
+    "disabledBehavior": "route returns 404 when GOOGLE_PLAY_BILLING_ENABLED is false",
+    "exclusions": [
+      "RTDN",
+      "Pub/Sub",
+      "purchase acknowledgement",
+      "voided purchases",
+      "refunds",
+      "binding finalization to active",
+      "Play Billing client",
+      "Flutter"
+    ],
+    "featureFlag": "GOOGLE_PLAY_BILLING_ENABLED",
+    "featureFlagDefault": false,
+    "internalOperation": "verifyAndProvisionGooglePlayPurchase",
+    "requestFields": [
+      "purchaseToken",
+      "optional packageName",
+      "optional subscriptionId"
+    ],
+    "responsePolicy": [
+      "returns applied or replayed with bounded membership status only",
+      "never returns purchase tokens",
+      "never returns Google verification payloads or provider identifiers"
+    ],
+    "route": "POST /v1/billing/google-play/purchases"
   },
   "googlePlayVerification": {
     "acceptedSubscriptionStates": [
@@ -87,7 +117,6 @@
     "adapter": "TownGooglePlayAndroidPublisherAdapter",
     "api": "purchases.subscriptionsv2.get",
     "exclusions": [
-      "public Fastify purchase routes",
       "RTDN",
       "Pub/Sub",
       "purchase acknowledgement",
@@ -106,7 +135,9 @@
     "featureFlag": "GOOGLE_PLAY_BILLING_ENABLED",
     "featureFlagDefault": false,
     "internalOperation": "verifyAndProvisionGooglePlayPurchase",
-    "publicRoutes": [],
+    "publicRoutes": [
+      "POST /v1/billing/google-play/purchases"
+    ],
     "requiredConfig": [
       "GOOGLE_PLAY_PACKAGE_NAME",
       "GOOGLE_PLAY_SUBSCRIPTION_ID",

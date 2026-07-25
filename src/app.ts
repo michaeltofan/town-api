@@ -23,10 +23,12 @@ import { passkeyManagementRoutes } from './routes/passkey-management.js';
 import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { signalsRoutes } from './routes/signals.js';
 import { billingRoutes } from './routes/billing.js';
+import { googlePlayRoutes } from './routes/google-play.js';
 import { localEligibilityRoutes } from './routes/local-eligibility.js';
 import { signalSubmissionRoutes } from './routes/signal-submissions.js';
 import type { LocalParticipationEligibilityResolver } from './membership/local-eligibility.js';
 import type { TownStripeAdapter } from './billing/stripe-adapter.js';
+import type { TownGooglePlayAndroidPublisherAdapter } from './membership/google-play/android-publisher-adapter.js';
 
 export type BuildAppOptions = {
   env: Env;
@@ -74,7 +76,12 @@ export type BuildAppOptions = {
     now?: () => string;
     generateId?: () => string;
   };
+  googlePlay?: {
+    now?: () => string;
+    generateId?: () => string;
+  };
   stripeAdapter?: TownStripeAdapter;
+  googlePlayAdapter?: TownGooglePlayAndroidPublisherAdapter;
 };
 
 const SENSITIVE_HEADER_REDACT = {
@@ -98,11 +105,13 @@ const SENSITIVE_HEADER_REDACT = {
     'req.body.token',
     'req.body.recoveryToken',
     'req.body.setupToken',
+    'req.body.purchaseToken',
     'DATABASE_URL',
     'env.DATABASE_URL',
     '*.DATABASE_URL',
     '*.STRIPE_SECRET_KEY',
     '*.STRIPE_WEBHOOK_SECRET',
+    '*.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON',
     '*.SESSION_TOKEN_HASH_KEY',
     '*.EMAIL_VERIFICATION_HASH_KEY',
     '*.EMAIL_VERIFICATION_RESEND_API_KEY',
@@ -306,6 +315,16 @@ export async function buildApp(options: BuildAppOptions) {
       ? { generateId: options.billing.generateId }
       : {}),
     ...(options.stripeAdapter !== undefined ? { stripeAdapter: options.stripeAdapter } : {}),
+  });
+  await app.register(googlePlayRoutes, {
+    env: options.env,
+    ...(options.googlePlay?.now !== undefined ? { now: options.googlePlay.now } : {}),
+    ...(options.googlePlay?.generateId !== undefined
+      ? { generateId: options.googlePlay.generateId }
+      : {}),
+    ...(options.googlePlayAdapter !== undefined
+      ? { googlePlayAdapter: options.googlePlayAdapter }
+      : {}),
   });
 
   return app;

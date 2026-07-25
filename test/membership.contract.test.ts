@@ -77,7 +77,7 @@ describe('membership contract', () => {
     expect(doc.stripeBoundary.webhookHandler).toBe('not implemented');
   });
 
-  it('records Google Play verification as internal-only and fail-closed', () => {
+  it('records Google Play verification and session-authenticated purchase ingress as fail-closed', () => {
     const doc = generateMembershipContractDocument() as {
       googlePlayVerification: {
         featureFlag: string;
@@ -86,9 +86,20 @@ describe('membership contract', () => {
         internalOperation: string;
         publicRoutes: string[];
         acceptedSubscriptionStates: string[];
+        exclusions: string[];
       };
       googlePlayPreBinding: {
         publicRoutes: string[];
+      };
+      googlePlayPurchaseIngress: {
+        route: string;
+        featureFlag: string;
+        featureFlagDefault: boolean;
+        auth: string;
+        internalOperation: string;
+        disabledBehavior: string;
+        responsePolicy: string[];
+        exclusions: string[];
       };
     };
     expect(doc.googlePlayVerification.featureFlag).toBe('GOOGLE_PLAY_BILLING_ENABLED');
@@ -97,11 +108,28 @@ describe('membership contract', () => {
     expect(doc.googlePlayVerification.internalOperation).toBe(
       'verifyAndProvisionGooglePlayPurchase',
     );
-    expect(doc.googlePlayVerification.publicRoutes).toEqual([]);
+    expect(doc.googlePlayVerification.publicRoutes).toEqual([
+      'POST /v1/billing/google-play/purchases',
+    ]);
     expect(doc.googlePlayVerification.acceptedSubscriptionStates).toEqual([
       'SUBSCRIPTION_STATE_ACTIVE',
     ]);
+    expect(doc.googlePlayVerification.exclusions).not.toContain('public Fastify purchase routes');
+    expect(doc.googlePlayVerification.exclusions).toContain('RTDN');
     expect(doc.googlePlayPreBinding.publicRoutes).toEqual([]);
+    expect(doc.googlePlayPurchaseIngress.route).toBe('POST /v1/billing/google-play/purchases');
+    expect(doc.googlePlayPurchaseIngress.featureFlag).toBe('GOOGLE_PLAY_BILLING_ENABLED');
+    expect(doc.googlePlayPurchaseIngress.featureFlagDefault).toBe(false);
+    expect(doc.googlePlayPurchaseIngress.auth).toContain('Session');
+    expect(doc.googlePlayPurchaseIngress.internalOperation).toBe(
+      'verifyAndProvisionGooglePlayPurchase',
+    );
+    expect(doc.googlePlayPurchaseIngress.disabledBehavior).toContain('404');
+    expect(doc.googlePlayPurchaseIngress.responsePolicy.join(' ')).toContain(
+      'never returns purchase tokens',
+    );
+    expect(doc.googlePlayPurchaseIngress.exclusions).toContain('purchase acknowledgement');
+    expect(doc.googlePlayPurchaseIngress.exclusions).toContain('binding finalization to active');
   });
 
   it('records the payload-hash canonical key order and secret exclusions', () => {
