@@ -6,6 +6,7 @@ export const MembershipStatusSchema = Type.Union([
   Type.Literal('active'),
   Type.Literal('cancelling'),
   Type.Literal('expired'),
+  Type.Literal('paid_pending_binding'),
 ]);
 
 export const CivicAccessLevelSchema = Type.Union([

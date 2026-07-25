@@ -20,13 +20,20 @@ describe('membership contract', () => {
       accessLevels: { values: string[] };
       localEligibility: { values: string[]; failClosedDefault: string };
     };
-    expect(doc.entitlement.statuses).toEqual(['inactive', 'active', 'cancelling', 'expired']);
-    expect(doc.entitlement.sources).toEqual(['test_fixture', 'stripe']);
+    expect(doc.entitlement.statuses).toEqual([
+      'inactive',
+      'active',
+      'cancelling',
+      'expired',
+      'paid_pending_binding',
+    ]);
+    expect(doc.entitlement.sources).toEqual(['test_fixture', 'stripe', 'google_play']);
     expect(doc.sourceEvents.eventTypes).toEqual([
       'activate',
       'schedule_cancellation',
       'expire',
       'reactivate',
+      'provision_paid_pending_binding',
     ]);
     expect(doc.sourceEvents.results).toEqual(['applied', 'replayed', 'rejected', 'stale']);
     expect(doc.accessLevels.values).toEqual(['visitor', 'read_only', 'participant']);
@@ -87,6 +94,9 @@ describe('membership contract', () => {
       'cancelAtPeriodEnd',
       'effectiveAt',
       'eventType',
+      'googlePlayPackageName',
+      'googlePlayPurchaseToken',
+      'googlePlaySubscriptionId',
       'source',
       'sourceCustomerId',
       'sourceEventId',

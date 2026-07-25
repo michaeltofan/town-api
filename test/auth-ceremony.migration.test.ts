@@ -10,6 +10,7 @@ const EXPECTED_TABLES = [
   'ceremony_rate_limits',
   'communities',
   'email_challenges',
+  'google_play_purchase_links',
   'identity_security_events',
   'membership_entitlements',
   'membership_source_events',

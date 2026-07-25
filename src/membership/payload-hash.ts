@@ -11,6 +11,9 @@ export type MembershipTransitionPayloadInput = {
   sourceSubscriptionId?: string | null;
   accessUntil?: string | null;
   cancelAtPeriodEnd?: boolean | null;
+  googlePlayPackageName?: string | null;
+  googlePlayPurchaseToken?: string | null;
+  googlePlaySubscriptionId?: string | null;
 };
 
 const PAYLOAD_KEY_ORDER = [
@@ -19,6 +22,9 @@ const PAYLOAD_KEY_ORDER = [
   'cancelAtPeriodEnd',
   'effectiveAt',
   'eventType',
+  'googlePlayPackageName',
+  'googlePlayPurchaseToken',
+  'googlePlaySubscriptionId',
   'source',
   'sourceCustomerId',
   'sourceEventId',
