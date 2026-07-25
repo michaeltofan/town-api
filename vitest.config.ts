@@ -35,6 +35,8 @@ export default defineConfig({
       'test/passkey-management.api.test.ts',
       'test/passkey-management.migration.test.ts',
       'test/membership.migration.test.ts',
+      'test/membership.google-play.migration.test.ts',
+      'test/membership.google-play-provision.integration.test.ts',
       'test/membership.transitions.integration.test.ts',
       'test/membership.idempotency.integration.test.ts',
       'test/membership.stale.integration.test.ts',

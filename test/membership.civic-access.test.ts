@@ -70,6 +70,19 @@ function makeEntitlement(
 }
 
 describe('resolveEffectiveMembershipStatus', () => {
+  it('returns paid_pending_binding unchanged when access_until is future', () => {
+    expect(
+      resolveEffectiveMembershipStatus(
+        makeEntitlement({
+          status: 'paid_pending_binding',
+          activatedAt: null,
+          source: 'google_play',
+        }),
+        NOW,
+      ),
+    ).toBe('paid_pending_binding');
+  });
+
   it('returns inactive when entitlement is missing', () => {
     expect(resolveEffectiveMembershipStatus(null, NOW)).toBe('inactive');
   });
@@ -142,6 +155,25 @@ describe('evaluateCivicAccess', () => {
     });
     expect(result.level).toBe('read_only');
     expect(result.denialReason).toBe('expired_membership');
+  });
+
+  it('denies participation for paid_pending_binding even with eligible local actor', () => {
+    const result = evaluateCivicAccess({
+      session: { accountId: ACCOUNT_ID },
+      account: makeAccount(),
+      entitlement: makeEntitlement({
+        status: 'paid_pending_binding',
+        activatedAt: null,
+        source: 'google_play',
+      }),
+      actor: makeActor({ localEligibilityVerifiedAt: NOW }),
+      communityId: COMMUNITY_ID,
+      localEligibility: eligibleLocal,
+      now: NOW,
+    });
+    expect(result.level).toBe('read_only');
+    expect(result.canParticipate).toBe(false);
+    expect(result.denialReason).toBe('inactive_membership');
   });
 
   it('boundary now == access_until is expired', () => {

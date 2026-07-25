@@ -3,7 +3,8 @@
     "derivation": [
       "visitor when no session is present",
       "read_only when a session is present but participant preconditions are not all met",
-      "participant only when the account is active, the entitlement is temporally valid with status active or cancelling, a linked civic actor exists for the request community, and local eligibility is eligible"
+      "participant only when the account is active, the entitlement is temporally valid with status active or cancelling, a linked civic actor exists for the request community, and local eligibility is eligible",
+      "paid_pending_binding never grants participant access; payment alone is insufficient without final community binding"
     ],
     "values": [
       "visitor",
@@ -31,19 +32,22 @@
     },
     "sources": [
       "test_fixture",
-      "stripe"
+      "stripe",
+      "google_play"
     ],
     "stateInvariants": [
       "inactive => access_until null and cancel_at_period_end false",
       "active => access_until not null and cancel_at_period_end false and activated_at not null and expired_at null",
       "cancelling => access_until not null and cancel_at_period_end true and cancellation_requested_at not null and expired_at null",
-      "expired => access_until not null and cancel_at_period_end false and expired_at not null"
+      "expired => access_until not null and cancel_at_period_end false and expired_at not null",
+      "paid_pending_binding => access_until not null and cancel_at_period_end false and activated_at null and cancellation_requested_at null and expired_at null"
     ],
     "statuses": [
       "inactive",
       "active",
       "cancelling",
-      "expired"
+      "expired",
+      "paid_pending_binding"
     ],
     "table": "town.membership_entitlements",
     "uniquePerAccount": true,
@@ -67,6 +71,15 @@
     "mobile integration",
     "deployment"
   ],
+  "googlePlayPreBinding": {
+    "internalOperation": "provisionGooglePlayPaidPendingBinding",
+    "participation": "paid_pending_binding grants no civic participation",
+    "provisionedStatus": "paid_pending_binding",
+    "publicRoutes": [],
+    "source": "google_play",
+    "table": "town.google_play_purchase_links",
+    "trustBoundary": "Input is trusted only after a future server-side Google Play verifier calls the internal provisioner; no Google API calls and no client-controlled route in this foundation"
+  },
   "identitySecurityEvents": {
     "added": [
       "membership_created",
@@ -74,6 +87,7 @@
       "membership_cancellation_scheduled",
       "membership_reactivated",
       "membership_expired",
+      "membership_paid_pending_binding_provisioned",
       "membership_event_replayed",
       "membership_event_rejected",
       "civic_participation_denied"
@@ -157,7 +171,8 @@
       "activate",
       "schedule_cancellation",
       "expire",
-      "reactivate"
+      "reactivate",
+      "provision_paid_pending_binding"
     ],
     "idempotency": [
       "Same (source, source_event_id) with matching payload_hash returns replayed and never re-mutates the entitlement",
@@ -172,6 +187,9 @@
         "cancelAtPeriodEnd",
         "effectiveAt",
         "eventType",
+        "googlePlayPackageName",
+        "googlePlayPurchaseToken",
+        "googlePlaySubscriptionId",
         "source",
         "sourceCustomerId",
         "sourceEventId",
@@ -258,6 +276,29 @@
         "cancelAtPeriodEnd": false,
         "expiredAtSetTo": "effective_at",
         "status": "expired"
+      }
+    },
+    "provisionPaidPendingBinding": {
+      "allowedFromStatuses": [
+        "absent",
+        "inactive",
+        "expired"
+      ],
+      "publicRoutes": [],
+      "rejectsWhen": [
+        "account is closed",
+        "access_until is not provided",
+        "access_until is not strictly greater than effective_at",
+        "purchase token is already correlated",
+        "entitlement is already active, cancelling, or paid_pending_binding"
+      ],
+      "source": "google_play",
+      "successOutcome": {
+        "activatedAt": null,
+        "cancelAtPeriodEnd": false,
+        "expiredAt": null,
+        "grantsParticipation": false,
+        "status": "paid_pending_binding"
       }
     },
     "reactivate": {

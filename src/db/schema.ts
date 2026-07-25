@@ -539,6 +539,7 @@ export const identitySecurityEvents = town.table(
         'membership_cancellation_scheduled',
         'membership_reactivated',
         'membership_expired',
+        'membership_paid_pending_binding_provisioned',
         'membership_event_replayed',
         'membership_event_rejected',
         'civic_participation_denied',
@@ -595,11 +596,11 @@ export const membershipEntitlements = town.table(
     unique('membership_entitlements_account_id_unique').on(table.accountId),
     check(
       'membership_entitlements_status_valid',
-      sql`${table.status} in ('inactive', 'active', 'cancelling', 'expired')`,
+      sql`${table.status} in ('inactive', 'active', 'cancelling', 'expired', 'paid_pending_binding')`,
     ),
     check(
       'membership_entitlements_source_valid',
-      sql`${table.source} in ('test_fixture', 'stripe')`,
+      sql`${table.source} in ('test_fixture', 'stripe', 'google_play')`,
     ),
     check('membership_entitlements_version_positive', sql`${table.version} >= 1`),
     check(
@@ -626,6 +627,12 @@ export const membershipEntitlements = town.table(
           and ${table.accessUntil} is not null
           and ${table.cancelAtPeriodEnd} = false
           and ${table.expiredAt} is not null)
+        or (${table.status} = 'paid_pending_binding'
+          and ${table.accessUntil} is not null
+          and ${table.cancelAtPeriodEnd} = false
+          and ${table.activatedAt} is null
+          and ${table.cancellationRequestedAt} is null
+          and ${table.expiredAt} is null)
       )`,
     ),
     uniqueIndex('membership_entitlements_stripe_subscription_unique')
@@ -661,11 +668,11 @@ export const membershipSourceEvents = town.table(
     unique('membership_source_events_source_event_unique').on(table.source, table.sourceEventId),
     check(
       'membership_source_events_source_valid',
-      sql`${table.source} in ('test_fixture', 'stripe')`,
+      sql`${table.source} in ('test_fixture', 'stripe', 'google_play')`,
     ),
     check(
       'membership_source_events_event_type_valid',
-      sql`${table.eventType} in ('activate', 'schedule_cancellation', 'expire', 'reactivate')`,
+      sql`${table.eventType} in ('activate', 'schedule_cancellation', 'expire', 'reactivate', 'provision_paid_pending_binding')`,
     ),
     check(
       'membership_source_events_result_valid',
@@ -742,6 +749,57 @@ export const stripeCheckoutAttempts = town.table(
       sql`${table.expiresAt} > ${table.createdAt}`,
     ),
     index('stripe_checkout_attempts_account_created_idx').on(table.accountId, table.createdAt),
+  ],
+);
+
+/**
+ * Google Play purchase correlation for TOWN accounts/entitlements.
+ * Purchase tokens remain usable for later Google API reconciliation.
+ * Order IDs are intentionally not required and are never used as primary/idempotency keys.
+ */
+export const googlePlayPurchaseLinks = town.table(
+  'google_play_purchase_links',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    entitlementId: uuid('entitlement_id').notNull(),
+    purchaseToken: text('purchase_token').notNull(),
+    packageName: text('package_name').notNull(),
+    subscriptionId: text('subscription_id').notNull(),
+    expiryTime: timestamp('expiry_time', { withTimezone: true, mode: 'string' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'google_play_purchase_links_account_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.entitlementId],
+      foreignColumns: [membershipEntitlements.id],
+      name: 'google_play_purchase_links_entitlement_id_fkey',
+    }).onDelete('restrict'),
+    unique('google_play_purchase_links_purchase_token_unique').on(table.purchaseToken),
+    check(
+      'google_play_purchase_links_updated_after_created',
+      sql`${table.updatedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      'google_play_purchase_links_purchase_token_nonempty',
+      sql`char_length(${table.purchaseToken}) > 0`,
+    ),
+    check(
+      'google_play_purchase_links_package_name_nonempty',
+      sql`char_length(${table.packageName}) > 0`,
+    ),
+    check(
+      'google_play_purchase_links_subscription_id_nonempty',
+      sql`char_length(${table.subscriptionId}) > 0`,
+    ),
+    index('google_play_purchase_links_account_id_idx').on(table.accountId),
+    index('google_play_purchase_links_entitlement_id_idx').on(table.entitlementId),
   ],
 );
 
@@ -979,6 +1037,7 @@ export type AccountSessionRow = typeof accountSessions.$inferSelect;
 export type CeremonyRateLimitRow = typeof ceremonyRateLimits.$inferSelect;
 export type StripeCustomerLinkRow = typeof stripeCustomerLinks.$inferSelect;
 export type StripeCheckoutAttemptRow = typeof stripeCheckoutAttempts.$inferSelect;
+export type GooglePlayPurchaseLinkRow = typeof googlePlayPurchaseLinks.$inferSelect;
 export type MembershipEntitlementRow = typeof membershipEntitlements.$inferSelect;
 export type MembershipSourceEventRow = typeof membershipSourceEvents.$inferSelect;
 
@@ -1064,6 +1123,7 @@ export type IdentitySecurityEventType =
   | 'membership_cancellation_scheduled'
   | 'membership_reactivated'
   | 'membership_expired'
+  | 'membership_paid_pending_binding_provisioned'
   | 'membership_event_replayed'
   | 'membership_event_rejected'
   | 'civic_participation_denied'
@@ -1081,10 +1141,19 @@ export type IdentitySecurityEventType =
   | 'stripe_payment_failed'
   | 'stripe_price_mismatch';
 
-export type MembershipStatus = 'inactive' | 'active' | 'cancelling' | 'expired';
-export type MembershipSource = 'test_fixture' | 'stripe';
+export type MembershipStatus =
+  | 'inactive'
+  | 'active'
+  | 'cancelling'
+  | 'expired'
+  | 'paid_pending_binding';
+export type MembershipSource = 'test_fixture' | 'stripe' | 'google_play';
 export type MembershipSourceEventType =
-  'activate' | 'schedule_cancellation' | 'expire' | 'reactivate';
+  | 'activate'
+  | 'schedule_cancellation'
+  | 'expire'
+  | 'reactivate'
+  | 'provision_paid_pending_binding';
 export type MembershipSourceEventResult = 'applied' | 'replayed' | 'rejected' | 'stale';
 export type CivicAccessLevel = 'visitor' | 'read_only' | 'participant';
 export type LocalParticipationEligibility =

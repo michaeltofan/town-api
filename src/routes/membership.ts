@@ -140,7 +140,7 @@ export const membershipRoutes: FastifyPluginCallbackTypebox<MembershipRoutesOpti
         tags: ['Account'],
         summary: 'Read the authenticated account membership entitlement and civic access view',
         description:
-          'Returns the effective membership status (inactive/active/cancelling/expired), accessUntil, cancelAtPeriodEnd, and the civic access level derived from membership, actor linkage, and fail-closed local eligibility. Requires an active web or mobile session. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes Stripe customer or subscription identifiers.',
+          'Returns the effective membership status (inactive/active/cancelling/expired/paid_pending_binding), accessUntil, cancelAtPeriodEnd, and the civic access level derived from membership, actor linkage, and fail-closed local eligibility. paid_pending_binding never grants participant access. Requires an active web or mobile session. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes Stripe customer or subscription identifiers.',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
         response: MembershipRouteResponses.accountMembership,
       },

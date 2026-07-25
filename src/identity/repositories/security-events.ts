@@ -42,6 +42,7 @@ const APPROVED_EVENT_TYPES = new Set<IdentitySecurityEventType>([
   'membership_cancellation_scheduled',
   'membership_reactivated',
   'membership_expired',
+  'membership_paid_pending_binding_provisioned',
   'membership_event_replayed',
   'membership_event_rejected',
   'civic_participation_denied',

@@ -112,6 +112,15 @@ export function evaluateCivicAccess(input: {
     };
   }
 
+  // Payment alone grants no civic participation. paid_pending_binding is provisioned
+  // after a verified purchase but before final community binding completes.
+  if (effectiveStatus === 'paid_pending_binding') {
+    return {
+      ...base,
+      denialReason: 'inactive_membership',
+    };
+  }
+
   if (!isMembershipTemporallyValid(input.entitlement, input.now)) {
     return {
       ...base,
