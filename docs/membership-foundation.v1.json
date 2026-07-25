@@ -66,7 +66,7 @@
     "membership pricing, catalog, or checkout",
     "local verification runtime",
     "Google Play RTDN / Pub/Sub / voided purchases / refunds",
-    "binding finalization from paid_pending_binding to active",
+    "subscription renewal",
     "Redis",
     "Railway",
     "web integration",
@@ -220,6 +220,24 @@
       "unavailable"
     ]
   },
+  "paidPendingBindingFinalization": {
+    "eventType": "finalize_paid_pending_binding",
+    "exclusions": [
+      "RTDN",
+      "Pub/Sub",
+      "voided purchases",
+      "refunds",
+      "subscription renewal",
+      "Play Billing client",
+      "Flutter"
+    ],
+    "fromStatus": "paid_pending_binding",
+    "internalOperation": "maybeFinalizePaidPendingBindingAfterCommunityBind",
+    "schemaChange": "membership_source_events_event_type_valid expanded to include finalize_paid_pending_binding only",
+    "toStatus": "active",
+    "transition": "finalizePaidPendingBindingMembership",
+    "triggerRoute": "PUT /v1/account/eligibility"
+  },
   "participantPolicy": {
     "denialErrorCode": "CIVIC_PARTICIPATION_NOT_AUTHORIZED",
     "denialMetadata": "bounded denial reason categories only; no signal, actor, or entitlement identifiers",
@@ -263,7 +281,8 @@
       "schedule_cancellation",
       "expire",
       "reactivate",
-      "provision_paid_pending_binding"
+      "provision_paid_pending_binding",
+      "finalize_paid_pending_binding"
     ],
     "idempotency": [
       "Same (source, source_event_id) with matching payload_hash returns replayed and never re-mutates the entitlement",
@@ -368,6 +387,36 @@
         "expiredAtSetTo": "effective_at",
         "status": "expired"
       }
+    },
+    "finalizePaidPendingBinding": {
+      "allowedFromStatuses": [
+        "paid_pending_binding"
+      ],
+      "eventType": "finalize_paid_pending_binding",
+      "neverFrom": [
+        "Google Play purchase ingress",
+        "verifyAndProvisionGooglePlayPurchase",
+        "activateMembership"
+      ],
+      "preconditions": [
+        "civic actor community binding is set for the target community",
+        "local_eligibility_verified_at is set"
+      ],
+      "rejectsWhen": [
+        "account is closed",
+        "entitlement is missing",
+        "entitlement is not paid_pending_binding",
+        "access_until is missing or not strictly greater than effective_at",
+        "proposed access_until does not match the entitlement access_until"
+      ],
+      "successOutcome": {
+        "accessUntilPreserved": true,
+        "activatedAtSetTo": "effective_at",
+        "cancelAtPeriodEnd": false,
+        "expiredAt": null,
+        "status": "active"
+      },
+      "trigger": "after successful PUT /v1/account/eligibility community binding (create or same-community idempotent confirm)"
     },
     "provisionPaidPendingBinding": {
       "allowedFromStatuses": [

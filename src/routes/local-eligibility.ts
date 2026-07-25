@@ -11,6 +11,7 @@ import { resolveActiveSession } from '../ceremony/passkey-authentication/service
 import { findActiveCommunityBySlug } from '../db/repositories/communities.js';
 import { AppError, communityNotFoundError } from '../errors/app-error.js';
 import { bindLocalEligibilityInTransaction } from '../membership/bind-service.js';
+import { maybeFinalizePaidPendingBindingAfterCommunityBind } from '../membership/finalize-after-community-bind.js';
 import {
   LocalEligibilityBindBodySchema,
   LocalEligibilityRouteResponses,
@@ -132,7 +133,7 @@ export const localEligibilityRoutes: FastifyPluginCallbackTypebox<LocalEligibili
         tags: ['Account'],
         summary: 'Bind local participation eligibility to an active community (set-once)',
         description:
-          "SET-ONCE SEMANTICS: this is deliberately not a replacing PUT. If the account has no community binding, the binding is created. If a binding already exists for the same community the request is idempotent and verifiedAt is NOT refreshed. If a binding exists for a different community the request is rejected with 409. Community transfer and re-verification are not supported by this endpoint.\n\nTRUST LIMITATION: the community in the request body is a client assertion. Local eligibility is determined on the client device and raw location data never reaches the server, so the server cannot independently validate the claim. Any session holder can assert any active community slug. This capability is gated behind LOCAL_ELIGIBILITY_ENABLED, which must remain false in any environment reachable by untrusted clients until either the server can validate eligibility evidence independently of the client's claim, or access is technically restricted to approved test accounts or a separate controlled environment.",
+          "SET-ONCE SEMANTICS: this is deliberately not a replacing PUT. If the account has no community binding, the binding is created. If a binding already exists for the same community the request is idempotent and verifiedAt is NOT refreshed. If a binding exists for a different community the request is rejected with 409. Community transfer and re-verification are not supported by this endpoint.\n\nAfter a successful community binding (create or same-community idempotent confirm), if the account has a durable Google Play entitlement in status paid_pending_binding, the server attempts a dedicated finalize_paid_pending_binding membership transition to active via the existing membership source-event idempotency ledger. Google Play purchase ingress remains paid_pending_binding-only; finalisation is a separate step and does not process RTDN, voided purchases, refunds, or renewals.\n\nTRUST LIMITATION: the community in the request body is a client assertion. Local eligibility is determined on the client device and raw location data never reaches the server, so the server cannot independently validate the claim. Any session holder can assert any active community slug. This capability is gated behind LOCAL_ELIGIBILITY_ENABLED, which must remain false in any environment reachable by untrusted clients until either the server can validate eligibility evidence independently of the client's claim, or access is technically restricted to approved test accounts or a separate controlled environment.",
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
         body: LocalEligibilityBindBodySchema,
         response: LocalEligibilityRouteResponses.bind,
@@ -183,6 +184,21 @@ export const localEligibilityRoutes: FastifyPluginCallbackTypebox<LocalEligibili
           now: nowIso,
         });
       });
+
+      // Separate step after durable community binding. Never widens activate.
+      // Skips when entitlement is absent or not paid_pending_binding.
+      await maybeFinalizePaidPendingBindingAfterCommunityBind(
+        app.database.db,
+        {
+          accountId: session.accountId,
+          communityId: community.id,
+          effectiveAt: nowIso,
+        },
+        {
+          requestId: request.id,
+          processedAt: nowIso,
+        },
+      );
 
       return await reply.status(200).send({ data: result });
     },

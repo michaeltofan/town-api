@@ -80,6 +80,7 @@ export type CreateGooglePlayTestAppOptions = {
   now?: () => string;
   generateId?: () => string;
   generateToken?: () => string;
+  envOverrides?: Partial<NodeJS.ProcessEnv>;
 };
 
 export async function createGooglePlayTestApp(
@@ -90,7 +91,10 @@ export async function createGooglePlayTestApp(
   await resetMigrateSeedFoundationAndActor(pool);
 
   const billingEnabled = options.billingEnabled ?? true;
-  const env = createGooglePlayEnv(billingEnabled ? {} : { GOOGLE_PLAY_BILLING_ENABLED: 'false' });
+  const env = createGooglePlayEnv({
+    ...(billingEnabled ? {} : { GOOGLE_PLAY_BILLING_ENABLED: 'false' }),
+    ...(options.envOverrides ?? {}),
+  });
   const delivery = createInMemoryTestDeliveryAdapter();
   const googlePlayState = createFakeGooglePlayAndroidPublisherState();
   const googlePlayAdapter = createFakeGooglePlayAndroidPublisherAdapter(googlePlayState);
@@ -127,6 +131,10 @@ export async function createGooglePlayTestApp(
       ...(options.generateToken !== undefined ? { generateToken: options.generateToken } : {}),
     },
     googlePlay: {
+      ...(options.now !== undefined ? { now: options.now } : {}),
+      ...(options.generateId !== undefined ? { generateId: options.generateId } : {}),
+    },
+    membership: {
       ...(options.now !== undefined ? { now: options.now } : {}),
       ...(options.generateId !== undefined ? { generateId: options.generateId } : {}),
     },

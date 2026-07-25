@@ -672,7 +672,7 @@ export const membershipSourceEvents = town.table(
     ),
     check(
       'membership_source_events_event_type_valid',
-      sql`${table.eventType} in ('activate', 'schedule_cancellation', 'expire', 'reactivate', 'provision_paid_pending_binding')`,
+      sql`${table.eventType} in ('activate', 'schedule_cancellation', 'expire', 'reactivate', 'provision_paid_pending_binding', 'finalize_paid_pending_binding')`,
     ),
     check(
       'membership_source_events_result_valid',
@@ -1145,7 +1145,12 @@ export type MembershipStatus =
   'inactive' | 'active' | 'cancelling' | 'expired' | 'paid_pending_binding';
 export type MembershipSource = 'test_fixture' | 'stripe' | 'google_play';
 export type MembershipSourceEventType =
-  'activate' | 'schedule_cancellation' | 'expire' | 'reactivate' | 'provision_paid_pending_binding';
+  | 'activate'
+  | 'schedule_cancellation'
+  | 'expire'
+  | 'reactivate'
+  | 'provision_paid_pending_binding'
+  | 'finalize_paid_pending_binding';
 export type MembershipSourceEventResult = 'applied' | 'replayed' | 'rejected' | 'stale';
 export type CivicAccessLevel = 'visitor' | 'read_only' | 'participant';
 export type LocalParticipationEligibility =

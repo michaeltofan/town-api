@@ -34,6 +34,7 @@ describe('membership contract', () => {
       'expire',
       'reactivate',
       'provision_paid_pending_binding',
+      'finalize_paid_pending_binding',
     ]);
     expect(doc.sourceEvents.results).toEqual(['applied', 'replayed', 'rejected', 'stale']);
     expect(doc.accessLevels.values).toEqual(['visitor', 'read_only', 'participant']);
@@ -166,6 +167,56 @@ describe('membership contract', () => {
     expect(doc.googlePlayPurchaseAcknowledgement.exclusions).toContain('RTDN');
     expect(doc.googlePlayPurchaseAcknowledgement.exclusions).toContain(
       'binding finalization to active',
+    );
+  });
+
+  it('records dedicated paid_pending_binding finalisation after community binding', () => {
+    const doc = generateMembershipContractDocument() as {
+      paidPendingBindingFinalization: {
+        internalOperation: string;
+        transition: string;
+        eventType: string;
+        fromStatus: string;
+        toStatus: string;
+        triggerRoute: string;
+        exclusions: string[];
+      };
+      transitions: {
+        finalizePaidPendingBinding: {
+          allowedFromStatuses: string[];
+          neverFrom: string[];
+          successOutcome: { status: string; accessUntilPreserved: boolean };
+        };
+        activate: { allowedFromStatuses: string[] };
+      };
+      explicitExclusions: string[];
+    };
+    expect(doc.paidPendingBindingFinalization.internalOperation).toBe(
+      'maybeFinalizePaidPendingBindingAfterCommunityBind',
+    );
+    expect(doc.paidPendingBindingFinalization.transition).toBe(
+      'finalizePaidPendingBindingMembership',
+    );
+    expect(doc.paidPendingBindingFinalization.eventType).toBe('finalize_paid_pending_binding');
+    expect(doc.paidPendingBindingFinalization.fromStatus).toBe('paid_pending_binding');
+    expect(doc.paidPendingBindingFinalization.toStatus).toBe('active');
+    expect(doc.paidPendingBindingFinalization.triggerRoute).toBe('PUT /v1/account/eligibility');
+    expect(doc.paidPendingBindingFinalization.exclusions).toEqual(
+      expect.arrayContaining(['RTDN', 'voided purchases', 'refunds', 'subscription renewal']),
+    );
+    expect(doc.transitions.finalizePaidPendingBinding.allowedFromStatuses).toEqual([
+      'paid_pending_binding',
+    ]);
+    expect(doc.transitions.finalizePaidPendingBinding.neverFrom).toContain(
+      'Google Play purchase ingress',
+    );
+    expect(doc.transitions.finalizePaidPendingBinding.successOutcome.status).toBe('active');
+    expect(doc.transitions.finalizePaidPendingBinding.successOutcome.accessUntilPreserved).toBe(
+      true,
+    );
+    expect(doc.transitions.activate.allowedFromStatuses).not.toContain('paid_pending_binding');
+    expect(doc.explicitExclusions).not.toContain(
+      'binding finalization from paid_pending_binding to active',
     );
   });
 
