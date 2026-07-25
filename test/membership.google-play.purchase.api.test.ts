@@ -168,6 +168,35 @@ describe('POST /v1/billing/google-play/purchases', () => {
     expect(JSON.stringify(body)).not.toContain(token);
   });
 
+  it('returns GOOGLE_PLAY_PURCHASE_ACKNOWLEDGE_FAILED when acknowledge transport fails after durable provision', async () => {
+    const token = 'gp_token_api_ack_fail';
+    seedActiveGooglePlayPurchase(ctx.googlePlayState, {
+      purchaseToken: token,
+      expiryTime: ACCESS_UNTIL,
+    });
+    ctx.googlePlayState.errorHooks.acknowledgeSubscription = () =>
+      new Error('acknowledge unavailable');
+    const registration = await activatePasskeyAccountAndLinkCommunity({
+      app: ctx.app,
+      delivery: ctx.delivery,
+      email: 'GooglePlayAckFail+setup@example.com',
+    });
+    const login = await loginMobileSession({ app: ctx.app, material: registration.material });
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: ROUTE,
+      headers: { authorization: `Session ${login.sessionToken}` },
+      payload: { purchaseToken: token },
+    });
+    delete ctx.googlePlayState.errorHooks.acknowledgeSubscription;
+    expect(response.statusCode).toBe(502);
+    const body = response.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe('GOOGLE_PLAY_PURCHASE_ACKNOWLEDGE_FAILED');
+    expect(JSON.stringify(body)).not.toContain(token);
+    expect(body.error.message.toLowerCase()).not.toContain('transport');
+    expect(body.error.message.toLowerCase()).not.toContain('unavailable');
+  });
+
   it('protects against cross-account purchase token reuse', async () => {
     const token = 'gp_token_api_cross_account';
     seedActiveGooglePlayPurchase(ctx.googlePlayState, {

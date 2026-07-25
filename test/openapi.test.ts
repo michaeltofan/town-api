@@ -136,7 +136,8 @@ describe('OpenAPI contract', () => {
     expect(googlePlaySecurity).not.toContain('TownControlKey');
     expect(googlePlayPost.description?.toLowerCase()).toContain('purchase token');
     expect(googlePlayPost.description?.toLowerCase()).toContain('paid_pending_binding');
-    expect(googlePlayPost.description?.toLowerCase()).toContain('does not acknowledge');
+    expect(googlePlayPost.description?.toLowerCase()).toContain('acknowledge');
+    expect(googlePlayPost.description?.toLowerCase()).toContain('does not process rtdn');
 
     // Confirmation PUT is now session-authenticated (not TownControlKey).
     const confirmationSecurity = JSON.stringify(confirmationPath.put.security ?? []);

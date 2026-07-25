@@ -5,6 +5,10 @@
 
 export const GOOGLE_PLAY_SUBSCRIPTION_STATE_ACTIVE = 'SUBSCRIPTION_STATE_ACTIVE' as const;
 
+export const GOOGLE_PLAY_ACKNOWLEDGEMENT_STATE_PENDING = 'ACKNOWLEDGEMENT_STATE_PENDING' as const;
+export const GOOGLE_PLAY_ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED =
+  'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED' as const;
+
 export type GooglePlaySubscriptionPurchaseLineItem = {
   productId: string;
   expiryTime: string;
@@ -13,6 +17,11 @@ export type GooglePlaySubscriptionPurchaseLineItem = {
 export type GooglePlaySubscriptionPurchaseV2 = {
   subscriptionState: string;
   lineItems: GooglePlaySubscriptionPurchaseLineItem[];
+  /**
+   * Optional SubscriptionPurchaseV2 acknowledgementState. When absent, treat as
+   * pending so acknowledgement is still attempted after durable provision.
+   */
+  acknowledgementState?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -63,11 +72,16 @@ export function parseSubscriptionPurchaseV2(
     });
   }
 
+  const acknowledgementState = isNonEmptyString(value.acknowledgementState)
+    ? value.acknowledgementState
+    : undefined;
+
   return {
     ok: true,
     purchase: {
       subscriptionState: value.subscriptionState,
       lineItems,
+      ...(acknowledgementState !== undefined ? { acknowledgementState } : {}),
     },
   };
 }

@@ -11,6 +11,7 @@ import { resolveActiveSession } from '../ceremony/passkey-authentication/service
 import {
   AppError,
   googlePlayBillingNotAvailableError,
+  googlePlayPurchaseAcknowledgeFailedError,
   googlePlayPurchaseAlreadyBoundError,
   googlePlayPurchaseRejectedError,
   membershipAlreadyActiveError,
@@ -173,7 +174,7 @@ export const googlePlayRoutes: FastifyPluginCallbackTypebox<GooglePlayRoutesOpti
         tags: ['Billing'],
         summary: 'Verify and provision a Google Play purchase for the authenticated account',
         description:
-          'Accepts a Google Play purchase token from an active web or mobile session, verifies it via Android Publisher purchases.subscriptionsv2.get, and provisions paid_pending_binding through the internal Google Play provisioner. Feature-gated by GOOGLE_PLAY_BILLING_ENABLED (fail-closed when disabled). SetupGrant, RecoveryGrant, and Bearer are rejected. Never returns purchase tokens, Google verification payloads, or provider identifiers. Does not acknowledge purchases, process RTDN, or finalize binding to active.',
+          'Accepts a Google Play purchase token from an active web or mobile session, verifies it via Android Publisher purchases.subscriptionsv2.get, provisions paid_pending_binding through the internal Google Play provisioner, and acknowledges the purchase via purchases.subscriptions.acknowledge only after a durable applied or replayed provision outcome. Feature-gated by GOOGLE_PLAY_BILLING_ENABLED (fail-closed when disabled). SetupGrant, RecoveryGrant, and Bearer are rejected. Never returns purchase tokens, Google verification payloads, or provider identifiers. Does not process RTDN, voided purchases, refunds, or finalize binding to active.',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
         body: GooglePlayPurchaseRequestSchema,
         response: GooglePlayPurchaseRouteResponses.purchase,
@@ -246,6 +247,11 @@ export const googlePlayRoutes: FastifyPluginCallbackTypebox<GooglePlayRoutesOpti
 
       if (outcome.result !== 'applied' && outcome.result !== 'replayed') {
         throw googlePlayPurchaseRejectedError();
+      }
+
+      if (outcome.acknowledgement === 'failed' || outcome.acknowledgement === undefined) {
+        // Provision is durable; fail closed so the client can retry (replay + re-ack).
+        throw googlePlayPurchaseAcknowledgeFailedError();
       }
 
       const entitlement = outcome.entitlement;

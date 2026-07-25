@@ -5975,7 +5975,7 @@
     },
     "/v1/billing/google-play/purchases": {
       "post": {
-        "description": "Accepts a Google Play purchase token from an active web or mobile session, verifies it via Android Publisher purchases.subscriptionsv2.get, and provisions paid_pending_binding through the internal Google Play provisioner. Feature-gated by GOOGLE_PLAY_BILLING_ENABLED (fail-closed when disabled). SetupGrant, RecoveryGrant, and Bearer are rejected. Never returns purchase tokens, Google verification payloads, or provider identifiers. Does not acknowledge purchases, process RTDN, or finalize binding to active.",
+        "description": "Accepts a Google Play purchase token from an active web or mobile session, verifies it via Android Publisher purchases.subscriptionsv2.get, provisions paid_pending_binding through the internal Google Play provisioner, and acknowledges the purchase via purchases.subscriptions.acknowledge only after a durable applied or replayed provision outcome. Feature-gated by GOOGLE_PLAY_BILLING_ENABLED (fail-closed when disabled). SetupGrant, RecoveryGrant, and Bearer are rejected. Never returns purchase tokens, Google verification payloads, or provider identifiers. Does not process RTDN, voided purchases, refunds, or finalize binding to active.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7765,7 +7765,7 @@
       "name": "Authentication"
     },
     {
-      "description": "Stripe and Google Play billing runtime for TOWN membership. Checkout, Customer Portal, and Google Play purchase ingress require an active session; the Stripe webhook endpoint verifies raw Stripe signatures. Never exposes Stripe customer/subscription/invoice identifiers, Google Play purchase tokens, or Google verification payloads in public API responses; only Stripe-issued Checkout/Portal URLs and bounded membership status are returned. Google Play purchase ingress is flag-gated by GOOGLE_PLAY_BILLING_ENABLED and does not acknowledge purchases, process RTDN, or finalize binding to active.",
+      "description": "Stripe and Google Play billing runtime for TOWN membership. Checkout, Customer Portal, and Google Play purchase ingress require an active session; the Stripe webhook endpoint verifies raw Stripe signatures. Never exposes Stripe customer/subscription/invoice identifiers, Google Play purchase tokens, or Google verification payloads in public API responses; only Stripe-issued Checkout/Portal URLs and bounded membership status are returned. Google Play purchase ingress is flag-gated by GOOGLE_PLAY_BILLING_ENABLED, acknowledges purchases only after durable paid_pending_binding provision, and does not process RTDN, voided purchases, refunds, or finalize binding to active.",
       "name": "Billing"
     }
   ]

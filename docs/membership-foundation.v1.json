@@ -65,7 +65,7 @@
     "membership mutation routes other than the session-authenticated Google Play purchase ingress",
     "membership pricing, catalog, or checkout",
     "local verification runtime",
-    "Google Play RTDN / Pub/Sub / acknowledgement / voided purchases",
+    "Google Play RTDN / Pub/Sub / voided purchases / refunds",
     "binding finalization from paid_pending_binding to active",
     "Redis",
     "Railway",
@@ -82,13 +82,40 @@
     "table": "town.google_play_purchase_links",
     "trustBoundary": "Input is trusted only after the server-side Google Play verifier validates the purchase via Android Publisher subscriptionsv2.get and then calls the internal provisioner; the session-authenticated purchase ingress never bypasses verification"
   },
+  "googlePlayPurchaseAcknowledgement": {
+    "adapter": "TownGooglePlayAndroidPublisherAdapter",
+    "alreadyAcknowledged": "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED skips the acknowledge call; Google acknowledge is otherwise treated as idempotent without a local persistence marker",
+    "api": "purchases.subscriptions.acknowledge",
+    "exclusions": [
+      "RTDN",
+      "Pub/Sub",
+      "voided purchases",
+      "refunds",
+      "binding finalization to active",
+      "Play Billing client",
+      "Flutter"
+    ],
+    "failClosed": [
+      "acknowledgement transport or non-success Google status fails the request after durable provision so clients can retry",
+      "never exposes purchase tokens or Google acknowledgement payloads"
+    ],
+    "internalOperation": "verifyAndProvisionGooglePlayPurchase",
+    "neverWhen": [
+      "failed verification",
+      "rejected purchase",
+      "cross-account purchase-token protection",
+      "transaction rollback",
+      "provisioning failure"
+    ],
+    "persistence": "no schema change; google_play_purchase_links remains purchase-token correlation only",
+    "when": "only after verifyAndProvisionGooglePlayPurchase reaches durable applied or replayed provision"
+  },
   "googlePlayPurchaseIngress": {
     "auth": "active web or mobile Session only; SetupGrant, RecoveryGrant, and Bearer rejected",
     "disabledBehavior": "route returns 404 when GOOGLE_PLAY_BILLING_ENABLED is false",
     "exclusions": [
       "RTDN",
       "Pub/Sub",
-      "purchase acknowledgement",
       "voided purchases",
       "refunds",
       "binding finalization to active",
@@ -119,7 +146,6 @@
     "exclusions": [
       "RTDN",
       "Pub/Sub",
-      "purchase acknowledgement",
       "voided purchases",
       "refunds",
       "binding finalization to active",
@@ -130,7 +156,8 @@
       "disabled when GOOGLE_PLAY_BILLING_ENABLED is false",
       "rejected when Android Publisher verification fails or returns a non-active subscription",
       "rejected when productId or packageName does not match configured values",
-      "never calls provisionGooglePlayPaidPendingBinding unless verification succeeds"
+      "never calls provisionGooglePlayPaidPendingBinding unless verification succeeds",
+      "never acknowledges until provision returns applied or replayed"
     ],
     "featureFlag": "GOOGLE_PLAY_BILLING_ENABLED",
     "featureFlagDefault": false,
