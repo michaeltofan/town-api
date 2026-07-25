@@ -68,6 +68,7 @@ export function generateMembershipContractDocument(): unknown {
         'expire',
         'reactivate',
         'provision_paid_pending_binding',
+        'finalize_paid_pending_binding',
       ],
       results: ['applied', 'replayed', 'rejected', 'stale'],
       payloadHash: {
@@ -302,6 +303,54 @@ export function generateMembershipContractDocument(): unknown {
         },
         publicRoutes: [],
       },
+      finalizePaidPendingBinding: {
+        eventType: 'finalize_paid_pending_binding',
+        allowedFromStatuses: ['paid_pending_binding'],
+        rejectsWhen: [
+          'account is closed',
+          'entitlement is missing',
+          'entitlement is not paid_pending_binding',
+          'access_until is missing or not strictly greater than effective_at',
+          'proposed access_until does not match the entitlement access_until',
+        ],
+        preconditions: [
+          'civic actor community binding is set for the target community',
+          'local_eligibility_verified_at is set',
+        ],
+        successOutcome: {
+          status: 'active',
+          cancelAtPeriodEnd: false,
+          activatedAtSetTo: 'effective_at',
+          accessUntilPreserved: true,
+          expiredAt: null,
+        },
+        trigger:
+          'after successful PUT /v1/account/eligibility community binding (create or same-community idempotent confirm)',
+        neverFrom: [
+          'Google Play purchase ingress',
+          'verifyAndProvisionGooglePlayPurchase',
+          'activateMembership',
+        ],
+      },
+    },
+    paidPendingBindingFinalization: {
+      internalOperation: 'maybeFinalizePaidPendingBindingAfterCommunityBind',
+      transition: 'finalizePaidPendingBindingMembership',
+      eventType: 'finalize_paid_pending_binding',
+      fromStatus: 'paid_pending_binding',
+      toStatus: 'active',
+      triggerRoute: 'PUT /v1/account/eligibility',
+      schemaChange:
+        'membership_source_events_event_type_valid expanded to include finalize_paid_pending_binding only',
+      exclusions: [
+        'RTDN',
+        'Pub/Sub',
+        'voided purchases',
+        'refunds',
+        'subscription renewal',
+        'Play Billing client',
+        'Flutter',
+      ],
     },
     reconcile: {
       module: 'src/membership/reconcile.ts',
@@ -370,7 +419,7 @@ export function generateMembershipContractDocument(): unknown {
       'membership pricing, catalog, or checkout',
       'local verification runtime',
       'Google Play RTDN / Pub/Sub / voided purchases / refunds',
-      'binding finalization from paid_pending_binding to active',
+      'subscription renewal',
       'Redis',
       'Railway',
       'web integration',
