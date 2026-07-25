@@ -1,10 +1,6 @@
 export type MembershipTransitionResultKind = 'applied' | 'replayed' | 'rejected' | 'stale';
 export type MembershipEventType =
-  | 'activate'
-  | 'schedule_cancellation'
-  | 'expire'
-  | 'reactivate'
-  | 'provision_paid_pending_binding';
+  'activate' | 'schedule_cancellation' | 'expire' | 'reactivate' | 'provision_paid_pending_binding';
 export type AccessUntilCategory = 'null' | 'future' | 'present_or_past';
 export type ParticipationDenialReason =
   | 'no_session'

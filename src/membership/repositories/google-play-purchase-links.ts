@@ -1,9 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
-import {
-  googlePlayPurchaseLinks,
-  type GooglePlayPurchaseLinkRow,
-} from '../../db/schema.js';
+import { googlePlayPurchaseLinks, type GooglePlayPurchaseLinkRow } from '../../db/schema.js';
 
 type Db = Database['db'];
 

@@ -42,14 +42,7 @@ describe('Google Play paid_pending_binding provision foundation', () => {
       connectionTimeoutMs: 3000,
       idleTimeoutMs: 1000,
     });
-    for (const id of [
-      accountA,
-      accountB,
-      accountC,
-      accountStripe,
-      accountFixture,
-      accountFail,
-    ]) {
+    for (const id of [accountA, accountB, accountC, accountStripe, accountFixture, accountFail]) {
       await createAccountShell(database.db, { id, createdAt: NOW, updatedAt: NOW });
     }
   });
@@ -148,9 +141,7 @@ describe('Google Play paid_pending_binding provision foundation', () => {
     expect(entitlement).toBeDefined();
     expect(entitlement?.status).toBe('paid_pending_binding');
 
-    expect(resolveEffectiveMembershipStatus(entitlement ?? null, NOW)).toBe(
-      'paid_pending_binding',
-    );
+    expect(resolveEffectiveMembershipStatus(entitlement ?? null, NOW)).toBe('paid_pending_binding');
     expect(['active', 'cancelling']).not.toContain(
       resolveEffectiveMembershipStatus(entitlement ?? null, NOW),
     );

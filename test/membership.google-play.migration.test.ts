@@ -88,8 +88,6 @@ describe('membership migration 0014 google play paid_pending_binding foundation'
        WHERE connamespace = 'town'::regnamespace
          AND conname = 'identity_security_events_type_valid'`,
     );
-    expect(security.rows[0]?.definition).toContain(
-      "'membership_paid_pending_binding_provisioned'",
-    );
+    expect(security.rows[0]?.definition).toContain("'membership_paid_pending_binding_provisioned'");
   });
 });

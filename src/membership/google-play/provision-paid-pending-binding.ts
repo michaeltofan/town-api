@@ -260,10 +260,7 @@ async function runProvisionInTransaction(
     };
 
     let entitlement = await lockEntitlementByAccountId(dbTx, input.accountId);
-    const existingPurchaseLink = await lockGooglePlayPurchaseLinkByToken(
-      dbTx,
-      input.purchaseToken,
-    );
+    const existingPurchaseLink = await lockGooglePlayPurchaseLinkByToken(dbTx, input.purchaseToken);
 
     const reject = async (
       reason: string,
