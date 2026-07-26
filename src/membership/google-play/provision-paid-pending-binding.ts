@@ -339,7 +339,8 @@ export async function runProvisionInTransaction(
       entitlement &&
       (entitlement.status === 'active' ||
         entitlement.status === 'cancelling' ||
-        entitlement.status === 'paid_pending_binding')
+        entitlement.status === 'paid_pending_binding' ||
+        entitlement.status === 'suspended')
     ) {
       return reject('invalid_status_for_provision_paid_pending_binding');
     }
