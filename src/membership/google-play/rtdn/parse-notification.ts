@@ -98,7 +98,7 @@ function resolveVariant(notification: Record<string, unknown>): NotificationVari
   if (present.length !== 1) {
     fail();
   }
-  return present[0] as NotificationVariant;
+  return present[0]!;
 }
 
 export function parseRtdnNotification(
@@ -149,10 +149,7 @@ export function parseRtdnNotification(
   }
 
   if (variant === 'testNotification') {
-    if (
-      !hasOnlyKeys(detail, ['version']) ||
-      detail.version !== DEVELOPER_NOTIFICATION_VERSION
-    ) {
+    if (!hasOnlyKeys(detail, ['version']) || detail.version !== DEVELOPER_NOTIFICATION_VERSION) {
       fail();
     }
     return { kind: 'test', messageId, eventTimeMillis };

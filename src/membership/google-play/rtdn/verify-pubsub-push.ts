@@ -1,9 +1,6 @@
 import { OAuth2Client, type LoginTicket } from 'google-auth-library';
 
-export const GOOGLE_OIDC_ISSUERS = new Set([
-  'https://accounts.google.com',
-  'accounts.google.com',
-]);
+export const GOOGLE_OIDC_ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
 
 export type PubSubPushVerifier = (token: string) => Promise<void>;
 

@@ -92,10 +92,7 @@ describe('Google Play RTDN fail-closed configuration', () => {
 
   it.each([
     ['missing audience', { ...ENABLED_ENV, GOOGLE_PLAY_RTDN_OIDC_AUDIENCE: undefined }],
-    [
-      'audience query',
-      { ...ENABLED_ENV, GOOGLE_PLAY_RTDN_OIDC_AUDIENCE: `${AUDIENCE}?secret=no` },
-    ],
+    ['audience query', { ...ENABLED_ENV, GOOGLE_PLAY_RTDN_OIDC_AUDIENCE: `${AUDIENCE}?secret=no` }],
     [
       'audience fragment',
       { ...ENABLED_ENV, GOOGLE_PLAY_RTDN_OIDC_AUDIENCE: `${AUDIENCE}#fragment` },
@@ -131,7 +128,7 @@ describe('Google Pub/Sub OIDC verifier', () => {
   function verifierFor(claims: Record<string, unknown>) {
     const verifyIdToken = vi.fn().mockResolvedValue({
       getPayload: () => claims,
-    } as unknown as LoginTicket);
+    } as LoginTicket);
     return {
       verifier: createPubSubPushVerifier(
         { audience: AUDIENCE, serviceAccountEmail: SERVICE_ACCOUNT },
@@ -160,9 +157,11 @@ describe('Google Pub/Sub OIDC verifier', () => {
   });
 
   it('maps Google key-fetch transport failure to verifier unavailable', async () => {
-    const verifyIdToken = vi.fn().mockRejectedValue(Object.assign(new Error('fetch failed'), {
-      code: 'ETIMEDOUT',
-    }));
+    const verifyIdToken = vi.fn().mockRejectedValue(
+      Object.assign(new Error('fetch failed'), {
+        code: 'ETIMEDOUT',
+      }),
+    );
     const verifier = createPubSubPushVerifier(
       { audience: AUDIENCE, serviceAccountEmail: SERVICE_ACCOUNT },
       { verifyIdToken },
@@ -210,18 +209,9 @@ describe('Google Play RTDN parse boundary', () => {
         },
       },
     ],
-    [
-      'wrong version',
-      pushEnvelope({ ...testNotification(), version: '2.0' }),
-    ],
-    [
-      'wrong package',
-      pushEnvelope({ ...testNotification(), packageName: 'org.town.wrong' }),
-    ],
-    [
-      'non-decimal event time',
-      pushEnvelope({ ...testNotification(), eventTimeMillis: '1.5' }),
-    ],
+    ['wrong version', pushEnvelope({ ...testNotification(), version: '2.0' })],
+    ['wrong package', pushEnvelope({ ...testNotification(), packageName: 'org.town.wrong' })],
+    ['non-decimal event time', pushEnvelope({ ...testNotification(), eventTimeMillis: '1.5' })],
     [
       'multiple variants',
       pushEnvelope({
@@ -294,9 +284,9 @@ describe('POST /v1/billing/google-play/rtdn', () => {
   });
 
   it('returns 401 when the injected verifier rejects authentication', async () => {
-    const verifier = vi.fn<PubSubPushVerifier>().mockRejectedValue(
-      new PubSubPushAuthenticationError(),
-    );
+    const verifier = vi
+      .fn<PubSubPushVerifier>()
+      .mockRejectedValue(new PubSubPushAuthenticationError());
     const app = await createRtdnApp({ verifier });
     apps.push(app);
     const response = await app.inject({
@@ -310,9 +300,9 @@ describe('POST /v1/billing/google-play/rtdn', () => {
   });
 
   it('returns 503 when the injected verifier reports key-fetch unavailability', async () => {
-    const verifier = vi.fn<PubSubPushVerifier>().mockRejectedValue(
-      new PubSubPushVerifierUnavailableError(),
-    );
+    const verifier = vi
+      .fn<PubSubPushVerifier>()
+      .mockRejectedValue(new PubSubPushVerifierUnavailableError());
     const app = await createRtdnApp({ verifier });
     apps.push(app);
     const response = await app.inject({

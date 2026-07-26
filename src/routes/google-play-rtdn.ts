@@ -101,11 +101,7 @@ export const googlePlayRtdnRoutes: FastifyPluginCallbackTypebox<GooglePlayRtdnRo
             'Google Play RTDN ingress is unavailable.',
           );
         }
-        throw new AppError(
-          401,
-          'PUBSUB_PUSH_NOT_AUTHORIZED',
-          'Pub/Sub push is not authorized.',
-        );
+        throw new AppError(401, 'PUBSUB_PUSH_NOT_AUTHORIZED', 'Pub/Sub push is not authorized.');
       }
 
       const rawBody = request.body;
@@ -121,11 +117,7 @@ export const googlePlayRtdnRoutes: FastifyPluginCallbackTypebox<GooglePlayRtdnRo
         });
       } catch (error) {
         if (error instanceof RtdnParseError) {
-          throw new AppError(
-            400,
-            'INVALID_GOOGLE_PLAY_RTDN',
-            'Invalid Google Play RTDN payload.',
-          );
+          throw new AppError(400, 'INVALID_GOOGLE_PLAY_RTDN', 'Invalid Google Play RTDN payload.');
         }
         throw error;
       }
@@ -139,7 +131,7 @@ export const googlePlayRtdnRoutes: FastifyPluginCallbackTypebox<GooglePlayRtdnRo
           },
           'Google Play RTDN test notification received',
         );
-        return reply.status(204).send();
+        return reply.status(204).send(null);
       }
 
       request.log.info(
