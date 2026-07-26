@@ -24,11 +24,13 @@ import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { signalsRoutes } from './routes/signals.js';
 import { billingRoutes } from './routes/billing.js';
 import { googlePlayRoutes } from './routes/google-play.js';
+import { googlePlayRtdnRoutes } from './routes/google-play-rtdn.js';
 import { localEligibilityRoutes } from './routes/local-eligibility.js';
 import { signalSubmissionRoutes } from './routes/signal-submissions.js';
 import type { LocalParticipationEligibilityResolver } from './membership/local-eligibility.js';
 import type { TownStripeAdapter } from './billing/stripe-adapter.js';
 import type { TownGooglePlayAndroidPublisherAdapter } from './membership/google-play/android-publisher-adapter.js';
+import type { PubSubPushVerifier } from './membership/google-play/rtdn/verify-pubsub-push.js';
 
 export type BuildAppOptions = {
   env: Env;
@@ -79,6 +81,9 @@ export type BuildAppOptions = {
   googlePlay?: {
     now?: () => string;
     generateId?: () => string;
+  };
+  googlePlayRtdn?: {
+    verifier?: PubSubPushVerifier;
   };
   stripeAdapter?: TownStripeAdapter;
   googlePlayAdapter?: TownGooglePlayAndroidPublisherAdapter;
@@ -324,6 +329,12 @@ export async function buildApp(options: BuildAppOptions) {
       : {}),
     ...(options.googlePlayAdapter !== undefined
       ? { googlePlayAdapter: options.googlePlayAdapter }
+      : {}),
+  });
+  await app.register(googlePlayRtdnRoutes, {
+    env: options.env,
+    ...(options.googlePlayRtdn?.verifier !== undefined
+      ? { verifier: options.googlePlayRtdn.verifier }
       : {}),
   });
 
