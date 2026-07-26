@@ -161,10 +161,13 @@ export function parseRtdnNotification(
 
   if (variant === 'subscriptionNotification') {
     if (
-      !hasOnlyKeys(detail, ['version', 'notificationType', 'purchaseToken']) ||
+      !hasOnlyKeys(detail, ['version', 'notificationType', 'purchaseToken', 'subscriptionId']) ||
       detail.version !== DEVELOPER_NOTIFICATION_VERSION
     ) {
       fail();
+    }
+    if (detail.subscriptionId !== undefined) {
+      requireNonEmptyString(detail.subscriptionId);
     }
     return {
       kind: 'subscription',

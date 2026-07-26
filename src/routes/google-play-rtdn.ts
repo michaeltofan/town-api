@@ -42,6 +42,16 @@ export const googlePlayRtdnRoutes: FastifyPluginCallbackTypebox<GooglePlayRtdnRo
   done,
 ) => {
   const { env } = options;
+  const configuredVerifier =
+    options.verifier ??
+    (env.GOOGLE_PLAY_RTDN_INGRESS_ENABLED &&
+    env.GOOGLE_PLAY_RTDN_OIDC_AUDIENCE &&
+    env.GOOGLE_PLAY_RTDN_PUSH_SERVICE_ACCOUNT_EMAIL
+      ? createPubSubPushVerifier({
+          audience: env.GOOGLE_PLAY_RTDN_OIDC_AUDIENCE,
+          serviceAccountEmail: env.GOOGLE_PLAY_RTDN_PUSH_SERVICE_ACCOUNT_EMAIL,
+        })
+      : null);
 
   // Keep the body opaque until the handler has authenticated the push.
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_request, body, next) => {
@@ -75,7 +85,13 @@ export const googlePlayRtdnRoutes: FastifyPluginCallbackTypebox<GooglePlayRtdnRo
       const serviceAccountEmail = env.GOOGLE_PLAY_RTDN_PUSH_SERVICE_ACCOUNT_EMAIL;
       const subscription = env.GOOGLE_PLAY_RTDN_PUBSUB_SUBSCRIPTION;
       const packageName = env.GOOGLE_PLAY_PACKAGE_NAME;
-      if (!audience || !serviceAccountEmail || !subscription || !packageName) {
+      if (
+        !audience ||
+        !serviceAccountEmail ||
+        !subscription ||
+        !packageName ||
+        !configuredVerifier
+      ) {
         throw new AppError(
           503,
           'GOOGLE_PLAY_RTDN_UNAVAILABLE',
@@ -86,13 +102,7 @@ export const googlePlayRtdnRoutes: FastifyPluginCallbackTypebox<GooglePlayRtdnRo
       let token: string;
       try {
         token = extractSingleBearerToken(request.raw.rawHeaders);
-        const verifier =
-          options.verifier ??
-          createPubSubPushVerifier({
-            audience,
-            serviceAccountEmail,
-          });
-        await verifier(token);
+        await configuredVerifier(token);
       } catch (error) {
         if (error instanceof PubSubPushVerifierUnavailableError) {
           throw new AppError(

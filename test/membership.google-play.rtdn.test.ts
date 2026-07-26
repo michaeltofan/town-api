@@ -8,6 +8,7 @@ import {
 } from '../src/membership/google-play/rtdn/parse-notification.js';
 import {
   createPubSubPushVerifier,
+  GOOGLE_OIDC_CLOCK_SKEW_SECONDS,
   PubSubPushAuthenticationError,
   PubSubPushVerifierUnavailableError,
   type PubSubPushVerifier,
@@ -114,7 +115,17 @@ async function createRtdnApp(input: {
 
 describe('Google Play RTDN fail-closed configuration', () => {
   it('defaults the ingress feature flag to false independently of Play billing', () => {
-    const env = createTestEnv({ GOOGLE_PLAY_BILLING_ENABLED: 'false' });
+    const env = createTestEnv({
+      GOOGLE_PLAY_BILLING_ENABLED: 'true',
+      GOOGLE_PLAY_PACKAGE_NAME: PACKAGE_NAME,
+      GOOGLE_PLAY_SUBSCRIPTION_ID: 'town_annual',
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        client_email: 'play-api@town-test.iam.gserviceaccount.com',
+        private_key:
+          '-----BEGIN PRIVATE KEY-----\nlocal-test-placeholder-private-key\n-----END PRIVATE KEY-----',
+      }),
+    });
+    expect(env.GOOGLE_PLAY_BILLING_ENABLED).toBe(true);
     expect(env.GOOGLE_PLAY_RTDN_INGRESS_ENABLED).toBe(false);
   });
 
@@ -153,6 +164,10 @@ describe('Google Pub/Sub OIDC verifier', () => {
     iat: 1_785_042_000,
     exp: 1_785_045_600,
   } satisfies TokenPayload;
+
+  it('pins the documented google-auth-library clock skew', () => {
+    expect(GOOGLE_OIDC_CLOCK_SKEW_SECONDS).toBe(300);
+  });
 
   function verifierFor(claims: Partial<TokenPayload>) {
     const verifyIdToken = vi
@@ -235,6 +250,27 @@ describe('Google Play RTDN parse boundary', () => {
     expect(parsed).not.toHaveProperty('subscriptionId');
   });
 
+  it('validates but does not extract an optional subscriptionId', () => {
+    const notification = subscriptionNotification();
+    const parsed = parseRtdnNotification(
+      Buffer.from(
+        JSON.stringify(
+          pushEnvelope({
+            ...notification,
+            subscriptionNotification: {
+              ...notification.subscriptionNotification,
+              subscriptionId: 'town_annual',
+            },
+          }),
+        ),
+        'utf8',
+      ),
+      { packageName: PACKAGE_NAME, subscription: SUBSCRIPTION },
+    );
+    expect(parsed.kind).toBe('subscription');
+    expect(parsed).not.toHaveProperty('subscriptionId');
+  });
+
   it.each([
     ['malformed envelope', { nope: true }],
     [
@@ -266,16 +302,6 @@ describe('Google Play RTDN parse boundary', () => {
       pushEnvelope({
         ...testNotification(),
         subscriptionNotification: subscriptionNotification().subscriptionNotification,
-      }),
-    ],
-    [
-      'subscription with subscriptionId',
-      pushEnvelope({
-        ...subscriptionNotification(),
-        subscriptionNotification: {
-          ...subscriptionNotification().subscriptionNotification,
-          subscriptionId: 'must-not-be-accepted-or-required',
-        },
       }),
     ],
   ])('rejects %s', (_name, envelope) => {

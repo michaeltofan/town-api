@@ -1,6 +1,8 @@
 import { OAuth2Client, type LoginTicket } from 'google-auth-library';
 
 export const GOOGLE_OIDC_ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
+/** google-auth-library's built-in ID-token clock-skew allowance. */
+export const GOOGLE_OIDC_CLOCK_SKEW_SECONDS = 300;
 
 export type PubSubPushVerifier = (token: string) => Promise<void>;
 
