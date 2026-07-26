@@ -804,6 +804,58 @@ export const googlePlayPurchaseLinks = town.table(
 );
 
 /**
+ * Durable, append-only Google Play RTDN ingress correlation.
+ * Processing and membership mutation are intentionally separate from receipt.
+ */
+export const googlePlayRtdnInbox = town.table(
+  'google_play_rtdn_inbox',
+  {
+    id: uuid('id').primaryKey(),
+    pubsubSubscription: text('pubsub_subscription').notNull(),
+    messageId: text('message_id').notNull(),
+    notificationKind: text('notification_kind').notNull(),
+    notificationType: integer('notification_type'),
+    purchaseToken: text('purchase_token').notNull(),
+    eventTimeMillis: bigint('event_time_millis', { mode: 'bigint' }).notNull(),
+    subscriptionId: text('subscription_id'),
+    rawPayload: jsonb('raw_payload').notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true, mode: 'string' }).notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true, mode: 'string' }),
+  },
+  (table) => [
+    unique('google_play_rtdn_inbox_subscription_message_unique').on(
+      table.pubsubSubscription,
+      table.messageId,
+    ),
+    check(
+      'google_play_rtdn_inbox_pubsub_subscription_nonempty',
+      sql`char_length(${table.pubsubSubscription}) > 0`,
+    ),
+    check('google_play_rtdn_inbox_message_id_nonempty', sql`char_length(${table.messageId}) > 0`),
+    check(
+      'google_play_rtdn_inbox_purchase_token_nonempty',
+      sql`char_length(${table.purchaseToken}) > 0`,
+    ),
+    check(
+      'google_play_rtdn_inbox_notification_kind_valid',
+      sql`${table.notificationKind} in ('subscription', 'one_time', 'voided')`,
+    ),
+    check(
+      'google_play_rtdn_inbox_raw_payload_object',
+      sql`jsonb_typeof(${table.rawPayload}) = 'object'`,
+    ),
+    check(
+      'google_play_rtdn_inbox_payload_hash_valid',
+      sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    index('google_play_rtdn_inbox_unprocessed_received_at_idx')
+      .on(table.receivedAt)
+      .where(sql`${table.processedAt} is null`),
+  ],
+);
+
+/**
  * Restricted pre-authentication authority after email verification and before first passkey.
  * Not a session: cannot access normal APIs, civic actions, membership, or create sessions alone.
  */
@@ -1038,6 +1090,7 @@ export type CeremonyRateLimitRow = typeof ceremonyRateLimits.$inferSelect;
 export type StripeCustomerLinkRow = typeof stripeCustomerLinks.$inferSelect;
 export type StripeCheckoutAttemptRow = typeof stripeCheckoutAttempts.$inferSelect;
 export type GooglePlayPurchaseLinkRow = typeof googlePlayPurchaseLinks.$inferSelect;
+export type GooglePlayRtdnInboxRow = typeof googlePlayRtdnInbox.$inferSelect;
 export type MembershipEntitlementRow = typeof membershipEntitlements.$inferSelect;
 export type MembershipSourceEventRow = typeof membershipSourceEvents.$inferSelect;
 

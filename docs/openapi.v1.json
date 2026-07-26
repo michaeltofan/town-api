@@ -6378,7 +6378,7 @@
     },
     "/v1/billing/google-play/rtdn": {
       "post": {
-        "description": "Authenticates a Google Pub/Sub OIDC push and validates its Google Play RTDN payload. Test notifications are acknowledged. Real notifications return 503 until a durable inbox exists; this route never reads or mutates membership state.",
+        "description": "Authenticates a Google Pub/Sub OIDC push and validates its Google Play RTDN payload. Test notifications are acknowledged and real notifications are durably recorded; this route never reads or mutates membership state.",
         "responses": {
           "204": {
             "description": "Default Response"
