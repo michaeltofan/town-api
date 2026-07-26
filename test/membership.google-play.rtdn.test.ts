@@ -1,11 +1,24 @@
 import { PassThrough } from 'node:stream';
 import { LoginTicket, type TokenPayload } from 'google-auth-library';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { Pool } from 'pg';
 import { buildApp, type AppInstance } from '../src/app.js';
 import {
   parseRtdnNotification,
   RtdnParseError,
 } from '../src/membership/google-play/rtdn/parse-notification.js';
+import type {
+  GooglePlayRtdnInboxPersister,
+  GooglePlayRtdnInboxRecord,
+} from '../src/membership/google-play/rtdn/inbox.js';
+import { persistGooglePlayRtdnInbox } from '../src/membership/google-play/rtdn/inbox.js';
+import { createDatabase, type Database } from '../src/db/client.js';
+import {
+  googlePlayPurchaseLinks,
+  googlePlayRtdnInbox,
+  membershipEntitlements,
+  membershipSourceEvents,
+} from '../src/db/schema.js';
 import {
   createPubSubPushVerifier,
   GOOGLE_OIDC_CLOCK_SKEW_SECONDS,
@@ -15,6 +28,7 @@ import {
 } from '../src/membership/google-play/rtdn/verify-pubsub-push.js';
 import { createFakeDatabase } from './helpers/database.js';
 import { createTestEnv } from './helpers/env.js';
+import { requireDatabaseUrl, resetAndMigrate } from './helpers/pg.js';
 
 const ROUTE = '/v1/billing/google-play/rtdn';
 const PACKAGE_NAME = 'org.town.test';
@@ -32,10 +46,10 @@ const ENABLED_ENV = {
   GOOGLE_PLAY_PACKAGE_NAME: PACKAGE_NAME,
 } as const;
 
-function pushEnvelope(notification: Record<string, unknown>) {
+function pushEnvelope(notification: Record<string, unknown>, messageId = 'message-123') {
   return {
     message: {
-      messageId: 'message-123',
+      messageId,
       data: Buffer.from(JSON.stringify(notification), 'utf8').toString('base64'),
     },
     subscription: SUBSCRIPTION,
@@ -100,17 +114,36 @@ async function createRtdnApp(input: {
     getSubscriptionV2: ReturnType<typeof vi.fn>;
     acknowledgeSubscription: ReturnType<typeof vi.fn>;
   };
+  persistInbox?: GooglePlayRtdnInboxPersister;
+  database?: Database;
 }): Promise<AppInstance> {
   const env = createTestEnv(input.enabled === false ? {} : ENABLED_ENV);
   const app = await buildApp({
     env,
     logger: input.logger ?? false,
-    database: createFakeDatabase(),
-    googlePlayRtdn: { verifier: input.verifier },
+    database: input.database ?? createFakeDatabase(),
+    googlePlayRtdn: {
+      verifier: input.verifier,
+      ...(input.persistInbox ? { persistInbox: input.persistInbox } : {}),
+    },
     ...(input.androidPublisher ? { googlePlayAdapter: input.androidPublisher } : {}),
   });
   await app.ready();
   return app;
+}
+
+function createInMemoryInbox() {
+  const rows = new Map<string, GooglePlayRtdnInboxRecord>();
+  const persistInbox = vi.fn<GooglePlayRtdnInboxPersister>((record) => {
+    const key = `${record.pubsubSubscription}\0${record.messageId}`;
+    const existing = rows.get(key);
+    if (!existing) {
+      rows.set(key, record);
+      return Promise.resolve('inserted');
+    }
+    return Promise.resolve(existing.payloadHash === record.payloadHash ? 'replayed' : 'conflict');
+  });
+  return { rows, persistInbox };
 }
 
 describe('Google Play RTDN fail-closed configuration', () => {
@@ -235,7 +268,7 @@ describe('Google Pub/Sub OIDC verifier', () => {
 });
 
 describe('Google Play RTDN parse boundary', () => {
-  it('extracts only subscription correlation fields and does not require subscriptionId', () => {
+  it('extracts subscription correlation fields and does not require subscriptionId', () => {
     const parsed = parseRtdnNotification(
       Buffer.from(JSON.stringify(pushEnvelope(subscriptionNotification())), 'utf8'),
       { packageName: PACKAGE_NAME, subscription: SUBSCRIPTION },
@@ -246,11 +279,13 @@ describe('Google Play RTDN parse boundary', () => {
       eventTimeMillis: '1785042000000',
       notificationType: 2,
       purchaseToken: PURCHASE_TOKEN,
+      subscriptionId: null,
+      rawPayload: subscriptionNotification(),
+      decodedPayloadBytes: Buffer.from(JSON.stringify(subscriptionNotification()), 'utf8'),
     });
-    expect(parsed).not.toHaveProperty('subscriptionId');
   });
 
-  it('validates but does not extract an optional subscriptionId', () => {
+  it('validates and extracts an optional subscriptionId', () => {
     const notification = subscriptionNotification();
     const parsed = parseRtdnNotification(
       Buffer.from(
@@ -268,7 +303,7 @@ describe('Google Play RTDN parse boundary', () => {
       { packageName: PACKAGE_NAME, subscription: SUBSCRIPTION },
     );
     expect(parsed.kind).toBe('subscription');
-    expect(parsed).not.toHaveProperty('subscriptionId');
+    expect(parsed).toHaveProperty('subscriptionId', 'town_annual');
   });
 
   it.each([
@@ -311,6 +346,45 @@ describe('Google Play RTDN parse boundary', () => {
         subscription: SUBSCRIPTION,
       }),
     ).toThrow(RtdnParseError);
+  });
+});
+
+describe('Google Play RTDN durable inbox boundary', () => {
+  it('writes only the RTDN inbox table', async () => {
+    const insertedTables: unknown[] = [];
+    const db = {
+      insert: vi.fn((table: unknown) => {
+        insertedTables.push(table);
+        return {
+          values: () => ({
+            onConflictDoNothing: () => ({
+              returning: () => Promise.resolve([{ payloadHash: 'a'.repeat(64) }]),
+            }),
+          }),
+        };
+      }),
+    } as unknown as Database['db'];
+
+    await expect(
+      persistGooglePlayRtdnInbox(db, {
+        id: '00000000-0000-4000-8000-000000000001',
+        pubsubSubscription: SUBSCRIPTION,
+        messageId: 'message-123',
+        notificationKind: 'subscription',
+        notificationType: 2,
+        purchaseToken: PURCHASE_TOKEN,
+        eventTimeMillis: 1785042000000n,
+        subscriptionId: 'town_annual',
+        rawPayload: subscriptionNotification(),
+        payloadHash: 'a'.repeat(64),
+        receivedAt: '2026-07-26T06:47:00.000Z',
+      }),
+    ).resolves.toBe('inserted');
+
+    expect(insertedTables).toEqual([googlePlayRtdnInbox]);
+    expect(insertedTables).not.toContain(membershipEntitlements);
+    expect(insertedTables).not.toContain(membershipSourceEvents);
+    expect(insertedTables).not.toContain(googlePlayPurchaseLinks);
   });
 });
 
@@ -425,14 +499,16 @@ describe('POST /v1/billing/google-play/rtdn', () => {
     ['one-time product', oneTimeNotification()],
     ['voided purchase', voidedNotification()],
   ])(
-    'returns 503 for a real %s notification without DB or Android Publisher access',
+    'durably records a new real %s notification and returns 204 without Android Publisher access',
     async (_name, notification) => {
       const verifier = vi.fn<PubSubPushVerifier>().mockResolvedValue();
       const getSubscriptionV2 = vi.fn();
       const acknowledgeSubscription = vi.fn();
+      const { rows, persistInbox } = createInMemoryInbox();
       const app = await createRtdnApp({
         verifier,
         androidPublisher: { getSubscriptionV2, acknowledgeSubscription },
+        persistInbox,
       });
       apps.push(app);
       const response = await app.inject({
@@ -441,12 +517,220 @@ describe('POST /v1/billing/google-play/rtdn', () => {
         headers: { authorization: `Bearer ${JWT}` },
         payload: pushEnvelope(notification),
       });
-      expect(response.statusCode).toBe(503);
-      expect(response.json()).toMatchObject({ error: { code: 'GOOGLE_PLAY_RTDN_RETRY_REQUIRED' } });
+      expect(response.statusCode).toBe(204);
+      expect(rows.size).toBe(1);
+      expect([...rows.values()][0]).toMatchObject({
+        pubsubSubscription: SUBSCRIPTION,
+        messageId: 'message-123',
+        purchaseToken: PURCHASE_TOKEN,
+        rawPayload: notification,
+      });
       expect(getSubscriptionV2).not.toHaveBeenCalled();
       expect(acknowledgeSubscription).not.toHaveBeenCalled();
     },
   );
+
+  it('acknowledges an identical redelivery while retaining one durable row', async () => {
+    const verifier = vi.fn<PubSubPushVerifier>().mockResolvedValue();
+    const { rows, persistInbox } = createInMemoryInbox();
+    const app = await createRtdnApp({ verifier, persistInbox });
+    apps.push(app);
+    const request = {
+      method: 'POST' as const,
+      url: ROUTE,
+      headers: { authorization: `Bearer ${JWT}` },
+      payload: pushEnvelope(subscriptionNotification()),
+    };
+
+    const first = await app.inject(request);
+    const redelivery = await app.inject(request);
+
+    expect(first.statusCode).toBe(204);
+    expect(redelivery.statusCode).toBe(204);
+    expect(rows.size).toBe(1);
+    expect(persistInbox).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns 503 and retains one row when the same key has a different payload hash', async () => {
+    const verifier = vi.fn<PubSubPushVerifier>().mockResolvedValue();
+    const { rows, persistInbox } = createInMemoryInbox();
+    const app = await createRtdnApp({ verifier, persistInbox });
+    apps.push(app);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: ROUTE,
+      headers: { authorization: `Bearer ${JWT}` },
+      payload: pushEnvelope(subscriptionNotification()),
+    });
+    const differentlyEncoded = pushEnvelope(subscriptionNotification());
+    differentlyEncoded.message.data = Buffer.from(
+      JSON.stringify(subscriptionNotification(), null, 2),
+      'utf8',
+    ).toString('base64');
+    const conflict = await app.inject({
+      method: 'POST',
+      url: ROUTE,
+      headers: { authorization: `Bearer ${JWT}` },
+      payload: differentlyEncoded,
+    });
+
+    expect(first.statusCode).toBe(204);
+    expect(conflict.statusCode).toBe(503);
+    expect(conflict.json()).toMatchObject({
+      error: { code: 'GOOGLE_PLAY_RTDN_RETRY_REQUIRED' },
+    });
+    expect(rows.size).toBe(1);
+  });
+
+  describe('with a real PostgreSQL inbox', () => {
+    let pool: Pool;
+
+    beforeAll(async () => {
+      pool = new Pool({ connectionString: requireDatabaseUrl(), max: 1 });
+      await resetAndMigrate(pool);
+    });
+
+    afterAll(async () => {
+      await pool.end();
+    });
+
+    function realDatabase(): Database {
+      return createDatabase({
+        connectionString: requireDatabaseUrl(),
+        poolMax: 2,
+        connectionTimeoutMs: 3000,
+        idleTimeoutMs: 1000,
+      });
+    }
+
+    async function inboxRows(messageId: string) {
+      return (
+        await pool.query<{
+          id: string;
+          pubsub_subscription: string;
+          message_id: string;
+          notification_kind: string;
+          notification_type: number | null;
+          purchase_token: string;
+          event_time_millis: string;
+          subscription_id: string | null;
+          raw_payload: Record<string, unknown>;
+          payload_hash: string;
+          received_at: Date;
+          processed_at: Date | null;
+        }>(
+          `SELECT *
+           FROM town.google_play_rtdn_inbox
+           WHERE pubsub_subscription = $1 AND message_id = $2`,
+          [SUBSCRIPTION, messageId],
+        )
+      ).rows;
+    }
+
+    it.each([
+      ['subscription', subscriptionNotification()],
+      ['one-time product', oneTimeNotification()],
+    ])('returns 503 and leaves zero %s rows when persistence fails', async (name, notification) => {
+      const messageId = `failed-${name.replaceAll(' ', '-')}`;
+      const verifier = vi.fn<PubSubPushVerifier>().mockResolvedValue();
+      const getSubscriptionV2 = vi.fn();
+      const acknowledgeSubscription = vi.fn();
+      const persistInbox = vi
+        .fn<GooglePlayRtdnInboxPersister>()
+        .mockRejectedValue(new Error('uncertain database result'));
+      const app = await createRtdnApp({
+        verifier,
+        androidPublisher: { getSubscriptionV2, acknowledgeSubscription },
+        persistInbox,
+        database: realDatabase(),
+      });
+      apps.push(app);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: ROUTE,
+        headers: { authorization: `Bearer ${JWT}` },
+        payload: pushEnvelope(notification, messageId),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toMatchObject({
+        error: { code: 'GOOGLE_PLAY_RTDN_RETRY_REQUIRED' },
+      });
+      expect(await inboxRows(messageId)).toHaveLength(0);
+      expect(getSubscriptionV2).not.toHaveBeenCalled();
+      expect(acknowledgeSubscription).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['subscription', subscriptionNotification(), 'subscription', 2, null],
+      ['one-time product', oneTimeNotification(), 'one_time', 1, null],
+    ])(
+      'deduplicates and rejects payload conflicts for a real %s notification',
+      async (name, notification, notificationKind, notificationType, subscriptionId) => {
+        const messageId = `dedup-${name.replaceAll(' ', '-')}`;
+        const verifier = vi.fn<PubSubPushVerifier>().mockResolvedValue();
+        const getSubscriptionV2 = vi.fn();
+        const acknowledgeSubscription = vi.fn();
+        const app = await createRtdnApp({
+          verifier,
+          androidPublisher: { getSubscriptionV2, acknowledgeSubscription },
+          database: realDatabase(),
+        });
+        apps.push(app);
+        const request = {
+          method: 'POST' as const,
+          url: ROUTE,
+          headers: { authorization: `Bearer ${JWT}` },
+          payload: pushEnvelope(notification, messageId),
+        };
+
+        const first = await app.inject(request);
+        expect(first.statusCode).toBe(204);
+        const firstRows = await inboxRows(messageId);
+        expect(firstRows).toHaveLength(1);
+        expect(firstRows[0]).toMatchObject({
+          pubsub_subscription: SUBSCRIPTION,
+          message_id: messageId,
+          notification_kind: notificationKind,
+          notification_type: notificationType,
+          purchase_token: PURCHASE_TOKEN,
+          event_time_millis: '1785042000000',
+          subscription_id: subscriptionId,
+          raw_payload: notification,
+          processed_at: null,
+        });
+
+        const redelivery = await app.inject(request);
+        expect(redelivery.statusCode).toBe(204);
+        const replayRows = await inboxRows(messageId);
+        expect(replayRows).toHaveLength(1);
+        expect(replayRows[0]?.id).toBe(firstRows[0]?.id);
+
+        const differentlyEncoded = pushEnvelope(notification, messageId);
+        differentlyEncoded.message.data = Buffer.from(
+          JSON.stringify(notification, null, 2),
+          'utf8',
+        ).toString('base64');
+        const conflict = await app.inject({
+          method: 'POST',
+          url: ROUTE,
+          headers: { authorization: `Bearer ${JWT}` },
+          payload: differentlyEncoded,
+        });
+        expect(conflict.statusCode).toBe(503);
+        expect(conflict.json()).toMatchObject({
+          error: { code: 'GOOGLE_PLAY_RTDN_RETRY_REQUIRED' },
+        });
+        const conflictRows = await inboxRows(messageId);
+        expect(conflictRows).toHaveLength(1);
+        expect(conflictRows[0]).toEqual(firstRows[0]);
+        expect(getSubscriptionV2).not.toHaveBeenCalled();
+        expect(acknowledgeSubscription).not.toHaveBeenCalled();
+      },
+    );
+  });
 
   it('logs only bounded correlation metadata', async () => {
     const output = new PassThrough();
@@ -455,9 +739,11 @@ describe('POST /v1/billing/google-play/rtdn', () => {
       logs += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
     });
     const verifier = vi.fn<PubSubPushVerifier>().mockResolvedValue();
+    const { persistInbox } = createInMemoryInbox();
     const app = await createRtdnApp({
       verifier,
       logger: { level: 'info', stream: output },
+      persistInbox,
     });
     apps.push(app);
     const envelope = pushEnvelope(subscriptionNotification());
@@ -468,12 +754,14 @@ describe('POST /v1/billing/google-play/rtdn', () => {
       headers: { authorization: `Bearer ${JWT}` },
       payload: envelope,
     });
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode).toBe(204);
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(logs).not.toContain(JWT);
     expect(logs).not.toContain(PURCHASE_TOKEN);
     expect(logs).not.toContain(encodedPayload);
+    expect(logs).not.toContain('purchase_token');
+    expect(logs).not.toContain('raw_payload');
     expect(logs).toContain('message-123');
-    expect(logs).toContain('google_play_rtdn_real_received_without_durable_sink');
+    expect(logs).toContain('google_play_rtdn_inbox_recorded');
   });
 });

@@ -31,6 +31,7 @@ import type { LocalParticipationEligibilityResolver } from './membership/local-e
 import type { TownStripeAdapter } from './billing/stripe-adapter.js';
 import type { TownGooglePlayAndroidPublisherAdapter } from './membership/google-play/android-publisher-adapter.js';
 import type { PubSubPushVerifier } from './membership/google-play/rtdn/verify-pubsub-push.js';
+import type { GooglePlayRtdnInboxPersister } from './membership/google-play/rtdn/inbox.js';
 
 export type BuildAppOptions = {
   env: Env;
@@ -84,6 +85,7 @@ export type BuildAppOptions = {
   };
   googlePlayRtdn?: {
     verifier?: PubSubPushVerifier;
+    persistInbox?: GooglePlayRtdnInboxPersister;
   };
   stripeAdapter?: TownStripeAdapter;
   googlePlayAdapter?: TownGooglePlayAndroidPublisherAdapter;
@@ -335,6 +337,9 @@ export async function buildApp(options: BuildAppOptions) {
     env: options.env,
     ...(options.googlePlayRtdn?.verifier !== undefined
       ? { verifier: options.googlePlayRtdn.verifier }
+      : {}),
+    ...(options.googlePlayRtdn?.persistInbox !== undefined
+      ? { persistInbox: options.googlePlayRtdn.persistInbox }
       : {}),
   });
 

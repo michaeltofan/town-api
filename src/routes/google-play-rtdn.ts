@@ -1,6 +1,11 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
 import { AppError } from '../errors/app-error.js';
+import {
+  persistGooglePlayRtdnInbox,
+  type GooglePlayRtdnInboxPersister,
+} from '../membership/google-play/rtdn/inbox.js';
 import {
   parseRtdnNotification,
   RtdnParseError,
@@ -17,6 +22,7 @@ import type { Env } from '../config/env.js';
 export type GooglePlayRtdnRoutesOptions = {
   env: Env;
   verifier?: PubSubPushVerifier;
+  persistInbox?: GooglePlayRtdnInboxPersister;
 };
 
 function extractSingleBearerToken(rawHeaders: readonly string[]): string {
@@ -52,6 +58,8 @@ export const googlePlayRtdnRoutes: FastifyPluginCallbackTypebox<GooglePlayRtdnRo
           serviceAccountEmail: env.GOOGLE_PLAY_RTDN_PUSH_SERVICE_ACCOUNT_EMAIL,
         })
       : null);
+  const persistInbox: GooglePlayRtdnInboxPersister =
+    options.persistInbox ?? ((record) => persistGooglePlayRtdnInbox(app.database.db, record));
 
   // Keep the body opaque until the handler has authenticated the push.
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_request, body, next) => {
@@ -66,7 +74,7 @@ export const googlePlayRtdnRoutes: FastifyPluginCallbackTypebox<GooglePlayRtdnRo
         tags: ['Billing'],
         summary: 'Authenticate and validate a Google Play RTDN push',
         description:
-          'Authenticates a Google Pub/Sub OIDC push and validates its Google Play RTDN payload. Test notifications are acknowledged. Real notifications return 503 until a durable inbox exists; this route never reads or mutates membership state.',
+          'Authenticates a Google Pub/Sub OIDC push and validates its Google Play RTDN payload. Test notifications are acknowledged and real notifications are durably recorded; this route never reads or mutates membership state.',
         response: {
           204: Type.Null(),
           400: DomainErrorResponseSchema,
@@ -144,24 +152,70 @@ export const googlePlayRtdnRoutes: FastifyPluginCallbackTypebox<GooglePlayRtdnRo
         return reply.status(204).send(null);
       }
 
+      const payloadHash = createHash('sha256')
+        .update(notification.decodedPayloadBytes)
+        .digest('hex');
+      let result;
+      try {
+        result = await persistInbox({
+          id: randomUUID(),
+          pubsubSubscription: subscription,
+          messageId: notification.messageId,
+          notificationKind: notification.kind === 'oneTime' ? 'one_time' : notification.kind,
+          notificationType: notification.notificationType,
+          purchaseToken: notification.purchaseToken,
+          eventTimeMillis: BigInt(notification.eventTimeMillis),
+          subscriptionId: notification.subscriptionId,
+          rawPayload: notification.rawPayload,
+          payloadHash,
+          receivedAt: new Date().toISOString(),
+        });
+      } catch {
+        request.log.warn(
+          {
+            event: 'google_play_rtdn_inbox_write_failed',
+            messageId: notification.messageId,
+            notificationKind: notification.kind,
+          },
+          'Google Play RTDN durable receipt is uncertain',
+        );
+        throw new AppError(
+          503,
+          'GOOGLE_PLAY_RTDN_RETRY_REQUIRED',
+          'Google Play RTDN processing is not available.',
+        );
+      }
+
+      if (result === 'conflict') {
+        request.log.warn(
+          {
+            event: 'google_play_rtdn_inbox_hash_conflict',
+            messageId: notification.messageId,
+            notificationKind: notification.kind,
+          },
+          'Google Play RTDN message id was reused with a different payload',
+        );
+        throw new AppError(
+          503,
+          'GOOGLE_PLAY_RTDN_RETRY_REQUIRED',
+          'Google Play RTDN processing is not available.',
+        );
+      }
+
       request.log.info(
         {
-          event: 'google_play_rtdn_real_received_without_durable_sink',
+          event:
+            result === 'inserted'
+              ? 'google_play_rtdn_inbox_recorded'
+              : 'google_play_rtdn_inbox_replayed',
           messageId: notification.messageId,
           eventTimeMillis: notification.eventTimeMillis,
           notificationKind: notification.kind,
           notificationType: notification.notificationType,
         },
-        'Google Play RTDN real notification requires retry',
+        'Google Play RTDN real notification durably recorded',
       );
-
-      // Future durable-insert point: an inbox slice (migration 0016) must persist
-      // this trigger before returning 2xx. Durable storage is intentionally out of scope here.
-      throw new AppError(
-        503,
-        'GOOGLE_PLAY_RTDN_RETRY_REQUIRED',
-        'Google Play RTDN processing is not available.',
-      );
+      return reply.status(204).send(null);
     },
   );
 

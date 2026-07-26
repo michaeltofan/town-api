@@ -22,6 +22,7 @@ const EXPECTED_TOWN_TABLES = [
   'communities',
   'email_challenges',
   'google_play_purchase_links',
+  'google_play_rtdn_inbox',
   'identity_security_events',
   'membership_entitlements',
   'membership_source_events',

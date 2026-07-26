@@ -16,6 +16,8 @@ export type ParsedRtdnNotification =
       kind: 'test';
       messageId: string;
       eventTimeMillis: string;
+      rawPayload: Record<string, unknown>;
+      decodedPayloadBytes: Buffer;
     }
   | {
       kind: 'subscription' | 'oneTime' | 'voided';
@@ -23,6 +25,9 @@ export type ParsedRtdnNotification =
       eventTimeMillis: string;
       notificationType: number | null;
       purchaseToken: string;
+      subscriptionId: string | null;
+      rawPayload: Record<string, unknown>;
+      decodedPayloadBytes: Buffer;
     };
 
 export class RtdnParseError extends Error {
@@ -59,7 +64,7 @@ function requireNotificationType(value: unknown): number {
   return value as number;
 }
 
-function decodeBase64Utf8(value: unknown): string {
+function decodeBase64Utf8(value: unknown): { bytes: Buffer; text: string } {
   const encoded = requireNonEmptyString(value);
   if (encoded.length % 4 !== 0 || !BASE64_PATTERN.test(encoded)) {
     fail();
@@ -70,7 +75,10 @@ function decodeBase64Utf8(value: unknown): string {
     fail();
   }
   try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return {
+      bytes,
+      text: new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+    };
   } catch {
     return fail();
   }
@@ -129,7 +137,7 @@ export function parseRtdnNotification(
 
   const messageId = requireNonEmptyString(envelope.message.messageId);
   const decoded = decodeBase64Utf8(envelope.message.data);
-  const notification = parseJsonObject(decoded);
+  const notification = parseJsonObject(decoded.text);
   if (
     !hasOnlyKeys(notification, [
       'version',
@@ -156,7 +164,13 @@ export function parseRtdnNotification(
     if (!hasOnlyKeys(detail, ['version']) || detail.version !== DEVELOPER_NOTIFICATION_VERSION) {
       fail();
     }
-    return { kind: 'test', messageId, eventTimeMillis };
+    return {
+      kind: 'test',
+      messageId,
+      eventTimeMillis,
+      rawPayload: notification,
+      decodedPayloadBytes: decoded.bytes,
+    };
   }
 
   if (variant === 'subscriptionNotification') {
@@ -166,15 +180,17 @@ export function parseRtdnNotification(
     ) {
       fail();
     }
-    if (detail.subscriptionId !== undefined) {
-      requireNonEmptyString(detail.subscriptionId);
-    }
+    const subscriptionId =
+      detail.subscriptionId === undefined ? null : requireNonEmptyString(detail.subscriptionId);
     return {
       kind: 'subscription',
       messageId,
       eventTimeMillis,
       notificationType: requireNotificationType(detail.notificationType),
       purchaseToken: requireNonEmptyString(detail.purchaseToken),
+      subscriptionId,
+      rawPayload: notification,
+      decodedPayloadBytes: decoded.bytes,
     };
   }
 
@@ -192,6 +208,9 @@ export function parseRtdnNotification(
       eventTimeMillis,
       notificationType: requireNotificationType(detail.notificationType),
       purchaseToken: requireNonEmptyString(detail.purchaseToken),
+      subscriptionId: null,
+      rawPayload: notification,
+      decodedPayloadBytes: decoded.bytes,
     };
   }
 
@@ -209,5 +228,8 @@ export function parseRtdnNotification(
     eventTimeMillis,
     notificationType: null,
     purchaseToken: requireNonEmptyString(detail.purchaseToken),
+    subscriptionId: null,
+    rawPayload: notification,
+    decodedPayloadBytes: decoded.bytes,
   };
 }
