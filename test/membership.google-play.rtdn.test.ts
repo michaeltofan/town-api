@@ -63,6 +63,34 @@ function subscriptionNotification() {
   };
 }
 
+function oneTimeNotification() {
+  return {
+    version: '1.0',
+    packageName: PACKAGE_NAME,
+    eventTimeMillis: '1785042000000',
+    oneTimeProductNotification: {
+      version: '1.0',
+      notificationType: 1,
+      purchaseToken: PURCHASE_TOKEN,
+      sku: 'town_one_time',
+    },
+  };
+}
+
+function voidedNotification() {
+  return {
+    version: '1.0',
+    packageName: PACKAGE_NAME,
+    eventTimeMillis: '1785042000000',
+    voidedPurchaseNotification: {
+      purchaseToken: PURCHASE_TOKEN,
+      orderId: 'GPA.1234-5678-9012-34567',
+      productType: 1,
+      refundType: 1,
+    },
+  };
+}
+
 async function createRtdnApp(input: {
   verifier: PubSubPushVerifier;
   enabled?: boolean;
@@ -366,26 +394,33 @@ describe('POST /v1/billing/google-play/rtdn', () => {
     expect(response.body).toBe('');
   });
 
-  it('returns 503 for a real notification without DB or Android Publisher access', async () => {
-    const verifier = vi.fn<PubSubPushVerifier>().mockResolvedValue();
-    const getSubscriptionV2 = vi.fn();
-    const acknowledgeSubscription = vi.fn();
-    const app = await createRtdnApp({
-      verifier,
-      androidPublisher: { getSubscriptionV2, acknowledgeSubscription },
-    });
-    apps.push(app);
-    const response = await app.inject({
-      method: 'POST',
-      url: ROUTE,
-      headers: { authorization: `Bearer ${JWT}` },
-      payload: pushEnvelope(subscriptionNotification()),
-    });
-    expect(response.statusCode).toBe(503);
-    expect(response.json()).toMatchObject({ error: { code: 'GOOGLE_PLAY_RTDN_RETRY_REQUIRED' } });
-    expect(getSubscriptionV2).not.toHaveBeenCalled();
-    expect(acknowledgeSubscription).not.toHaveBeenCalled();
-  });
+  it.each([
+    ['subscription', subscriptionNotification()],
+    ['one-time product', oneTimeNotification()],
+    ['voided purchase', voidedNotification()],
+  ])(
+    'returns 503 for a real %s notification without DB or Android Publisher access',
+    async (_name, notification) => {
+      const verifier = vi.fn<PubSubPushVerifier>().mockResolvedValue();
+      const getSubscriptionV2 = vi.fn();
+      const acknowledgeSubscription = vi.fn();
+      const app = await createRtdnApp({
+        verifier,
+        androidPublisher: { getSubscriptionV2, acknowledgeSubscription },
+      });
+      apps.push(app);
+      const response = await app.inject({
+        method: 'POST',
+        url: ROUTE,
+        headers: { authorization: `Bearer ${JWT}` },
+        payload: pushEnvelope(notification),
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toMatchObject({ error: { code: 'GOOGLE_PLAY_RTDN_RETRY_REQUIRED' } });
+      expect(getSubscriptionV2).not.toHaveBeenCalled();
+      expect(acknowledgeSubscription).not.toHaveBeenCalled();
+    },
+  );
 
   it('logs only bounded correlation metadata', async () => {
     const output = new PassThrough();
