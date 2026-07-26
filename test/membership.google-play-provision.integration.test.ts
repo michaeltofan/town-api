@@ -247,6 +247,13 @@ describe('Google Play paid_pending_binding provision foundation', () => {
       version: 1,
     });
 
+    const beforeEntitlement = await database.db
+      .select()
+      .from(membershipEntitlements)
+      .where(eq(membershipEntitlements.accountId, accountSuspended))
+      .limit(1);
+    expect(beforeEntitlement).toHaveLength(1);
+
     const beforeRejectedAudits = await database.db
       .select()
       .from(identitySecurityEvents)
@@ -280,12 +287,7 @@ describe('Google Play paid_pending_binding provision foundation', () => {
       .from(membershipEntitlements)
       .where(eq(membershipEntitlements.accountId, accountSuspended));
     expect(entitlements).toHaveLength(1);
-    expect(entitlements[0]).toMatchObject({
-      id: entitlementId,
-      status: 'suspended',
-      version: 1,
-      updatedAt: NOW,
-    });
+    expect(entitlements[0]).toEqual(beforeEntitlement[0]);
     expect(entitlements.some((row) => row.status === 'paid_pending_binding')).toBe(false);
 
     const links = await database.db
