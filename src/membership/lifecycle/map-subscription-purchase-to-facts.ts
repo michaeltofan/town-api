@@ -136,5 +136,9 @@ export function mapSubscriptionPurchaseToNeutralFacts(
     expiry = expiry === null ? lineItemExpiry : Math.max(expiry, lineItemExpiry);
   }
 
+  if (expiry === null) {
+    return { ok: false, reason: 'subscription_line_items_missing' };
+  }
+
   return { ok: true, facts: { state, expiry } };
 }
