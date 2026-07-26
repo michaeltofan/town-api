@@ -138,6 +138,12 @@ const EnvSchema = Type.Object(
     GOOGLE_PLAY_PACKAGE_NAME: Type.Optional(Type.String({ minLength: 3 })),
     GOOGLE_PLAY_SUBSCRIPTION_ID: Type.Optional(Type.String({ minLength: 1 })),
     GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: Type.Optional(Type.String({ minLength: 32 })),
+    GOOGLE_PLAY_RTDN_INGRESS_ENABLED: Type.Boolean({ default: false }),
+    GOOGLE_PLAY_RTDN_OIDC_AUDIENCE: Type.Optional(Type.String({ minLength: 8 })),
+    GOOGLE_PLAY_RTDN_PUSH_SERVICE_ACCOUNT_EMAIL: Type.Optional(
+      Type.String({ minLength: 3, maxLength: 320 }),
+    ),
+    GOOGLE_PLAY_RTDN_PUBSUB_SUBSCRIPTION: Type.Optional(Type.String({ minLength: 1 })),
     OBJECT_STORAGE_ENABLED: Type.Boolean({ default: false }),
     OBJECT_STORAGE_ENDPOINT: Type.Optional(Type.String({ minLength: 1 })),
     OBJECT_STORAGE_BUCKET: Type.Optional(Type.String({ minLength: 1 })),
@@ -365,6 +371,15 @@ function sanitizeEnvErrorPath(path: string, message: string): string {
   if (path.includes('GOOGLE_PLAY_SUBSCRIPTION_ID')) {
     return `${path}: must be a non-empty subscription product id when Google Play billing is enabled`;
   }
+  if (path.includes('GOOGLE_PLAY_RTDN_OIDC_AUDIENCE')) {
+    return `${path}: must be an absolute https URL without wildcard, query, or fragment when Google Play RTDN ingress is enabled`;
+  }
+  if (path.includes('GOOGLE_PLAY_RTDN_PUSH_SERVICE_ACCOUNT_EMAIL')) {
+    return `${path}: must be a valid email address when Google Play RTDN ingress is enabled`;
+  }
+  if (path.includes('GOOGLE_PLAY_RTDN_PUBSUB_SUBSCRIPTION')) {
+    return `${path}: must match projects/{project}/subscriptions/{subscription} when Google Play RTDN ingress is enabled`;
+  }
   return `${path}: ${message}`;
 }
 
@@ -389,6 +404,24 @@ function isAbsoluteHttpsUrl(value: string, nodeEnv: string): boolean {
     return nodeEnv !== 'production';
   }
   return true;
+}
+
+function isRtdnAudience(value: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  return (
+    parsed.protocol === 'https:' &&
+    parsed.hostname.length > 0 &&
+    !value.includes('*') &&
+    parsed.username === '' &&
+    parsed.password === '' &&
+    parsed.search === '' &&
+    parsed.hash === ''
+  );
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
@@ -436,6 +469,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const googlePlayBillingEnabled = parseBooleanFlag(
     source.GOOGLE_PLAY_BILLING_ENABLED,
     'GOOGLE_PLAY_BILLING_ENABLED',
+  );
+  const googlePlayRtdnIngressEnabled = parseBooleanFlag(
+    source.GOOGLE_PLAY_RTDN_INGRESS_ENABLED,
+    'GOOGLE_PLAY_RTDN_INGRESS_ENABLED',
   );
   const nodeEnv = source.NODE_ENV ?? 'development';
   const appEnv = resolveAppEnv(source.APP_ENV, nodeEnv);
@@ -490,6 +527,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     LOCAL_ELIGIBILITY_ENABLED: localEligibilityEnabled,
     STRIPE_BILLING_ENABLED: stripeBillingEnabled,
     GOOGLE_PLAY_BILLING_ENABLED: googlePlayBillingEnabled,
+    GOOGLE_PLAY_RTDN_INGRESS_ENABLED: googlePlayRtdnIngressEnabled,
     OBJECT_STORAGE_ENABLED: objectStorageEnabled,
     SIGNAL_SUBMISSION_ENABLED: signalSubmissionEnabled,
     TRUST_PROXY: trustProxy,
@@ -1018,6 +1056,47 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     candidate.GOOGLE_PLAY_PACKAGE_NAME = packageName;
     candidate.GOOGLE_PLAY_SUBSCRIPTION_ID = subscriptionId;
     candidate.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = serviceAccountJson;
+  }
+
+  if (googlePlayRtdnIngressEnabled) {
+    const audience = source.GOOGLE_PLAY_RTDN_OIDC_AUDIENCE;
+    const serviceAccountEmail = source.GOOGLE_PLAY_RTDN_PUSH_SERVICE_ACCOUNT_EMAIL;
+    const subscription = source.GOOGLE_PLAY_RTDN_PUBSUB_SUBSCRIPTION;
+    const packageName = source.GOOGLE_PLAY_PACKAGE_NAME;
+
+    if (!isNonEmptyString(audience) || !isRtdnAudience(audience)) {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_RTDN_OIDC_AUDIENCE must be an absolute https URL without wildcard, query, or fragment when GOOGLE_PLAY_RTDN_INGRESS_ENABLED is true',
+      );
+    }
+    if (!isNonEmptyString(serviceAccountEmail) || !isEmailAddressShape(serviceAccountEmail)) {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_RTDN_PUSH_SERVICE_ACCOUNT_EMAIL must be a valid email address when GOOGLE_PLAY_RTDN_INGRESS_ENABLED is true',
+      );
+    }
+    if (
+      !isNonEmptyString(subscription) ||
+      !/^projects\/[^/\s]+\/subscriptions\/[^/\s]+$/.test(subscription)
+    ) {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_RTDN_PUBSUB_SUBSCRIPTION must match projects/{project}/subscriptions/{subscription} when GOOGLE_PLAY_RTDN_INGRESS_ENABLED is true',
+      );
+    }
+    if (
+      !isNonEmptyString(packageName) ||
+      packageName.length < 3 ||
+      !packageName.includes('.') ||
+      packageName.includes(' ')
+    ) {
+      throw new Error(
+        'Invalid environment configuration: GOOGLE_PLAY_PACKAGE_NAME must be a non-empty Android package name when GOOGLE_PLAY_RTDN_INGRESS_ENABLED is true',
+      );
+    }
+
+    candidate.GOOGLE_PLAY_RTDN_OIDC_AUDIENCE = audience;
+    candidate.GOOGLE_PLAY_RTDN_PUSH_SERVICE_ACCOUNT_EMAIL = serviceAccountEmail;
+    candidate.GOOGLE_PLAY_RTDN_PUBSUB_SUBSCRIPTION = subscription;
+    candidate.GOOGLE_PLAY_PACKAGE_NAME = packageName;
   }
 
   if (!isNonEmptyString(candidate.DATABASE_URL)) {

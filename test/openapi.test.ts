@@ -89,7 +89,7 @@ describe('OpenAPI contract', () => {
     expect(membership.patch).toBeUndefined();
     expect(membership.delete).toBeUndefined();
 
-    // Billing foundation: Stripe checkout/portal/webhook plus Google Play purchase ingress.
+    // Billing foundation: Stripe checkout/portal/webhook plus Google Play purchase and RTDN ingress.
     const billingPaths = Object.keys(document.paths)
       .filter((p) => p.includes('/v1/billing'))
       .sort();
@@ -97,6 +97,7 @@ describe('OpenAPI contract', () => {
       '/v1/billing/checkout-session',
       '/v1/billing/customer-portal-session',
       '/v1/billing/google-play/purchases',
+      '/v1/billing/google-play/rtdn',
       '/v1/billing/stripe/webhook',
     ]);
     const checkout = document.paths['/v1/billing/checkout-session'] as Record<string, unknown>;
@@ -111,6 +112,12 @@ describe('OpenAPI contract', () => {
     >;
     expect(googlePlayPurchase.post).toBeDefined();
     expect(googlePlayPurchase.get).toBeUndefined();
+    const googlePlayRtdn = document.paths['/v1/billing/google-play/rtdn'] as Record<
+      string,
+      unknown
+    >;
+    expect(googlePlayRtdn.post).toBeDefined();
+    expect(googlePlayRtdn.get).toBeUndefined();
     const webhook = document.paths['/v1/billing/stripe/webhook'] as Record<string, unknown>;
     expect(webhook.post).toBeDefined();
     expect(webhook.get).toBeUndefined();
@@ -138,6 +145,18 @@ describe('OpenAPI contract', () => {
     expect(googlePlayPost.description?.toLowerCase()).toContain('paid_pending_binding');
     expect(googlePlayPost.description?.toLowerCase()).toContain('acknowledge');
     expect(googlePlayPost.description?.toLowerCase()).toContain('does not process rtdn');
+    const googlePlayRtdnPost = googlePlayRtdn.post as {
+      security?: unknown[];
+      description?: string;
+      responses?: Record<string, unknown>;
+    };
+    expect(googlePlayRtdnPost.security ?? []).toEqual([]);
+    expect(googlePlayRtdnPost.description?.toLowerCase()).toContain('oidc');
+    expect(googlePlayRtdnPost.description?.toLowerCase()).toContain('never reads or mutates');
+    expect(googlePlayRtdnPost.responses).toHaveProperty('204');
+    expect(googlePlayRtdnPost.responses).toHaveProperty('400');
+    expect(googlePlayRtdnPost.responses).toHaveProperty('401');
+    expect(googlePlayRtdnPost.responses).toHaveProperty('503');
 
     // Confirmation PUT is now session-authenticated (not TownControlKey).
     const confirmationSecurity = JSON.stringify(confirmationPath.put.security ?? []);
