@@ -139,6 +139,12 @@ describe('Google Pub/Sub OIDC verifier', () => {
     };
   }
 
+  function withoutClaim(key: 'iat' | 'exp'): Partial<TokenPayload> {
+    const claims: Partial<TokenPayload> = { ...validClaims };
+    delete claims[key];
+    return claims;
+  }
+
   it('accepts the exact Google issuer, audience, service account, and verified email', async () => {
     const { verifier, verifyIdToken } = verifierFor(validClaims);
     await expect(verifier(JWT)).resolves.toBeUndefined();
@@ -150,8 +156,8 @@ describe('Google Pub/Sub OIDC verifier', () => {
     ['audience', { ...validClaims, aud: `${AUDIENCE}/wrong` }],
     ['service account', { ...validClaims, email: 'wrong@example.test' }],
     ['unverified email', { ...validClaims, email_verified: false }],
-    ['missing iat', { ...validClaims, iat: undefined }],
-    ['missing exp', { ...validClaims, exp: undefined }],
+    ['missing iat', withoutClaim('iat')],
+    ['missing exp', withoutClaim('exp')],
   ])('rejects a token with an invalid %s claim', async (_name, claims) => {
     const { verifier } = verifierFor(claims);
     await expect(verifier(JWT)).rejects.toBeInstanceOf(PubSubPushAuthenticationError);
