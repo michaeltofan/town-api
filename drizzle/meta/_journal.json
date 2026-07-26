@@ -120,6 +120,13 @@
       "when": 1785048420000,
       "tag": "0016_google_play_rtdn_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785090000000,
+      "tag": "0017_suspended_membership_status",
+      "breakpoints": true
     }
   ]
 }

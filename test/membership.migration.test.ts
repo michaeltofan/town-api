@@ -92,6 +92,99 @@ describe('membership migration 0010', () => {
     expect(fks.rows[0]?.confdeltype).toBe('r');
   });
 
+  it('accepts suspended and all five original membership statuses', async () => {
+    const accountId = '10000000-0000-4000-8000-000000000099';
+    const now = '2026-07-26T00:00:00.000Z';
+    const future = '2030-01-01T00:00:00.000Z';
+    const statuses = [
+      {
+        status: 'inactive',
+        accessUntil: null,
+        cancelAtPeriodEnd: false,
+        activatedAt: null,
+        cancellationRequestedAt: null,
+        expiredAt: null,
+      },
+      {
+        status: 'active',
+        accessUntil: future,
+        cancelAtPeriodEnd: false,
+        activatedAt: now,
+        cancellationRequestedAt: null,
+        expiredAt: null,
+      },
+      {
+        status: 'cancelling',
+        accessUntil: future,
+        cancelAtPeriodEnd: true,
+        activatedAt: now,
+        cancellationRequestedAt: now,
+        expiredAt: null,
+      },
+      {
+        status: 'expired',
+        accessUntil: now,
+        cancelAtPeriodEnd: false,
+        activatedAt: now,
+        cancellationRequestedAt: null,
+        expiredAt: now,
+      },
+      {
+        status: 'paid_pending_binding',
+        accessUntil: future,
+        cancelAtPeriodEnd: false,
+        activatedAt: null,
+        cancellationRequestedAt: null,
+        expiredAt: null,
+      },
+      {
+        status: 'suspended',
+        accessUntil: future,
+        cancelAtPeriodEnd: false,
+        activatedAt: now,
+        cancellationRequestedAt: null,
+        expiredAt: null,
+      },
+    ] as const;
+
+    await pool.query('BEGIN');
+    try {
+      await pool.query(
+        `INSERT INTO town.accounts (id, status, created_at, updated_at)
+         VALUES ($1, 'pending_email', $2, $2)`,
+        [accountId, now],
+      );
+      for (const [index, status] of statuses.entries()) {
+        const entitlementId = `30000000-0000-4000-8000-${String(100 + index).padStart(12, '0')}`;
+        await pool.query(
+          `INSERT INTO town.membership_entitlements (
+             id, account_id, status, access_until, cancel_at_period_end, source,
+             activated_at, cancellation_requested_at, expired_at, created_at, updated_at, version
+           ) VALUES ($1, $2, $3, $4, $5, 'test_fixture', $6, $7, $8, $9, $9, 1)`,
+          [
+            entitlementId,
+            accountId,
+            status.status,
+            status.accessUntil,
+            status.cancelAtPeriodEnd,
+            status.activatedAt,
+            status.cancellationRequestedAt,
+            status.expiredAt,
+            now,
+          ],
+        );
+        const persisted = await pool.query<{ status: string }>(
+          `SELECT status FROM town.membership_entitlements WHERE id = $1`,
+          [entitlementId],
+        );
+        expect(persisted.rows[0]?.status).toBe(status.status);
+        await pool.query(`DELETE FROM town.membership_entitlements WHERE id = $1`, [entitlementId]);
+      }
+    } finally {
+      await pool.query('ROLLBACK');
+    }
+  });
+
   it('creates the membership_source_events table with the expected columns and constraints', async () => {
     const cols = await pool.query<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
