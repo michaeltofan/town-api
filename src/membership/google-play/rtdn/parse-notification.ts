@@ -98,7 +98,11 @@ function resolveVariant(notification: Record<string, unknown>): NotificationVari
   if (present.length !== 1) {
     fail();
   }
-  return present[0]!;
+  const variant = present[0];
+  if (variant === undefined) {
+    fail();
+  }
+  return variant;
 }
 
 export function parseRtdnNotification(

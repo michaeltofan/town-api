@@ -1,5 +1,5 @@
 import { PassThrough } from 'node:stream';
-import type { LoginTicket } from 'google-auth-library';
+import { LoginTicket, type TokenPayload } from 'google-auth-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp, type AppInstance } from '../src/app.js';
 import {
@@ -119,16 +119,17 @@ describe('Google Pub/Sub OIDC verifier', () => {
   const validClaims = {
     iss: 'https://accounts.google.com',
     aud: AUDIENCE,
+    sub: 'pubsub-push-subject',
     email: SERVICE_ACCOUNT,
     email_verified: true,
     iat: 1_785_042_000,
     exp: 1_785_045_600,
-  };
+  } satisfies TokenPayload;
 
-  function verifierFor(claims: Record<string, unknown>) {
-    const verifyIdToken = vi.fn().mockResolvedValue({
-      getPayload: () => claims,
-    } as LoginTicket);
+  function verifierFor(claims: Partial<TokenPayload>) {
+    const verifyIdToken = vi
+      .fn()
+      .mockResolvedValue(new LoginTicket('test-envelope', claims as TokenPayload));
     return {
       verifier: createPubSubPushVerifier(
         { audience: AUDIENCE, serviceAccountEmail: SERVICE_ACCOUNT },
