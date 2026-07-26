@@ -176,6 +176,21 @@ describe('evaluateCivicAccess', () => {
     expect(result.denialReason).toBe('inactive_membership');
   });
 
+  it('denies participation for suspended even with unelapsed access', () => {
+    const result = evaluateCivicAccess({
+      session: { accountId: ACCOUNT_ID },
+      account: makeAccount(),
+      entitlement: makeEntitlement({ status: 'suspended' }),
+      actor: makeActor({ localEligibilityVerifiedAt: NOW }),
+      communityId: COMMUNITY_ID,
+      localEligibility: eligibleLocal,
+      now: NOW,
+    });
+    expect(result.level).toBe('read_only');
+    expect(result.canParticipate).toBe(false);
+    expect(result.denialReason).toBe('inactive_membership');
+  });
+
   it('boundary now == access_until is expired', () => {
     const result = evaluateCivicAccess({
       session: { accountId: ACCOUNT_ID },

@@ -596,7 +596,7 @@ export const membershipEntitlements = town.table(
     unique('membership_entitlements_account_id_unique').on(table.accountId),
     check(
       'membership_entitlements_status_valid',
-      sql`${table.status} in ('inactive', 'active', 'cancelling', 'expired', 'paid_pending_binding')`,
+      sql`${table.status} in ('inactive', 'active', 'cancelling', 'expired', 'paid_pending_binding', 'suspended')`,
     ),
     check(
       'membership_entitlements_source_valid',
@@ -632,6 +632,9 @@ export const membershipEntitlements = town.table(
           and ${table.cancelAtPeriodEnd} = false
           and ${table.activatedAt} is null
           and ${table.cancellationRequestedAt} is null
+          and ${table.expiredAt} is null)
+        or (${table.status} = 'suspended'
+          and ${table.accessUntil} is not null
           and ${table.expiredAt} is null)
       )`,
     ),
@@ -1195,7 +1198,7 @@ export type IdentitySecurityEventType =
   | 'stripe_price_mismatch';
 
 export type MembershipStatus =
-  'inactive' | 'active' | 'cancelling' | 'expired' | 'paid_pending_binding';
+  'inactive' | 'active' | 'cancelling' | 'expired' | 'paid_pending_binding' | 'suspended';
 export type MembershipSource = 'test_fixture' | 'stripe' | 'google_play';
 export type MembershipSourceEventType =
   | 'activate'

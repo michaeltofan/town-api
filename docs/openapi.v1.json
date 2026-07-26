@@ -1118,6 +1118,12 @@
                                     "paid_pending_binding"
                                   ],
                                   "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "suspended"
+                                  ],
+                                  "type": "string"
                                 }
                               ]
                             }
@@ -6063,6 +6069,12 @@
                                 {
                                   "enum": [
                                     "paid_pending_binding"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "suspended"
                                   ],
                                   "type": "string"
                                 }

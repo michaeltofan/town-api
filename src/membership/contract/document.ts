@@ -41,7 +41,14 @@ export function generateMembershipContractDocument(): unknown {
     entitlement: {
       table: 'town.membership_entitlements',
       uniquePerAccount: true,
-      statuses: ['inactive', 'active', 'cancelling', 'expired', 'paid_pending_binding'],
+      statuses: [
+        'inactive',
+        'active',
+        'cancelling',
+        'expired',
+        'paid_pending_binding',
+        'suspended',
+      ],
       sources: ['test_fixture', 'stripe', 'google_play'],
       versioning: {
         column: 'version',
@@ -57,6 +64,7 @@ export function generateMembershipContractDocument(): unknown {
         'cancelling => access_until not null and cancel_at_period_end true and cancellation_requested_at not null and expired_at null',
         'expired => access_until not null and cancel_at_period_end false and expired_at not null',
         'paid_pending_binding => access_until not null and cancel_at_period_end false and activated_at null and cancellation_requested_at null and expired_at null',
+        'suspended => access_until not null and expired_at null',
       ],
     },
     sourceEvents: {

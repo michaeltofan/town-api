@@ -13,7 +13,7 @@ const contractPath = path.resolve(
 );
 
 describe('membership contract', () => {
-  it('exposes the four membership statuses, sources, results, and access levels', () => {
+  it('exposes the six membership statuses, sources, results, and access levels', () => {
     const doc = generateMembershipContractDocument() as {
       entitlement: { statuses: string[]; sources: string[] };
       sourceEvents: { eventTypes: string[]; results: string[] };
@@ -26,6 +26,7 @@ describe('membership contract', () => {
       'cancelling',
       'expired',
       'paid_pending_binding',
+      'suspended',
     ]);
     expect(doc.entitlement.sources).toEqual(['test_fixture', 'stripe', 'google_play']);
     expect(doc.sourceEvents.eventTypes).toEqual([

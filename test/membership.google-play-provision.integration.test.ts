@@ -1,18 +1,27 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { createDatabase, type Database } from '../src/db/client.js';
+import { FOUNDATION_COMMUNITY_IDS } from '../src/db/seeds/foundation-content.js';
 import {
+  accounts,
+  actors,
   googlePlayPurchaseLinks,
+  identitySecurityEvents,
   membershipEntitlements,
   membershipSourceEvents,
 } from '../src/db/schema.js';
 import { createAccountShell } from '../src/identity/repositories/accounts.js';
+import { createCivicActor, linkActorToAccount } from '../src/identity/repositories/actor-link.js';
 import {
   evaluateCivicAccess,
   resolveEffectiveMembershipStatus,
 } from '../src/membership/civic-access.js';
+import {
+  buildFinalizePaidPendingBindingSourceEventId,
+  maybeFinalizePaidPendingBindingAfterCommunityBind,
+} from '../src/membership/finalize-after-community-bind.js';
 import {
   findCommittedTokenConflict,
   provisionGooglePlayPaidPendingBinding,
@@ -26,6 +35,7 @@ const NOW = '2026-07-25T12:00:00.000Z';
 const ACCESS_UNTIL = '2027-07-25T12:00:00.000Z';
 const PACKAGE_NAME = 'com.town.town_safe_space_mobile';
 const SUBSCRIPTION_ID = 'town_annual_membership';
+const COMMUNITY_ID = FOUNDATION_COMMUNITY_IDS.milanoIt;
 
 describe('Google Play paid_pending_binding provision foundation', () => {
   let pool: Pool;
@@ -36,6 +46,8 @@ describe('Google Play paid_pending_binding provision foundation', () => {
   const accountStripe = '11000000-0000-4000-8000-000000000504';
   const accountFixture = '11000000-0000-4000-8000-000000000505';
   const accountFail = '11000000-0000-4000-8000-000000000506';
+  const accountSuspended = '11000000-0000-4000-8000-000000000511';
+  const actorSuspended = '20000000-0000-4000-8000-000000000511';
 
   beforeAll(async () => {
     const url = requireDatabaseUrl();
@@ -47,7 +59,15 @@ describe('Google Play paid_pending_binding provision foundation', () => {
       connectionTimeoutMs: 3000,
       idleTimeoutMs: 1000,
     });
-    for (const id of [accountA, accountB, accountC, accountStripe, accountFixture, accountFail]) {
+    for (const id of [
+      accountA,
+      accountB,
+      accountC,
+      accountStripe,
+      accountFixture,
+      accountFail,
+      accountSuspended,
+    ]) {
       await createAccountShell(database.db, { id, createdAt: NOW, updatedAt: NOW });
     }
   });
@@ -172,6 +192,164 @@ describe('Google Play paid_pending_binding provision foundation', () => {
     expect(access.canParticipate).toBe(false);
     expect(access.level).toBe('read_only');
     expect(access.denialReason).toBe('inactive_membership');
+  });
+
+  it('rejects suspended without entitlement or purchase-link writes and cannot finalize', async () => {
+    const sourceEventId = 'gp_evt_suspended_rejected';
+    const purchaseToken = 'gp_token_suspended_rejected';
+    const entitlementId = randomUUID();
+
+    const handle = Buffer.alloc(32, 0);
+    Buffer.from(accountSuspended.replace(/-/g, ''), 'hex').copy(handle, 0, 0, 16);
+    await database.db
+      .update(accounts)
+      .set({
+        webauthnUserHandle: handle,
+        status: 'active',
+        accountReadyAt: NOW,
+        updatedAt: NOW,
+      })
+      .where(eq(accounts.id, accountSuspended));
+    await createCivicActor(database.db, {
+      id: actorSuspended,
+      displayLabel: 'Suspended member',
+      communityId: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    await linkActorToAccount(database.db, {
+      actorId: actorSuspended,
+      accountId: accountSuspended,
+      at: NOW,
+    });
+    await database.db
+      .update(actors)
+      .set({
+        communityId: COMMUNITY_ID,
+        localEligibilityVerifiedAt: NOW,
+        updatedAt: NOW,
+      })
+      .where(eq(actors.id, actorSuspended));
+    await insertMembershipEntitlement(database.db, {
+      id: entitlementId,
+      accountId: accountSuspended,
+      status: 'suspended',
+      accessUntil: ACCESS_UNTIL,
+      cancelAtPeriodEnd: false,
+      source: 'google_play',
+      sourceCustomerId: null,
+      sourceSubscriptionId: null,
+      activatedAt: NOW,
+      cancellationRequestedAt: null,
+      expiredAt: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+      version: 1,
+    });
+
+    const beforeEntitlement = await database.db
+      .select()
+      .from(membershipEntitlements)
+      .where(eq(membershipEntitlements.accountId, accountSuspended))
+      .limit(1);
+    expect(beforeEntitlement).toHaveLength(1);
+
+    const beforeRejectedAudits = await database.db
+      .select()
+      .from(identitySecurityEvents)
+      .where(
+        and(
+          eq(identitySecurityEvents.accountId, accountSuspended),
+          eq(identitySecurityEvents.eventType, 'membership_event_rejected'),
+        ),
+      );
+
+    const outcome = await provisionGooglePlayPaidPendingBinding(
+      database.db,
+      {
+        sourceEventId,
+        accountId: accountSuspended,
+        effectiveAt: NOW,
+        accessUntil: ACCESS_UNTIL,
+        purchaseToken,
+        packageName: PACKAGE_NAME,
+        subscriptionId: SUBSCRIPTION_ID,
+      },
+      { nodeEnv: 'test', processedAt: NOW },
+    );
+
+    expect(outcome.result).toBe('rejected');
+    expect(outcome.reason).toBe('invalid_status_for_provision_paid_pending_binding');
+    expect(outcome.entitlement?.status).toBe('suspended');
+
+    const entitlements = await database.db
+      .select()
+      .from(membershipEntitlements)
+      .where(eq(membershipEntitlements.accountId, accountSuspended));
+    expect(entitlements).toHaveLength(1);
+    expect(entitlements[0]).toEqual(beforeEntitlement[0]);
+    expect(entitlements.some((row) => row.status === 'paid_pending_binding')).toBe(false);
+
+    const links = await database.db
+      .select()
+      .from(googlePlayPurchaseLinks)
+      .where(eq(googlePlayPurchaseLinks.purchaseToken, purchaseToken));
+    expect(links).toHaveLength(0);
+
+    const sourceEvents = await database.db
+      .select()
+      .from(membershipSourceEvents)
+      .where(eq(membershipSourceEvents.sourceEventId, sourceEventId));
+    expect(sourceEvents).toHaveLength(1);
+    expect(sourceEvents[0]?.result).toBe('rejected');
+
+    const afterRejectedAudits = await database.db
+      .select()
+      .from(identitySecurityEvents)
+      .where(
+        and(
+          eq(identitySecurityEvents.accountId, accountSuspended),
+          eq(identitySecurityEvents.eventType, 'membership_event_rejected'),
+        ),
+      );
+    expect(afterRejectedAudits).toHaveLength(beforeRejectedAudits.length + 1);
+
+    const finalized = await maybeFinalizePaidPendingBindingAfterCommunityBind(
+      database.db,
+      {
+        accountId: accountSuspended,
+        communityId: COMMUNITY_ID,
+        effectiveAt: NOW,
+      },
+      { nodeEnv: 'test', processedAt: NOW },
+    );
+    expect(finalized.result).toBe('skipped');
+    if (finalized.result === 'skipped') {
+      expect(finalized.reason).toBe('not_paid_pending_binding');
+      expect(finalized.entitlement?.status).toBe('suspended');
+    }
+
+    const finalizeEvents = await database.db
+      .select()
+      .from(membershipSourceEvents)
+      .where(
+        eq(
+          membershipSourceEvents.sourceEventId,
+          buildFinalizePaidPendingBindingSourceEventId({
+            accountId: accountSuspended,
+            communityId: COMMUNITY_ID,
+          }),
+        ),
+      );
+    expect(finalizeEvents).toHaveLength(0);
+
+    const finalEntitlement = await database.db
+      .select()
+      .from(membershipEntitlements)
+      .where(eq(membershipEntitlements.accountId, accountSuspended))
+      .limit(1);
+    expect(finalEntitlement[0]?.status).toBe('suspended');
+    expect(finalEntitlement[0]?.version).toBe(1);
   });
 
   it('exact replay of the same operation/event and payload is idempotent', async () => {
