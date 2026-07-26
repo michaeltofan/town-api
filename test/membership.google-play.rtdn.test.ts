@@ -131,14 +131,14 @@ async function createRtdnApp(input: {
 
 function createInMemoryInbox() {
   const rows = new Map<string, GooglePlayRtdnInboxRecord>();
-  const persistInbox = vi.fn<GooglePlayRtdnInboxPersister>(async (record) => {
+  const persistInbox = vi.fn<GooglePlayRtdnInboxPersister>((record) => {
     const key = `${record.pubsubSubscription}\0${record.messageId}`;
     const existing = rows.get(key);
     if (!existing) {
       rows.set(key, record);
-      return 'inserted';
+      return Promise.resolve('inserted');
     }
-    return existing.payloadHash === record.payloadHash ? 'replayed' : 'conflict';
+    return Promise.resolve(existing.payloadHash === record.payloadHash ? 'replayed' : 'conflict');
   });
   return { rows, persistInbox };
 }
