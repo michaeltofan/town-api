@@ -6,8 +6,8 @@ production deployment.
 ## Pre-flight (once per branch)
 
 - [ ] Branch merged to `main`; CI green.
-- [ ] `npm run db:check` shows no drift and journal shows exactly 12
-      entries (`0000`–`0011`).
+- [ ] `npm run db:check` shows no drift and journal shows exactly 22
+      entries (`0000`–`0021`).
 - [ ] `npm run openapi:check` passes (docs match source).
 - [ ] All contract checks pass (`identity`, `auth`, `membership`, `billing`).
 - [ ] `npm run build && npm run check` succeed locally.
