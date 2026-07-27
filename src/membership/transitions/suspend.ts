@@ -23,7 +23,9 @@ const suspendLogic: TransitionLogic = {
   apply(ctx: TransitionContext) {
     const entitlement = ctx.entitlement;
     if (!entitlement) {
-      throw new Error('suspend.apply requires an existing entitlement; validate must reject earlier');
+      throw new Error(
+        'suspend.apply requires an existing entitlement; validate must reject earlier',
+      );
     }
     return {
       status: 'suspended' as const,
