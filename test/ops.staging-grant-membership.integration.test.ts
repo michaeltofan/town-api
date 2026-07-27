@@ -76,9 +76,7 @@ describe('staging grant membership entrypoint wiring', () => {
     const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as {
       scripts: Record<string, string>;
     };
-    expect(pkg.scripts['membership:grant:staging']).toBe(
-      'tsx scripts/grant-staging-membership.ts',
-    );
+    expect(pkg.scripts['membership:grant:staging']).toBe('tsx scripts/grant-staging-membership.ts');
     expect(pkg.scripts['membership:grant:staging:production']).toBe(
       'node dist/scripts/grant-staging-membership.js',
     );

@@ -238,8 +238,7 @@ export function runStagingGrantMembershipCli(
     accountId = parseAccountIdArg(argv);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Invalid arguments';
-    const code =
-      error instanceof StagingGrantMembershipError ? error.code : 'ACCOUNT_ID_REQUIRED';
+    const code = error instanceof StagingGrantMembershipError ? error.code : 'ACCOUNT_ID_REQUIRED';
     process.stderr.write(`${code}: ${message}\n`);
     process.exitCode = 1;
     return;
