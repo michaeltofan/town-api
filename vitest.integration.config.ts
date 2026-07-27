@@ -42,6 +42,7 @@ export default defineConfig({
       'test/membership.finalize-paid-pending-binding.integration.test.ts',
       'test/membership.finalize-after-eligibility.api.test.ts',
       'test/membership.transitions.integration.test.ts',
+      'test/membership.suspend.integration.test.ts',
       'test/membership.idempotency.integration.test.ts',
       'test/membership.stale.integration.test.ts',
       'test/membership.concurrency.integration.test.ts',
