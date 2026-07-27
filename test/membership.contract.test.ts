@@ -63,7 +63,7 @@ describe('membership contract', () => {
     expect(doc.routes.participantSignalConfirmation).toBe('PUT /v1/signals/:signalId/confirmation');
   });
 
-  it('records the Stripe boundary — no SDK/network and no public provider ids', () => {
+  it('records the Stripe boundary — Slice 2 owns the SDK/webhook; public provider ids stay hidden', () => {
     const doc = generateMembershipContractDocument() as {
       stripeBoundary: {
         package: string;
@@ -72,12 +72,21 @@ describe('membership contract', () => {
         subscriptionIds: string;
         webhookHandler: string;
       };
+      explicitExclusions: string[];
     };
-    expect(doc.stripeBoundary.package).toBe('not installed');
-    expect(doc.stripeBoundary.network).toBe('not called');
+    expect(doc.stripeBoundary.package).toContain('stripe@22.3.2');
+    expect(doc.stripeBoundary.package).toContain('Slice 2');
+    expect(doc.stripeBoundary.network).toContain('STRIPE_BILLING_ENABLED');
+    expect(doc.stripeBoundary.network).toContain('sole membership payment provider');
     expect(doc.stripeBoundary.customerIds).toContain('never exposed');
     expect(doc.stripeBoundary.subscriptionIds).toContain('never exposed');
-    expect(doc.stripeBoundary.webhookHandler).toBe('not implemented');
+    expect(doc.stripeBoundary.webhookHandler).toContain('POST /v1/billing/stripe/webhook');
+    expect(doc.explicitExclusions).not.toContain('Stripe SDK/network integration');
+    expect(doc.explicitExclusions).not.toContain('Stripe webhook route');
+    expect(doc.explicitExclusions).toContain('Flutter client development');
+    expect(doc.explicitExclusions).toContain(
+      'Apple In-App Purchase / StoreKit / app-store distribution',
+    );
   });
 
   it('records Google Play verification and session-authenticated purchase ingress as fail-closed', () => {

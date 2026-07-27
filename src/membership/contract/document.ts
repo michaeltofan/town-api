@@ -22,7 +22,7 @@ export function generateMembershipContractDocument(): unknown {
     contractVersion: '1.0.0',
     title: 'TOWN Membership Foundation V1 — Slice 1',
     description:
-      'Contract for the membership entitlement runtime, civic access derivation, source-event idempotency ledger, participant signal confirmation, and session-authenticated membership inventory read. Membership is a separate foundation from account identity and civic actors. Stripe SDK/network integration, payments, JWTs, and local verification runtime remain out of scope.',
+      'Contract for the membership entitlement runtime, civic access derivation, source-event idempotency ledger, participant signal confirmation, and session-authenticated membership inventory read. Membership is a separate foundation from account identity and civic actors. This Slice 1 contract does not own Stripe Checkout, Customer Portal, or webhook routes; those are implemented by Membership Foundation V1 Slice 2 (billing foundation contract). JWTs and production local verification runtime remain out of scope here. Stripe is the sole membership payment provider for the current web launch; Google Play, Flutter, Apple In-App Purchase, and native app-store distribution are outside the current critical path.',
     status: 'implemented',
     implementedLiveRoutes: true,
     slice: 'membership_entitlement_and_civic_access_runtime',
@@ -36,7 +36,8 @@ export function generateMembershipContractDocument(): unknown {
       membershipEntitlement:
         'Separate foundation stored in town.membership_entitlements and town.membership_source_events',
       localVerification: 'Out of scope',
-      stripe: 'Out of scope; no Stripe SDK/network integration in this slice',
+      stripe:
+        'Out of scope for this Slice 1 entitlement contract; Stripe SDK/network integration is implemented in Membership Foundation V1 Slice 2 (billing foundation contract) and is the sole web-launch payment path',
     },
     entitlement: {
       table: 'town.membership_entitlements',
@@ -414,27 +415,30 @@ export function generateMembershipContractDocument(): unknown {
       limit: 60,
     },
     stripeBoundary: {
-      package: 'not installed',
-      network: 'not called',
+      package:
+        'installed as stripe@22.3.2; owned by Membership Foundation V1 Slice 2 billing foundation contract',
+      network:
+        'called only by the Slice 2 billing runtime when STRIPE_BILLING_ENABLED is true; Stripe is the sole membership payment provider for the current web launch',
       customerIds: 'reserved column only; never exposed in API responses',
       subscriptionIds: 'reserved column only; never exposed in API responses',
-      webhookHandler: 'not implemented',
+      webhookHandler:
+        'implemented at POST /v1/billing/stripe/webhook by the Slice 2 billing runtime',
     },
     explicitExclusions: [
-      'Stripe SDK/network integration',
-      'Stripe webhook route',
       'payment card handling',
       'production email provider',
       'JWTs',
       'membership mutation routes other than the session-authenticated Google Play purchase ingress',
-      'membership pricing, catalog, or checkout',
+      'membership pricing, catalog, or checkout owned by this Slice 1 contract (Stripe Checkout/Portal live under the Slice 2 billing contract)',
       'local verification runtime',
-      'Google Play RTDN / Pub/Sub / voided purchases / refunds',
-      'subscription renewal',
+      'Google Play RTDN membership apply / voided purchases / refunds',
+      'subscription renewal owned by this Slice 1 contract',
+      'Flutter client development',
+      'Apple In-App Purchase / StoreKit / app-store distribution',
+      'native Android/iOS application launch as the current critical path',
       'Redis',
       'Railway',
-      'web integration',
-      'mobile integration',
+      'web frontend integration owned by town-public',
       'deployment',
     ],
     testCommands: [

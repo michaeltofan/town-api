@@ -22,14 +22,20 @@ Slice 1 covers:
 
 ## 2. Explicitly out of scope for Slice 1
 
+Historical Slice 1 boundary (deployment-readiness foundation only):
+
 - Any Railway CLI usage, deploy commands, DNS management, or platform-specific
   automation. No `railway login`, no `railway.toml`.
 - Stripe live dashboard changes or real Stripe secrets.
 - Frontend / mobile changes.
-- New database migrations. Slice 1 ships zero new SQL migrations; the drizzle
-  journal remains at 12 entries (`0000`–`0011`).
+- New database migrations authored by that Slice 1 change set (the live
+  repository journal has since grown; see current count below).
 - `drizzle-kit push` or any live-schema mutation outside `drizzle-kit
 migrate` (invoked via `npm run db:migrate`).
+
+Current repository journal (authoritative for pre-flight checks): 22 entries
+(`0000`–`0021`), derived from `drizzle/meta/_journal.json` /
+`EXPECTED_MIGRATION_COUNT`.
 
 ## 3. Target environments
 
@@ -302,12 +308,17 @@ Backups:
   the retention window with the platform admin before any invasive change.
 - Slice 1 does not manage backup jobs itself.
 
-Future work referenced from Slice 1 but not implemented:
+Stripe webhook path (implemented; dashboard configuration remains a human
+operator action and is outside this documentation cleanup):
 
-- Real Stripe webhook URLs will be
-  `https://api-staging.towncivic.org/v1/billing/webhooks/stripe` and
-  `https://api.towncivic.org/v1/billing/webhooks/stripe`. Configuration
-  happens in the Stripe dashboard by a human operator.
+- Staging:
+  `https://api-staging.towncivic.org/v1/billing/stripe/webhook`
+- Production:
+  `https://api.towncivic.org/v1/billing/stripe/webhook`
+
+Stripe is the sole membership payment provider for the current web launch.
+Google Play, Flutter, Apple In-App Purchase, and native app-store distribution
+are outside the current critical path.
 
 ## 13. Reference
 

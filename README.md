@@ -496,12 +496,21 @@ Distinct from Slice 3 initial registration (`SetupGrant` only):
 
 ## Membership Foundation V1 — Slice 1
 
+> **Historical slice description.** The boundaries below describe Membership
+> Foundation V1 Slice 1 as originally shipped. They are retained for audit
+> context. They are **not** a description of the current repository: Stripe
+> Checkout, Customer Portal, and `POST /v1/billing/stripe/webhook` were added
+> in Slice 2 (see below). Stripe is the sole membership payment provider for
+> the current responsive-web launch. Google Play, Flutter, Apple In-App
+> Purchase, and native app-store distribution are outside the current critical
+> path.
+
 Slice 1 of the membership foundation introduces the entitlement/access runtime for civic participation. Membership is a **separate foundation** from account identity and authentication: an `accounts` row is never gated by membership, and no membership boundary weakens the identity/auth contracts.
 
-Boundaries and non-negotiables:
+Boundaries and non-negotiables **for Slice 1 as originally shipped**:
 
-- Zero Stripe or other payment-provider dependency. No SDK, no webhook route, no provider identifiers in any public response. Internal transitions accept a `source` label (`stripe`, `test_fixture`, `admin_backfill`), but Stripe customer or subscription IDs are never accepted from or emitted to the network.
-- There is exactly one public membership route: `GET /v1/account/membership`. There are no public membership mutation routes and no membership webhooks in this slice.
+- Zero Stripe or other payment-provider dependency in that slice. No SDK, no webhook route, no provider identifiers in any public response. Internal transitions accept a `source` label (`stripe`, `test_fixture`, `admin_backfill`), but Stripe customer or subscription IDs are never accepted from or emitted to the network. _(Superseded for the live repo by Slice 2 Stripe billing runtime.)_
+- There is exactly one public membership route: `GET /v1/account/membership`. There are no public membership mutation routes and no membership webhooks in this slice. _(Google Play purchase ingress and Stripe billing routes were added in later slices; they remain distinct from this entitlement-read surface.)_
 - Local participation eligibility defaults **fail-closed**: in `production` (or any non-test/non-development `NODE_ENV`), the default resolver returns `unavailable` and civic access reads never elevate to `participant`. Real local verification data plumbing is out of scope.
 - The controlled test actor (`00000000-0000-4000-8000-000000000301`) is never linked to an account, never receives a session, and never appears in confirmation-history attribution. Participant confirmation always attributes to the caller's linked civic actor.
 - Confirmation history is not reassigned after the participant PUT change. Pre-existing rows attributed to the controlled actor remain attributed to it; new participant PUTs write new rows attributed to the caller's civic actor.
@@ -613,7 +622,7 @@ npm run membership:contract:generate
 npm run membership:contract:check
 ```
 
-Suites include: payload-hash determinism, civic-access matrix (including temporal boundary and fail-closed local), migration invariants (no Stripe tables), transitions/idempotency/stale/concurrency/reconcile flows, `GET /v1/account/membership` response shapes and auth rejections, participant `PUT` matrix (including controlled-actor never linked, control-key rejected without session, and generic `CIVIC_PARTICIPATION_NOT_AUTHORIZED` denial), bounded audit metadata, and OpenAPI surface assertions.
+Suites include: payload-hash determinism, civic-access matrix (including temporal boundary and fail-closed local), migration invariants for the Slice 1 entitlement tables (Stripe billing tables arrive in Slice 2), transitions/idempotency/stale/concurrency/reconcile flows, `GET /v1/account/membership` response shapes and auth rejections, participant `PUT` matrix (including controlled-actor never linked, control-key rejected without session, and generic `CIVIC_PARTICIPATION_NOT_AUTHORIZED` denial), bounded audit metadata, and OpenAPI surface assertions.
 
 ### Exclusions
 
@@ -628,12 +637,14 @@ Explicitly out of scope for Slice 1:
 ## Membership Foundation V1 — Slice 2 (Stripe Billing Integration Runtime)
 
 Slice 2 adds the Stripe integration runtime that starts Checkout Sessions, opens
-Billing Portal Sessions, and processes signature-verified Stripe webhooks. All
-membership state changes still flow through the Slice 1 transitions (with
-`source='stripe'`); the billing runtime does not add new membership statuses,
-does not expose Stripe identifiers in public API responses, and never persists
-raw Stripe payloads, card data, or checkout/portal URLs beyond the immediate
-response body.
+Billing Portal Sessions, and processes signature-verified Stripe webhooks at
+`POST /v1/billing/stripe/webhook`. Stripe is the sole membership payment
+provider for the current responsive-web launch; Google Play and Apple store
+billing are outside that critical path. All membership state changes still flow
+through the Slice 1 transitions (with `source='stripe'`); the billing runtime
+does not add new membership statuses, does not expose Stripe identifiers in
+public API responses, and never persists raw Stripe payloads, card data, or
+checkout/portal URLs beyond the immediate response body.
 
 ### Stripe SDK version pinning
 
@@ -884,13 +895,20 @@ CI runs format/lint/typecheck/unit tests, migration checks, foundation + control
 
 ## Out of scope
 
-This slice still excludes:
+Current repository exclusions (not a claim that Stripe is unimplemented):
 
 - JWTs
 - recovery login sessions / production recovery email
 - public password or social login
-- membership / Stripe / GPS / residency / local verification
+- GPS / residency / production local verification evidence plumbing
 - confirmation removal / confirmation totals / comments / moderation
 - notifications / admin tooling
 - Redis / queues / workers / GraphQL
-- web integration / mobile integration / Railway deployment
+- Flutter client development, Google Play / Apple In-App Purchase as the
+  current launch payment path, and native Android/iOS app-store distribution
+- Railway CLI / platform automation from this documentation slice
+
+Stripe Checkout, Customer Portal, and `POST /v1/billing/stripe/webhook` **are
+implemented** (flag-gated by `STRIPE_BILLING_ENABLED`; see Slice 2 above).
+Stripe is the sole membership payment provider for the responsive web launch.
+Google Play code remains in-tree and flag-gated off by default.
