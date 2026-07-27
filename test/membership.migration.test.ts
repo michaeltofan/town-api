@@ -277,6 +277,7 @@ describe('membership migration 0010', () => {
     expect(events.rows[0]?.definition).toContain("'membership_cancellation_scheduled'");
     expect(events.rows[0]?.definition).toContain("'membership_reactivated'");
     expect(events.rows[0]?.definition).toContain("'membership_expired'");
+    expect(events.rows[0]?.definition).toContain("'membership_suspended'");
     expect(events.rows[0]?.definition).toContain("'membership_event_replayed'");
     expect(events.rows[0]?.definition).toContain("'membership_event_rejected'");
     expect(events.rows[0]?.definition).toContain("'civic_participation_denied'");
