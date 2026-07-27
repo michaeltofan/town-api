@@ -169,7 +169,7 @@ describe('suspend membership transition', () => {
     expect(persisted.status).toBe('suspended');
     expect(persisted.accessUntil).toBe(before.accessUntil);
     expect(persisted.cancelAtPeriodEnd).toBe(true);
-    expect(persisted.cancellationRequestedAt).toBe(cancellationRequestedAt);
+    expect(persisted.cancellationRequestedAt).toBe(before.cancellationRequestedAt);
     expect(persisted.activatedAt).toBe(before.activatedAt);
     expect(persisted.expiredAt).toBeNull();
   });
