@@ -36,6 +36,7 @@ describe('membership contract', () => {
       'reactivate',
       'provision_paid_pending_binding',
       'finalize_paid_pending_binding',
+      'restore',
     ]);
     expect(doc.sourceEvents.results).toEqual(['applied', 'replayed', 'rejected', 'stale']);
     expect(doc.accessLevels.values).toEqual(['visitor', 'read_only', 'participant']);
