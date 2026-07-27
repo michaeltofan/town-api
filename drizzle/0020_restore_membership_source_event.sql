@@ -1,0 +1,2 @@
+ALTER TABLE "town"."membership_source_events" DROP CONSTRAINT "membership_source_events_event_type_valid";--> statement-breakpoint
+ALTER TABLE "town"."membership_source_events" ADD CONSTRAINT "membership_source_events_event_type_valid" CHECK ("town"."membership_source_events"."event_type" in ('activate', 'schedule_cancellation', 'expire', 'reactivate', 'provision_paid_pending_binding', 'finalize_paid_pending_binding', 'suspend', 'restore'));

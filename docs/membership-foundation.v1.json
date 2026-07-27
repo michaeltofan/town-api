@@ -285,7 +285,8 @@
       "expire",
       "reactivate",
       "provision_paid_pending_binding",
-      "finalize_paid_pending_binding"
+      "finalize_paid_pending_binding",
+      "restore"
     ],
     "idempotency": [
       "Same (source, source_event_id) with matching payload_hash returns replayed and never re-mutates the entitlement",

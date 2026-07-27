@@ -77,6 +77,7 @@ export function generateMembershipContractDocument(): unknown {
         'reactivate',
         'provision_paid_pending_binding',
         'finalize_paid_pending_binding',
+        'restore',
       ],
       results: ['applied', 'replayed', 'rejected', 'stale'],
       payloadHash: {
