@@ -395,6 +395,7 @@ export function generateMembershipContractDocument(): unknown {
         'membership_reactivated',
         'membership_expired',
         'membership_suspended',
+        'membership_restored',
         'membership_paid_pending_binding_provisioned',
         'membership_event_replayed',
         'membership_event_rejected',

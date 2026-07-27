@@ -280,6 +280,28 @@ describe('membership migration 0010', () => {
     }
   });
 
+  it('accepts membership_restored as an identity security event type', async () => {
+    const eventId = '10000000-0000-4000-8000-000000000021';
+    const now = '2026-07-27T08:30:00.000Z';
+
+    await pool.query('BEGIN');
+    try {
+      await pool.query(
+        `INSERT INTO town.identity_security_events (
+           id, account_id, event_type, occurred_at, request_id, metadata
+         ) VALUES ($1, NULL, 'membership_restored', $2, NULL, NULL)`,
+        [eventId, now],
+      );
+      const persisted = await pool.query<{ event_type: string }>(
+        `SELECT event_type FROM town.identity_security_events WHERE id = $1`,
+        [eventId],
+      );
+      expect(persisted.rows[0]?.event_type).toBe('membership_restored');
+    } finally {
+      await pool.query('ROLLBACK');
+    }
+  });
+
   it('extends allowed ceremony rate-limit scopes and identity security event types', async () => {
     const scopes = await pool.query<{ definition: string }>(
       `SELECT pg_get_constraintdef(oid) AS definition
@@ -301,6 +323,7 @@ describe('membership migration 0010', () => {
     expect(events.rows[0]?.definition).toContain("'membership_reactivated'");
     expect(events.rows[0]?.definition).toContain("'membership_expired'");
     expect(events.rows[0]?.definition).toContain("'membership_suspended'");
+    expect(events.rows[0]?.definition).toContain("'membership_restored'");
     expect(events.rows[0]?.definition).toContain("'membership_event_replayed'");
     expect(events.rows[0]?.definition).toContain("'membership_event_rejected'");
     expect(events.rows[0]?.definition).toContain("'civic_participation_denied'");

@@ -148,6 +148,13 @@
       "when": 1785137042282,
       "tag": "0020_restore_membership_source_event",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785140924190,
+      "tag": "0021_membership_restored_audit_type",
+      "breakpoints": true
     }
   ]
 }
