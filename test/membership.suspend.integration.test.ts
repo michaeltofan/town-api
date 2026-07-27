@@ -120,7 +120,7 @@ describe('suspend membership transition', () => {
     expect(persisted.source).toBe(before.source);
     expect(persisted.sourceCustomerId).toBe(before.sourceCustomerId);
     expect(persisted.sourceSubscriptionId).toBe(before.sourceSubscriptionId);
-    expect(Number(persisted.version)).toBe(Number(before.version) + 1);
+    expect(persisted.version).toBe(before.version + 1);
 
     const sourceEvents = await database.db
       .select()
