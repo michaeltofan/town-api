@@ -257,6 +257,29 @@ describe('membership migration 0010', () => {
     }
   });
 
+  it('accepts restore as a membership source-event type', async () => {
+    const eventId = '10000000-0000-4000-8000-000000000020';
+    const now = '2026-07-27T07:20:00.000Z';
+
+    await pool.query('BEGIN');
+    try {
+      await pool.query(
+        `INSERT INTO town.membership_source_events (
+           id, source, source_event_id, event_type, account_id, payload_hash,
+           effective_at, processed_at, result, created_at
+         ) VALUES ($1, 'test_fixture', 'test:restore:vocabulary', 'restore', NULL, $2, $3, $3, 'applied', $3)`,
+        [eventId, 'a'.repeat(64), now],
+      );
+      const persisted = await pool.query<{ event_type: string }>(
+        `SELECT event_type FROM town.membership_source_events WHERE id = $1`,
+        [eventId],
+      );
+      expect(persisted.rows[0]?.event_type).toBe('restore');
+    } finally {
+      await pool.query('ROLLBACK');
+    }
+  });
+
   it('extends allowed ceremony rate-limit scopes and identity security event types', async () => {
     const scopes = await pool.query<{ definition: string }>(
       `SELECT pg_get_constraintdef(oid) AS definition

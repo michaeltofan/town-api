@@ -141,6 +141,13 @@
       "when": 1785130928043,
       "tag": "0019_membership_suspended_audit_type",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785137042282,
+      "tag": "0020_restore_membership_source_event",
+      "breakpoints": true
     }
   ]
 }
