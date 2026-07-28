@@ -21,6 +21,7 @@ function makeAccount(overrides: Partial<AccountRow> = {}): AccountRow {
   return {
     id: ACCOUNT_ID,
     status: 'active',
+    isOwner: false,
     webauthnUserHandle: null,
     accountReadyAt: NOW,
     recoveryCompletedAt: null,

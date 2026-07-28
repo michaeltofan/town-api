@@ -61,6 +61,11 @@ export const accounts = town.table(
   {
     id: uuid('id').primaryKey(),
     status: text('status').notNull(),
+    /**
+     * Inert owner label. Default false. Not consulted by authorization in this slice —
+     * only the mark-account-owner CLI writes it; no route/civic-access path branches on it.
+     */
+    isOwner: boolean('is_owner').notNull().default(false),
     webauthnUserHandle: bytea('webauthn_user_handle'),
     accountReadyAt: timestamp('account_ready_at', { withTimezone: true, mode: 'string' }),
     recoveryCompletedAt: timestamp('recovery_completed_at', {

@@ -80,6 +80,13 @@ const EnvSchema = Type.Object(
     // UUID format is validated explicitly below; TypeBox FormatRegistry is not required here.
     CONTROLLED_TEST_ACTOR_ID: Type.Optional(Type.String({ minLength: 36, maxLength: 36 })),
     /**
+     * Optional CLI-only secrets for account:mark-owner. Never required at app boot.
+     * loadEnv does not copy these into the runtime Env object; only the mark-owner
+     * command reads process.env.OWNER_SETUP_CODE / OWNER_SETUP_CODE_EXPECTED.
+     */
+    OWNER_SETUP_CODE: Type.Optional(Type.String({ minLength: 128, maxLength: 128 })),
+    OWNER_SETUP_CODE_EXPECTED: Type.Optional(Type.String({ minLength: 128, maxLength: 128 })),
+    /**
      * Temporary staging-only override: when true, allows exact
      * https://towncivic.org in WEBAUTHN_ALLOWED_ORIGINS under APP_ENV=staging.
      * Default false (fail-closed). No effect when APP_ENV=production.
@@ -286,6 +293,9 @@ function sanitizeEnvErrorPath(path: string, message: string): string {
   }
   if (path.includes('CONTROLLED_CONFIRMATION_KEY')) {
     return `${path}: must be a non-empty string when controlled confirmation is enabled`;
+  }
+  if (path.includes('OWNER_SETUP_CODE_EXPECTED') || path.includes('OWNER_SETUP_CODE')) {
+    return `${path}: must be exactly 128 characters when provided`;
   }
   if (path.includes('CONTROLLED_TEST_ACTOR_ID')) {
     return `${path}: must be a valid UUID when controlled confirmation is enabled`;

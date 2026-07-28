@@ -201,6 +201,8 @@ export async function transitionAccountState(
 
   let next: Omit<AccountRow, 'id' | 'createdAt'> = {
     status: input.to,
+    // Preserve inert owner label; this path never branches on or sets isOwner.
+    isOwner: account.isOwner,
     webauthnUserHandle: account.webauthnUserHandle,
     accountReadyAt: account.accountReadyAt,
     recoveryCompletedAt: account.recoveryCompletedAt,

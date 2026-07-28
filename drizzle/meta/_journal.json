@@ -155,6 +155,13 @@
       "when": 1785140924190,
       "tag": "0021_membership_restored_audit_type",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785206400000,
+      "tag": "0022_accounts_is_owner",
+      "breakpoints": true
     }
   ]
 }
