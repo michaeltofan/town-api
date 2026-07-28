@@ -169,6 +169,13 @@
       "when": 1785264000000,
       "tag": "0023_signals_hidden_moderation",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785350400000,
+      "tag": "0024_account_password_credentials_foundation",
+      "breakpoints": true
     }
   ]
 }

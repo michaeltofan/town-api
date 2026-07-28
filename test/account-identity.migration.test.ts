@@ -4,6 +4,7 @@ import { requireDatabaseUrl, resetAndMigrate } from './helpers/pg.js';
 
 const EXPECTED_TABLES = [
   'account_emails',
+  'account_password_credentials',
   'account_sessions',
   'accounts',
   'actors',
@@ -84,9 +85,20 @@ describe('account identity migration', () => {
       expect.arrayContaining([
         'account_emails_active_normalized_unique',
         'account_emails_one_active_primary',
+        'account_password_credentials_one_active_per_account',
         'actors_account_id_unique',
       ]),
     );
+
+    const passwordFk = await pool.query<{ conname: string; confdeltype: string }>(
+      `SELECT conname, confdeltype
+       FROM pg_constraint
+       WHERE connamespace = 'town'::regnamespace
+         AND contype = 'f'
+         AND conname = 'account_password_credentials_account_id_fkey'`,
+    );
+    expect(passwordFk.rows).toHaveLength(1);
+    expect(passwordFk.rows[0]?.confdeltype).toBe('r');
   });
 
   it('does not create membership, payment, stripe, or session tables', async () => {

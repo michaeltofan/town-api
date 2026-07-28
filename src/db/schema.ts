@@ -382,6 +382,61 @@ export const passkeyCredentials = town.table(
   ],
 );
 
+/**
+ * Durable KDF parameter record stored alongside password_hash for future rehash/upgrade.
+ * Values must match the algorithm that produced password_hash.
+ */
+export type PasswordKdfParametersRecord = {
+  memoryCost: number;
+  timeCost: number;
+  parallelism: number;
+  version: number;
+  outputLen: number;
+};
+
+/**
+ * Optional additional login credential (Argon2id PHC hash). Passkey remains required.
+ * At most one active row per account (partial unique on account_id where revoked_at IS NULL).
+ * Inert foundation — no HTTP routes in this slice.
+ */
+export const accountPasswordCredentials = town.table(
+  'account_password_credentials',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    algorithm: text('algorithm').notNull(),
+    parameters: jsonb('parameters').$type<PasswordKdfParametersRecord>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'account_password_credentials_account_id_fkey',
+    }).onDelete('restrict'),
+    check('account_password_credentials_algorithm_valid', sql`${table.algorithm} in ('argon2id')`),
+    check(
+      'account_password_credentials_password_hash_nonempty',
+      sql`char_length(${table.passwordHash}) > 0`,
+    ),
+    check(
+      'account_password_credentials_updated_after_created',
+      sql`${table.updatedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      'account_password_credentials_revoked_not_before_created',
+      sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt}`,
+    ),
+    uniqueIndex('account_password_credentials_one_active_per_account')
+      .on(table.accountId)
+      .where(sql`${table.revokedAt} is null`),
+    index('account_password_credentials_account_idx').on(table.accountId),
+  ],
+);
+
 export const emailChallenges = town.table(
   'email_challenges',
   {
@@ -1116,6 +1171,7 @@ export type SignalSubmissionRow = typeof signalSubmissions.$inferSelect;
 export type AccountRow = typeof accounts.$inferSelect;
 export type AccountEmailRow = typeof accountEmails.$inferSelect;
 export type PasskeyCredentialRow = typeof passkeyCredentials.$inferSelect;
+export type AccountPasswordCredentialRow = typeof accountPasswordCredentials.$inferSelect;
 export type EmailChallengeRow = typeof emailChallenges.$inferSelect;
 export type RecoveryGrantRow = typeof recoveryGrants.$inferSelect;
 export type WebAuthnChallengeRow = typeof webauthnChallenges.$inferSelect;

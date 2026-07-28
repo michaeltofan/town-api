@@ -15,6 +15,7 @@ function requireEnv(name: string): string {
 
 const EXPECTED_TOWN_TABLES = [
   'account_emails',
+  'account_password_credentials',
   'account_sessions',
   'accounts',
   'actors',

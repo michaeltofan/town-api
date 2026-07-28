@@ -21,6 +21,7 @@ import {
   DEFAULT_WEBAUTHN_RP_NAME,
   WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH,
 } from '../ceremony/passkey-registration/policy.js';
+import { PASSWORD_HASH_PEPPER_MIN_LENGTH } from '../identity/password-policy.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -129,6 +130,15 @@ const EnvSchema = Type.Object(
     ),
     ACCOUNT_RECOVERY_DELIVERY_MODE: Type.Optional(
       Type.Union([Type.Literal('test'), Type.Literal('development')]),
+    ),
+    /**
+     * Password-as-additional-login foundation. Default false / fail-closed.
+     * This slice defines the flag and optional pepper name only — no routes gated yet.
+     */
+    PASSWORD_AUTH_ENABLED: Type.Boolean({ default: false }),
+    /** Optional future pepper for password hashing; not required in this inert slice. */
+    PASSWORD_HASH_PEPPER: Type.Optional(
+      Type.String({ minLength: PASSWORD_HASH_PEPPER_MIN_LENGTH }),
     ),
     LOCAL_ELIGIBILITY_ENABLED: Type.Boolean({ default: false }),
     STRIPE_BILLING_ENABLED: Type.Boolean({ default: false }),
@@ -459,6 +469,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     source.ACCOUNT_RECOVERY_ENABLED,
     'ACCOUNT_RECOVERY_ENABLED',
   );
+  const passwordAuthEnabled = parseBooleanFlag(
+    source.PASSWORD_AUTH_ENABLED,
+    'PASSWORD_AUTH_ENABLED',
+  );
   const localEligibilityEnabled = parseBooleanFlag(
     source.LOCAL_ELIGIBILITY_ENABLED,
     'LOCAL_ELIGIBILITY_ENABLED',
@@ -534,6 +548,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     WEBAUTHN_REGISTRATION_ENABLED: webauthnRegistrationEnabled,
     PASSKEY_AUTHENTICATION_ENABLED: passkeyAuthenticationEnabled,
     ACCOUNT_RECOVERY_ENABLED: accountRecoveryEnabled,
+    PASSWORD_AUTH_ENABLED: passwordAuthEnabled,
     LOCAL_ELIGIBILITY_ENABLED: localEligibilityEnabled,
     STRIPE_BILLING_ENABLED: stripeBillingEnabled,
     GOOGLE_PLAY_BILLING_ENABLED: googlePlayBillingEnabled,
