@@ -84,7 +84,8 @@ export async function bindLocalEligibilityInTransaction(
   }
 
   // Different community: owner-only transfer; non-owners stay set-once.
-  if (locked.isOwner === true) {
+  // Owner is read only from the locked account row (boolean; never client-supplied).
+  if (locked.isOwner) {
     const updated = await bindActorLocalEligibility(db, {
       actorId: actor.id,
       communityId: input.community.id,
