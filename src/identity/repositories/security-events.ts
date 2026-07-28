@@ -61,6 +61,8 @@ const APPROVED_EVENT_TYPES = new Set<IdentitySecurityEventType>([
   'stripe_subscription_deleted',
   'stripe_payment_failed',
   'stripe_price_mismatch',
+  'signal_hidden',
+  'signal_unhidden',
 ]);
 
 export async function appendIdentitySecurityEvent(

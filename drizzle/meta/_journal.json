@@ -162,6 +162,13 @@
       "when": 1785206400000,
       "tag": "0022_accounts_is_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785264000000,
+      "tag": "0023_signals_hidden_moderation",
+      "breakpoints": true
     }
   ]
 }
