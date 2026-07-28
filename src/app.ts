@@ -23,6 +23,7 @@ import { passkeyManagementRoutes } from './routes/passkey-management.js';
 import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { signalsRoutes } from './routes/signals.js';
 import { signalModerationRoutes } from './routes/signal-moderation.js';
+import { accountModerationRoutes } from './routes/account-moderation.js';
 import { billingRoutes } from './routes/billing.js';
 import { googlePlayRoutes } from './routes/google-play.js';
 import { googlePlayRtdnRoutes } from './routes/google-play-rtdn.js';
@@ -211,6 +212,13 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(communitiesRoutes);
   await app.register(signalsRoutes);
   await app.register(signalModerationRoutes, {
+    env: options.env,
+    ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
+    ...(options.membership?.generateId !== undefined
+      ? { generateId: options.membership.generateId }
+      : {}),
+  });
+  await app.register(accountModerationRoutes, {
     env: options.env,
     ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
     ...(options.membership?.generateId !== undefined
