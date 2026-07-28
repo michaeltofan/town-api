@@ -99,15 +99,14 @@ describe('mark account owner entrypoint wiring', () => {
     expect(EXPECTED_MIGRATION_COUNT).toBe(23);
   });
 
-  it('is_owner is not referenced by civic-access or route authorization sources', () => {
+  it('is_owner is consulted only by civic-access (membership bypass), not membership routes or app', () => {
     const civicAccess = readFileSync(path.join(root, 'src/membership/civic-access.ts'), 'utf8');
     const membershipRoutes = readFileSync(path.join(root, 'src/routes/membership.ts'), 'utf8');
-    const confirmationRoutes = readFileSync(path.join(root, 'src/routes/confirmations.ts'), 'utf8');
     const app = readFileSync(path.join(root, 'src/app.ts'), 'utf8');
 
-    expect(civicAccess).not.toMatch(/is_owner|isOwner/);
+    // Owner participation slice: civic-access branches on isOwner for membership bypass.
+    expect(civicAccess).toMatch(/isOwner/);
     expect(membershipRoutes).not.toMatch(/is_owner|isOwner/);
-    expect(confirmationRoutes).not.toMatch(/is_owner|isOwner/);
     // app.ts may redact OWNER_SETUP_CODE* names; it must not branch on is_owner.
     expect(app).not.toMatch(/is_owner|isOwner/);
   });

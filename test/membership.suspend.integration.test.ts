@@ -296,7 +296,7 @@ describe('suspend membership transition', () => {
 
     const access = evaluateCivicAccess({
       session: { accountId: before.accountId },
-      account: { id: before.accountId, status: 'active' },
+      account: { id: before.accountId, status: 'active', isOwner: false },
       entitlement: suspended,
       actor: {
         id: '21000000-0000-4000-8000-000000000001',

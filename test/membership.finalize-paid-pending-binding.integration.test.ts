@@ -459,7 +459,7 @@ describe('membership finalize_paid_pending_binding (S5)', () => {
 
     const beforeAccess = evaluateCivicAccess({
       session: { accountId: accountCivic },
-      account: { id: accountCivic, status: 'active' },
+      account: { id: accountCivic, status: 'active', isOwner: false },
       entitlement: before ?? null,
       actor: {
         id: actorCivic,
@@ -489,7 +489,7 @@ describe('membership finalize_paid_pending_binding (S5)', () => {
 
     const afterAccess = evaluateCivicAccess({
       session: { accountId: accountCivic },
-      account: { id: accountCivic, status: 'active' },
+      account: { id: accountCivic, status: 'active', isOwner: false },
       entitlement: finalized.entitlement ?? null,
       actor: {
         id: actorCivic,

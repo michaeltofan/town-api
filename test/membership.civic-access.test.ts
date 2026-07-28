@@ -277,6 +277,85 @@ describe('evaluateCivicAccess', () => {
     expect(result.level).toBe('participant');
     expect(result.canParticipate).toBe(true);
   });
+
+  it('grants participant to is_owner account with no membership entitlement', () => {
+    const result = evaluateCivicAccess({
+      session: { accountId: ACCOUNT_ID },
+      account: makeAccount({ isOwner: true }),
+      entitlement: null,
+      actor: makeActor(),
+      communityId: COMMUNITY_ID,
+      localEligibility: eligibleLocal,
+      now: NOW,
+    });
+    expect(result.level).toBe('participant');
+    expect(result.canParticipate).toBe(true);
+    expect(result.denialReason).toBeUndefined();
+  });
+
+  it('grants participant to is_owner even when entitlement would otherwise deny', () => {
+    const result = evaluateCivicAccess({
+      session: { accountId: ACCOUNT_ID },
+      account: makeAccount({ isOwner: true }),
+      entitlement: makeEntitlement({
+        status: 'paid_pending_binding',
+        activatedAt: null,
+        source: 'google_play',
+      }),
+      actor: makeActor(),
+      communityId: COMMUNITY_ID,
+      localEligibility: eligibleLocal,
+      now: NOW,
+    });
+    expect(result.level).toBe('participant');
+    expect(result.canParticipate).toBe(true);
+    expect(result.denialReason).toBeUndefined();
+  });
+
+  it('does not grant is_owner anything beyond participant (still read_only without actor)', () => {
+    const result = evaluateCivicAccess({
+      session: { accountId: ACCOUNT_ID },
+      account: makeAccount({ isOwner: true }),
+      entitlement: null,
+      actor: null,
+      communityId: COMMUNITY_ID,
+      localEligibility: eligibleLocal,
+      now: NOW,
+    });
+    expect(result.level).toBe('read_only');
+    expect(result.canParticipate).toBe(false);
+    expect(result.denialReason).toBe('actor_missing');
+  });
+
+  it('still denies is_owner when local eligibility fails', () => {
+    const result = evaluateCivicAccess({
+      session: { accountId: ACCOUNT_ID },
+      account: makeAccount({ isOwner: true }),
+      entitlement: null,
+      actor: makeActor(),
+      communityId: COMMUNITY_ID,
+      localEligibility: 'not_verified',
+      now: NOW,
+    });
+    expect(result.level).toBe('read_only');
+    expect(result.canParticipate).toBe(false);
+    expect(result.denialReason).toBe('local_not_verified');
+  });
+
+  it('still denies non-owner with no membership (isOwner false)', () => {
+    const result = evaluateCivicAccess({
+      session: { accountId: ACCOUNT_ID },
+      account: makeAccount({ isOwner: false }),
+      entitlement: null,
+      actor: makeActor(),
+      communityId: COMMUNITY_ID,
+      localEligibility: eligibleLocal,
+      now: NOW,
+    });
+    expect(result.level).toBe('read_only');
+    expect(result.canParticipate).toBe(false);
+    expect(result.denialReason).toBe('no_entitlement');
+  });
 });
 
 describe('createDefaultLocalEligibilityResolver', () => {

@@ -51,9 +51,15 @@ function mapLocalEligibilityToDenial(
   }
 }
 
+/**
+ * Owner accounts (`isOwner === true`) bypass membership/payment entitlement checks
+ * only. Session, active-account, actor, community, and local-eligibility gates are
+ * unchanged. Owner access is the same `participant` level granted for active/cancelling
+ * membership — nothing beyond that.
+ */
 export function evaluateCivicAccess(input: {
   session: null | { accountId: string };
-  account: null | Pick<AccountRow, 'id' | 'status'>;
+  account: null | Pick<AccountRow, 'id' | 'status' | 'isOwner'>;
   entitlement: null | MembershipEntitlementRow;
   actor: null | Pick<ActorRow, 'id' | 'accountId' | 'communityId' | 'kind' | 'status'>;
   communityId?: string;
@@ -89,43 +95,50 @@ export function evaluateCivicAccess(input: {
     };
   }
 
-  if (!input.entitlement) {
-    return {
-      ...base,
-      denialReason: 'no_entitlement',
-    };
-  }
+  // Membership/payment gate. Owner label is an alternative path to the same
+  // participant outcome; existing entitlement rules stay intact for non-owners.
+  const isOwner = input.account.isOwner;
+  let effectiveStatus: MembershipStatus | null = null;
 
-  const effectiveStatus = resolveEffectiveMembershipStatus(input.entitlement, input.now);
+  if (!isOwner) {
+    if (!input.entitlement) {
+      return {
+        ...base,
+        denialReason: 'no_entitlement',
+      };
+    }
 
-  if (effectiveStatus === 'inactive') {
-    return {
-      ...base,
-      denialReason: 'inactive_membership',
-    };
-  }
+    effectiveStatus = resolveEffectiveMembershipStatus(input.entitlement, input.now);
 
-  if (effectiveStatus === 'expired') {
-    return {
-      ...base,
-      denialReason: 'expired_membership',
-    };
-  }
+    if (effectiveStatus === 'inactive') {
+      return {
+        ...base,
+        denialReason: 'inactive_membership',
+      };
+    }
 
-  // Payment alone grants no civic participation. paid_pending_binding is provisioned
-  // after a verified purchase but before final community binding completes.
-  if (effectiveStatus === 'paid_pending_binding') {
-    return {
-      ...base,
-      denialReason: 'inactive_membership',
-    };
-  }
+    if (effectiveStatus === 'expired') {
+      return {
+        ...base,
+        denialReason: 'expired_membership',
+      };
+    }
 
-  if (!isMembershipTemporallyValid(input.entitlement, input.now)) {
-    return {
-      ...base,
-      denialReason: 'elapsed_access_until',
-    };
+    // Payment alone grants no civic participation. paid_pending_binding is provisioned
+    // after a verified purchase but before final community binding completes.
+    if (effectiveStatus === 'paid_pending_binding') {
+      return {
+        ...base,
+        denialReason: 'inactive_membership',
+      };
+    }
+
+    if (!isMembershipTemporallyValid(input.entitlement, input.now)) {
+      return {
+        ...base,
+        denialReason: 'elapsed_access_until',
+      };
+    }
   }
 
   if (!input.actor) {
@@ -157,11 +170,13 @@ export function evaluateCivicAccess(input: {
     };
   }
 
-  if (!['active', 'cancelling'].includes(effectiveStatus)) {
-    return {
-      ...base,
-      denialReason: 'inactive_membership',
-    };
+  if (!isOwner) {
+    if (effectiveStatus === null || !['active', 'cancelling'].includes(effectiveStatus)) {
+      return {
+        ...base,
+        denialReason: 'inactive_membership',
+      };
+    }
   }
 
   return {

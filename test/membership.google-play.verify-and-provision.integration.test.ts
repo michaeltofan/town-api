@@ -124,7 +124,7 @@ describe('Google Play verify-and-provision S2/S4', () => {
 
     const access = evaluateCivicAccess({
       session: { accountId: accountOk },
-      account: { id: accountOk, status: 'active' },
+      account: { id: accountOk, status: 'active', isOwner: false },
       entitlement: outcome.entitlement ?? null,
       actor: {
         id: '20000000-0000-4000-8000-000000000701',

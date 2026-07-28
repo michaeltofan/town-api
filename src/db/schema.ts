@@ -62,8 +62,9 @@ export const accounts = town.table(
     id: uuid('id').primaryKey(),
     status: text('status').notNull(),
     /**
-     * Inert owner label. Default false. Not consulted by authorization in this slice —
-     * only the mark-account-owner CLI writes it; no route/civic-access path branches on it.
+     * Owner label. Default false. When true, evaluateCivicAccess grants the same
+     * participant access as an active membership (membership/payment bypass only;
+     * actor and local-eligibility gates still apply). Written by account:mark-owner.
      */
     isOwner: boolean('is_owner').notNull().default(false),
     webauthnUserHandle: bytea('webauthn_user_handle'),

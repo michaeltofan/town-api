@@ -176,6 +176,7 @@ describe('Google Play paid_pending_binding provision foundation', () => {
       account: {
         id: accountB,
         status: 'active',
+        isOwner: false,
       },
       entitlement: entitlement ?? null,
       actor: {
