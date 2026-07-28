@@ -21,6 +21,9 @@ import { requireDatabaseUrl, resetMigrateSeedFoundationAndActor } from './helper
 const FIXED_NOW = '2026-07-23T12:00:00.000Z';
 /** Within session idle window (60m) so the same session remains authorized. */
 const LATER_NOW = '2026-07-23T12:30:00.000Z';
+/** Separate ceremony rate-limit window so owner cases do not exhaust IP quotas. */
+const OWNER_NOW = '2026-07-23T15:00:00.000Z';
+const OWNER_LATER = '2026-07-23T15:30:00.000Z';
 
 describe('PUT /v1/account/eligibility', () => {
   let app: AppInstance;
@@ -247,7 +250,7 @@ describe('PUT /v1/account/eligibility', () => {
   });
 
   it('allows an is_owner account to re-bind to a different community and refreshes verifiedAt', async () => {
-    clock.now = FIXED_NOW;
+    clock.now = OWNER_NOW;
     const { login, registration } = await registerAndLogin('eligibility.owner-rebind@example.com');
     await app.database.db
       .update(accounts)
@@ -261,9 +264,9 @@ describe('PUT /v1/account/eligibility', () => {
       payload: { community: 'arad-ro' },
     });
     expect(first.statusCode).toBe(200);
-    expect(first.json<{ data: { verifiedAt: string } }>().data.verifiedAt).toBe(FIXED_NOW);
+    expect(first.json<{ data: { verifiedAt: string } }>().data.verifiedAt).toBe(OWNER_NOW);
 
-    clock.now = LATER_NOW;
+    clock.now = OWNER_LATER;
     const second = await app.inject({
       method: 'PUT',
       url: '/v1/account/eligibility',
@@ -280,7 +283,7 @@ describe('PUT /v1/account/eligibility', () => {
     }>();
     expect(secondBody.data.community.slug).toBe('milano-it');
     expect(secondBody.data.community.displayName).toBe('Milano');
-    expect(secondBody.data.verifiedAt).toBe(LATER_NOW);
+    expect(secondBody.data.verifiedAt).toBe(OWNER_LATER);
     expect(secondBody.data.localEligibility).toBe('eligible');
 
     const rows = await app.database.db
@@ -289,11 +292,11 @@ describe('PUT /v1/account/eligibility', () => {
       .where(eq(actors.accountId, registration.accountId))
       .limit(1);
     expect(rows[0]?.communityId).toBe(FOUNDATION_COMMUNITY_IDS.milanoIt);
-    expect(toIsoTimestamp(String(rows[0]?.localEligibilityVerifiedAt))).toBe(LATER_NOW);
+    expect(toIsoTimestamp(String(rows[0]?.localEligibilityVerifiedAt))).toBe(OWNER_LATER);
   });
 
   it('keeps same-community bind idempotent for an is_owner account (no verifiedAt refresh)', async () => {
-    clock.now = FIXED_NOW;
+    clock.now = OWNER_NOW;
     const { login, registration } = await registerAndLogin(
       'eligibility.owner-idempotent@example.com',
     );
@@ -309,9 +312,9 @@ describe('PUT /v1/account/eligibility', () => {
       payload: { community: 'munich-de' },
     });
     expect(first.statusCode).toBe(200);
-    expect(first.json<{ data: { verifiedAt: string } }>().data.verifiedAt).toBe(FIXED_NOW);
+    expect(first.json<{ data: { verifiedAt: string } }>().data.verifiedAt).toBe(OWNER_NOW);
 
-    clock.now = LATER_NOW;
+    clock.now = OWNER_LATER;
     const second = await app.inject({
       method: 'PUT',
       url: '/v1/account/eligibility',
@@ -319,8 +322,8 @@ describe('PUT /v1/account/eligibility', () => {
       payload: { community: 'munich-de' },
     });
     expect(second.statusCode).toBe(200);
-    expect(second.json<{ data: { verifiedAt: string } }>().data.verifiedAt).toBe(FIXED_NOW);
-    expect(second.json<{ data: { verifiedAt: string } }>().data.verifiedAt).not.toBe(LATER_NOW);
+    expect(second.json<{ data: { verifiedAt: string } }>().data.verifiedAt).toBe(OWNER_NOW);
+    expect(second.json<{ data: { verifiedAt: string } }>().data.verifiedAt).not.toBe(OWNER_LATER);
 
     const rows = await app.database.db
       .select()
@@ -328,11 +331,11 @@ describe('PUT /v1/account/eligibility', () => {
       .where(eq(actors.accountId, registration.accountId))
       .limit(1);
     expect(rows[0]?.communityId).toBe(FOUNDATION_COMMUNITY_IDS.munichDe);
-    expect(toIsoTimestamp(String(rows[0]?.localEligibilityVerifiedAt))).toBe(FIXED_NOW);
+    expect(toIsoTimestamp(String(rows[0]?.localEligibilityVerifiedAt))).toBe(OWNER_NOW);
   });
 
   it('creates a first-time binding for an is_owner account the same as a non-owner', async () => {
-    clock.now = FIXED_NOW;
+    clock.now = OWNER_NOW;
     const { login, registration } = await registerAndLogin(
       'eligibility.owner-first-bind@example.com',
     );
@@ -356,7 +359,7 @@ describe('PUT /v1/account/eligibility', () => {
       };
     }>();
     expect(body.data.community.slug).toBe('milano-it');
-    expect(body.data.verifiedAt).toBe(FIXED_NOW);
+    expect(body.data.verifiedAt).toBe(OWNER_NOW);
     expect(body.data.localEligibility).toBe('eligible');
 
     const rows = await app.database.db
@@ -365,7 +368,7 @@ describe('PUT /v1/account/eligibility', () => {
       .where(eq(actors.accountId, registration.accountId))
       .limit(1);
     expect(rows[0]?.communityId).toBe(FOUNDATION_COMMUNITY_IDS.milanoIt);
-    expect(toIsoTimestamp(String(rows[0]?.localEligibilityVerifiedAt))).toBe(FIXED_NOW);
+    expect(toIsoTimestamp(String(rows[0]?.localEligibilityVerifiedAt))).toBe(OWNER_NOW);
   });
 
   it('returns 500 INTERNAL_ERROR when the authenticated account has no linked civic actor', async () => {
