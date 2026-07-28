@@ -236,6 +236,7 @@ export async function runProvisionInTransaction(
     const accountRows = await tx.execute<{
       id: string;
       status: string;
+      is_owner: boolean;
       webauthn_user_handle: unknown;
       account_ready_at: string | null;
       recovery_completed_at: string | null;
@@ -244,7 +245,7 @@ export async function runProvisionInTransaction(
       created_at: string;
       updated_at: string;
     }>(sql`
-      SELECT id, status, webauthn_user_handle, account_ready_at, recovery_completed_at,
+      SELECT id, status, is_owner, webauthn_user_handle, account_ready_at, recovery_completed_at,
              suspended_at, closed_at, created_at, updated_at
       FROM town.accounts
       WHERE id = ${input.accountId}
@@ -258,6 +259,8 @@ export async function runProvisionInTransaction(
     const account: AccountRow = {
       id: accountRow.id,
       status: accountRow.status,
+      // Pass-through only; Google Play provisioning never branches on isOwner.
+      isOwner: accountRow.is_owner,
       webauthnUserHandle: accountRow.webauthn_user_handle as AccountRow['webauthnUserHandle'],
       accountReadyAt: accountRow.account_ready_at,
       recoveryCompletedAt: accountRow.recovery_completed_at,

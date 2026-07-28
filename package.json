@@ -32,6 +32,8 @@
     "db:seed:staging": "tsx scripts/db-seed-staging.ts",
     "db:seed:staging:production": "node dist/scripts/db-seed-staging.js",
     "db:inspect:staging:production": "node dist/scripts/db-inspect-staging.js",
+    "account:mark-owner": "tsx scripts/mark-account-owner.ts",
+    "account:mark-owner:production": "node dist/scripts/mark-account-owner.js",
     "identity:fixtures:load": "tsx scripts/load-identity-fixtures.ts",
     "identity:contract:generate": "tsx scripts/identity-contract.ts generate",
     "identity:contract:check": "tsx scripts/identity-contract.ts check",
