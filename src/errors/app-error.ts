@@ -18,6 +18,18 @@ export function signalNotFoundError(): AppError {
   return new AppError(404, 'SIGNAL_NOT_FOUND', 'The requested signal was not found.');
 }
 
+export function accountNotFoundError(): AppError {
+  return new AppError(404, 'ACCOUNT_NOT_FOUND', 'The requested account was not found.');
+}
+
+export function cannotBanSelfError(): AppError {
+  return new AppError(403, 'CANNOT_BAN_SELF', 'An owner cannot ban their own account.');
+}
+
+export function cannotBanOwnerError(): AppError {
+  return new AppError(403, 'CANNOT_BAN_OWNER', 'An owner cannot ban another owner account.');
+}
+
 export function controlledAccessRequiredError(): AppError {
   return new AppError(401, 'CONTROLLED_ACCESS_REQUIRED', 'Controlled access is required.');
 }

@@ -4357,6 +4357,475 @@
         ]
       }
     },
+    "/v1/accounts/{accountId}/ban": {
+      "post": {
+        "description": "Owner-only. Suspends the target account (status active -> suspended), revokes all of its active sessions (reason account_suspended), and writes one account_suspended audit with a fixed reason category. Idempotent: re-banning an already-suspended account returns changed=false with no audit. Ban of a non-active account (pending/closed) is a no-op (changed=false). Cannot ban self or another owner.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "immoral"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "abusive"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "spam"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "off_topic"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "illegal"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "other"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "pending_email"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "pending_passkey"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "active"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "suspended"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "closed"
+                              ],
+                              "type": "string"
+                            }
+                          ],
+                          "title": "AccountModerationStatus"
+                        },
+                        "suspendedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "accountId",
+                        "status",
+                        "suspendedAt",
+                        "changed"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Ban (suspend) an account (owner only)",
+        "tags": [
+          "AccountModeration"
+        ]
+      }
+    },
+    "/v1/accounts/{accountId}/unban": {
+      "post": {
+        "description": "Owner-only. Reactivates a suspended account (status suspended -> active) and writes one account_activated audit. Does not restore previously revoked sessions — the member must log in again. Idempotent: un-banning a non-suspended account returns changed=false with no audit.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "pending_email"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "pending_passkey"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "active"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "suspended"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "closed"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "suspendedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "accountId",
+                        "status",
+                        "suspendedAt",
+                        "changed"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Un-ban (reactivate) an account (owner only)",
+        "tags": [
+          "AccountModeration"
+        ]
+      }
+    },
     "/v1/authentication/logout": {
       "post": {
         "description": "Revokes the current session when present. Web cookie sessions require same-origin/same-site CSRF evidence and the response clears the configured session cookie. The operation is idempotent.",
