@@ -11,6 +11,7 @@ import {
   findAccountPasswordCredentialById,
   revokeAccountPasswordCredential,
 } from '../src/identity/repositories/password-credentials.js';
+import { toIsoTimestamp } from '../src/lib/timestamps.js';
 import { requireDatabaseUrl, resetMigrateSeedFoundationAndActor } from './helpers/pg.js';
 
 const T0 = '2026-07-16T12:00:00.000Z';
@@ -81,8 +82,8 @@ describe('account password credential repository', () => {
     expect(created.passwordHash).toBe(hashed.hash);
     expect(created.algorithm).toBe('argon2id');
     expect(created.revokedAt).toBeNull();
-    expect(created.createdAt).toBe(T0);
-    expect(created.updatedAt).toBe(T0);
+    expect(toIsoTimestamp(String(created.createdAt))).toBe(T0);
+    expect(toIsoTimestamp(String(created.updatedAt))).toBe(T0);
 
     const active = await findActiveAccountPasswordCredential(database.db, accountId);
     expect(active?.id).toBe(credentialId);
@@ -94,13 +95,13 @@ describe('account password credential repository', () => {
       accountId,
       revokedAt: T1,
     });
-    expect(revoked.revokedAt).toBe(T1);
-    expect(revoked.updatedAt).toBe(T1);
+    expect(toIsoTimestamp(String(revoked.revokedAt))).toBe(T1);
+    expect(toIsoTimestamp(String(revoked.updatedAt))).toBe(T1);
 
     await expect(findActiveAccountPasswordCredential(database.db, accountId)).resolves.toBeNull();
 
     const stillPresent = await findAccountPasswordCredentialById(database.db, credentialId);
-    expect(stillPresent?.revokedAt).toBe(T1);
+    expect(toIsoTimestamp(String(stillPresent?.revokedAt))).toBe(T1);
   });
 
   it('enforces at most one active password credential per account', async () => {
