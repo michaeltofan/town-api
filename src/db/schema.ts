@@ -148,6 +148,13 @@ export const signals = town.table(
     imageFocusY: smallint('image_focus_y').notNull(),
     publicationStatus: text('publication_status').notNull(),
     publishedAt: timestamp('published_at', { withTimezone: true, mode: 'string' }).notNull(),
+    /**
+     * Owner moderation hide state. Null means visible. Separate from publication_status
+     * (which remains CHECK-constrained to 'published'). Hidden iff hidden_at IS NOT NULL.
+     */
+    hiddenAt: timestamp('hidden_at', { withTimezone: true, mode: 'string' }),
+    hiddenReason: text('hidden_reason'),
+    hiddenByAccountId: uuid('hidden_by_account_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
@@ -157,11 +164,27 @@ export const signals = town.table(
       foreignColumns: [communities.id],
       name: 'signals_community_id_fkey',
     }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.hiddenByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'signals_hidden_by_account_id_fkey',
+    }).onDelete('restrict'),
     unique('signals_community_slug_unique').on(table.communityId, table.slug),
     unique('signals_community_position_unique').on(table.communityId, table.position),
     check('signals_position_positive', sql`${table.position} > 0`),
     check('signals_publication_status_published', sql`${table.publicationStatus} = 'published'`),
     check('signals_observed_precision_valid', sql`${table.observedPrecision} in ('day', 'week')`),
+    check(
+      'signals_hidden_reason_valid',
+      sql`${table.hiddenReason} is null or ${table.hiddenReason} in ('immoral', 'abusive', 'spam', 'off_topic', 'illegal', 'other')`,
+    ),
+    check(
+      'signals_hidden_state_consistent',
+      sql`(
+        (${table.hiddenAt} is null and ${table.hiddenReason} is null and ${table.hiddenByAccountId} is null)
+        or (${table.hiddenAt} is not null and ${table.hiddenReason} is not null and ${table.hiddenByAccountId} is not null)
+      )`,
+    ),
     check(
       'signals_image_focus_x_range',
       sql`${table.imageFocusX} >= 0 and ${table.imageFocusX} <= 100`,
@@ -563,7 +586,9 @@ export const identitySecurityEvents = town.table(
         'stripe_cancellation_removed',
         'stripe_subscription_deleted',
         'stripe_payment_failed',
-        'stripe_price_mismatch'
+        'stripe_price_mismatch',
+        'signal_hidden',
+        'signal_unhidden'
       )`,
     ),
     index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
@@ -1107,6 +1132,8 @@ export type MembershipSourceEventRow = typeof membershipSourceEvents.$inferSelec
 
 export type AccountStatus = 'pending_email' | 'pending_passkey' | 'active' | 'suspended' | 'closed';
 
+export type SignalHideReason = 'immoral' | 'abusive' | 'spam' | 'off_topic' | 'illegal' | 'other';
+
 export type EmailChallengePurpose = 'verify_email' | 'recover_account';
 export type WebAuthnChallengePurpose =
   | 'register'
@@ -1205,7 +1232,9 @@ export type IdentitySecurityEventType =
   | 'stripe_cancellation_removed'
   | 'stripe_subscription_deleted'
   | 'stripe_payment_failed'
-  | 'stripe_price_mismatch';
+  | 'stripe_price_mismatch'
+  | 'signal_hidden'
+  | 'signal_unhidden';
 
 export type MembershipStatus =
   'inactive' | 'active' | 'cancelling' | 'expired' | 'paid_pending_binding' | 'suspended';

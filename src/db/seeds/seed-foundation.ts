@@ -51,6 +51,9 @@ function toSignalInsert(row: CanonicalSignal): SignalRow {
     imageFocusY: row.imageFocusY,
     publicationStatus: row.publicationStatus,
     publishedAt: row.publishedAt,
+    hiddenAt: null,
+    hiddenReason: null,
+    hiddenByAccountId: null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
