@@ -208,7 +208,9 @@ export const signalSubmissionRoutes: FastifyPluginCallbackTypebox<SignalSubmissi
 
       const access = evaluateCivicAccess({
         session: { accountId: session.accountId },
-        account: account ? { id: account.id, status: account.status } : null,
+        account: account
+          ? { id: account.id, status: account.status, isOwner: account.isOwner }
+          : null,
         entitlement,
         actor,
         communityId: community.id,

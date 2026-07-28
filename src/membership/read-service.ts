@@ -47,7 +47,7 @@ export async function getAccountMembershipView(
 
   const access = evaluateCivicAccess({
     session: input.session,
-    account: account ? { id: account.id, status: account.status } : null,
+    account: account ? { id: account.id, status: account.status, isOwner: account.isOwner } : null,
     entitlement,
     actor,
     ...(communityId !== undefined ? { communityId } : {}),

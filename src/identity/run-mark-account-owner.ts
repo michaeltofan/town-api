@@ -8,8 +8,10 @@ import { safeEqualString } from '../lib/safe-equal.js';
  *
  * Safety: requires OWNER_SETUP_CODE to match OWNER_SETUP_CODE_EXPECTED via
  * safeEqualString (constant-time hashed compare). No HTTP surface. Does not
- * grant membership, sessions, civic access, or change authorization behavior —
- * is_owner is an inert label until a later slice deliberately uses it.
+ * grant membership, sessions, or Stripe entitlements — evaluateCivicAccess
+ * treats is_owner as an alternative path to the same participant level as an
+ * active membership (membership/payment bypass only; actor and local-eligibility
+ * gates still apply).
  *
  * Allowed in staging and production (no NODE_ENV/APP_ENV gate).
  */
