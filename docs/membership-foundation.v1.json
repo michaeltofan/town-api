@@ -211,8 +211,9 @@
     "setOnceSemantics": [
       "null community_id creates the binding and sets local_eligibility_verified_at",
       "same community_id is idempotent and does not refresh verified_at",
-      "different community_id returns 409 LOCAL_ELIGIBILITY_ALREADY_BOUND",
-      "community transfer and re-verification are not supported"
+      "different community_id returns 409 LOCAL_ELIGIBILITY_ALREADY_BOUND for non-owners",
+      "accounts.is_owner=true may transfer to a different community and refreshes local_eligibility_verified_at",
+      "owner is read only from the locked account row; never from the request body"
     ],
     "testBehavior": "test-only resolver may return eligible for participant coverage",
     "trustLimitation": "Request body community is a client assertion; raw location data never reaches the server; flag must remain false for untrusted clients until independent validation or controlled access exists",

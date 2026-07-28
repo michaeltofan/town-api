@@ -21,8 +21,12 @@ export type LocalEligibilityBindResult = {
 };
 
 /**
- * Set-once local eligibility bind inside a caller-provided transaction.
+ * Local eligibility bind inside a caller-provided transaction.
  * Requires the account row locked via lockAccountById before actor read.
+ *
+ * Set-once for non-owners: a different community throws LOCAL_ELIGIBILITY_ALREADY_BOUND.
+ * Owner accounts (locked.isOwner === true) may transfer to a different community and
+ * refresh local_eligibility_verified_at. Owner is read only from the locked account row.
  */
 export async function bindLocalEligibilityInTransaction(
   db: Db,
@@ -68,6 +72,29 @@ export async function bindLocalEligibilityInTransaction(
     const verifiedAt = actor.localEligibilityVerifiedAt;
     if (verifiedAt === null) {
       throw localEligibilityBindingIncompleteError();
+    }
+    return {
+      community: {
+        slug: input.community.slug,
+        displayName: input.community.displayName,
+      },
+      verifiedAt: toIsoTimestamp(verifiedAt),
+      localEligibility: 'eligible',
+    };
+  }
+
+  // Different community: owner-only transfer; non-owners stay set-once.
+  // Owner is read only from the locked account row (boolean; never client-supplied).
+  if (locked.isOwner) {
+    const updated = await bindActorLocalEligibility(db, {
+      actorId: actor.id,
+      communityId: input.community.id,
+      verifiedAt: input.now,
+      updatedAt: input.now,
+    });
+    const verifiedAt = updated.localEligibilityVerifiedAt;
+    if (verifiedAt === null) {
+      throw localEligibilityPersistFailedError();
     }
     return {
       community: {

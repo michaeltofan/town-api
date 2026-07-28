@@ -101,9 +101,10 @@ export async function createCivicActor(
 }
 
 /**
- * Set-once community binding for local eligibility.
- * Caller must hold the account row lock and decide bind vs idempotent vs conflict
- * before invoking. Executes on the provided transaction handle only.
+ * Persist community binding + local_eligibility_verified_at for an actor.
+ * Caller must hold the account row lock and decide first bind vs idempotent vs
+ * conflict vs owner transfer before invoking. Executes on the provided
+ * transaction handle only. This writer has no set-once logic of its own.
  */
 export async function bindActorLocalEligibility(
   db: Db,
