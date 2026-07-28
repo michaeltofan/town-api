@@ -28,6 +28,7 @@ describe('loadEnv', () => {
       WEBAUTHN_REGISTRATION_ENABLED: false,
       PASSKEY_AUTHENTICATION_ENABLED: false,
       ACCOUNT_RECOVERY_ENABLED: false,
+      PASSWORD_AUTH_ENABLED: false,
       LOCAL_ELIGIBILITY_ENABLED: false,
       STRIPE_BILLING_ENABLED: false,
       GOOGLE_PLAY_BILLING_ENABLED: false,
@@ -78,6 +79,7 @@ describe('loadEnv', () => {
       WEBAUTHN_REGISTRATION_ENABLED: false,
       PASSKEY_AUTHENTICATION_ENABLED: false,
       ACCOUNT_RECOVERY_ENABLED: false,
+      PASSWORD_AUTH_ENABLED: false,
       LOCAL_ELIGIBILITY_ENABLED: false,
       STRIPE_BILLING_ENABLED: false,
       GOOGLE_PLAY_BILLING_ENABLED: false,
@@ -386,5 +388,14 @@ describe('loadEnv', () => {
         OBJECT_STORAGE_ACCESS_KEY_ID: 'access-key',
       }),
     ).toThrow(/OBJECT_STORAGE_SECRET_ACCESS_KEY is required/);
+  });
+
+  it('allows PASSWORD_AUTH_ENABLED without pepper in this inert foundation slice', () => {
+    const env = loadEnv({
+      DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+      PASSWORD_AUTH_ENABLED: 'true',
+    });
+    expect(env.PASSWORD_AUTH_ENABLED).toBe(true);
+    expect(env).not.toHaveProperty('PASSWORD_HASH_PEPPER');
   });
 });

@@ -51,6 +51,7 @@ describe('PostgreSQL foundation integration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_password_credentials',
       'account_sessions',
       'accounts',
       'actors',
@@ -92,6 +93,7 @@ describe('PostgreSQL foundation integration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_password_credentials',
       'account_sessions',
       'accounts',
       'actors',
@@ -146,6 +148,7 @@ describe('PostgreSQL foundation integration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_password_credentials',
       'account_sessions',
       'accounts',
       'actors',

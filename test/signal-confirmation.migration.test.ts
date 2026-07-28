@@ -26,6 +26,7 @@ describe('actors and signal_confirmations migration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_password_credentials',
       'account_sessions',
       'accounts',
       'actors',
@@ -120,6 +121,7 @@ describe('actors and signal_confirmations migration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_password_credentials',
       'account_sessions',
       'accounts',
       'actors',

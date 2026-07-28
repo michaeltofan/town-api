@@ -26,6 +26,7 @@ describe('communities and signals migration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_password_credentials',
       'account_sessions',
       'accounts',
       'actors',
@@ -116,6 +117,7 @@ describe('communities and signals migration', () => {
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'account_emails',
+      'account_password_credentials',
       'account_sessions',
       'accounts',
       'actors',
