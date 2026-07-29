@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq, isNull } from 'drizzle-orm';
 import type { AppInstance } from '../src/app.js';
+import { hashOpaqueToken } from '../src/ceremony/email-verification/crypto.js';
 import {
   accountPasswordCredentials,
   accountSessions,
@@ -12,6 +14,7 @@ import { toIsoTimestamp } from '../src/lib/timestamps.js';
 import {
   completeEmailSetup,
   createPasskeyRegistrationTestApp,
+  TEST_EMAIL_VERIFICATION_HASH_KEY,
   TEST_INITIAL_PASSWORD,
 } from './helpers/passkey-registration.js';
 
@@ -193,5 +196,326 @@ describe('initial password setup API', () => {
     });
     expect(wrongPurpose.statusCode).toBe(400);
     expect(wrongPurpose.json()).toMatchObject(FAILURE_BODY);
+  });
+
+  async function assertNoPasswordSetupSideEffects(accountId: string): Promise<void> {
+    const db = currentApp().database.db;
+    expect(
+      (
+        await db
+          .select({ value: count() })
+          .from(accountPasswordCredentials)
+          .where(eq(accountPasswordCredentials.accountId, accountId))
+      )[0]?.value,
+    ).toBe(0);
+    expect((await db.select().from(accounts).where(eq(accounts.id, accountId)))[0]?.status).toBe(
+      'pending_password',
+    );
+    expect(
+      (
+        await db
+          .select({ value: count() })
+          .from(setupGrants)
+          .where(
+            and(
+              eq(setupGrants.accountId, accountId),
+              eq(setupGrants.purpose, 'initial_passkey_registration'),
+            ),
+          )
+      )[0]?.value,
+    ).toBe(0);
+    expect((await db.select({ value: count() }).from(accountSessions))[0]?.value).toBe(0);
+  }
+
+  it('allows exactly one concurrent successful password setup for the same grant', async () => {
+    const emailSetup = await completeEmailSetup(
+      currentApp(),
+      currentDelivery(),
+      'Password.Concurrent+ok@example.com',
+    );
+
+    const results = await Promise.all(
+      [0, 1].map(() =>
+        currentApp().inject({
+          method: 'POST',
+          url: '/v1/account/password',
+          headers: { authorization: `SetupGrant ${emailSetup.setupGrant}` },
+          payload: { password: TEST_INITIAL_PASSWORD },
+        }),
+      ),
+    );
+
+    expect(results.filter((response) => response.statusCode === 200)).toHaveLength(1);
+    expect(results.filter((response) => response.statusCode === 400)).toHaveLength(1);
+    for (const failed of results.filter((response) => response.statusCode === 400)) {
+      expect(failed.json()).toMatchObject(FAILURE_BODY);
+    }
+
+    const successBodies = results
+      .filter((response) => response.statusCode === 200)
+      .map((response) =>
+        response.json<{ data: { status: string; setupGrant: string } }>().data.setupGrant,
+      );
+    expect(successBodies).toHaveLength(1);
+
+    const db = currentApp().database.db;
+    const activeCredentials = await db
+      .select()
+      .from(accountPasswordCredentials)
+      .where(
+        and(
+          eq(accountPasswordCredentials.accountId, emailSetup.accountId),
+          isNull(accountPasswordCredentials.revokedAt),
+        ),
+      );
+    expect(activeCredentials).toHaveLength(1);
+
+    expect(
+      (await db.select().from(accounts).where(eq(accounts.id, emailSetup.accountId)))[0]?.status,
+    ).toBe('pending_passkey');
+
+    const usablePasskeyGrants = await db
+      .select()
+      .from(setupGrants)
+      .where(
+        and(
+          eq(setupGrants.accountId, emailSetup.accountId),
+          eq(setupGrants.purpose, 'initial_passkey_registration'),
+          isNull(setupGrants.consumedAt),
+          isNull(setupGrants.revokedAt),
+        ),
+      );
+    expect(usablePasskeyGrants).toHaveLength(1);
+    expect((await db.select({ value: count() }).from(accountSessions))[0]?.value).toBe(0);
+
+    const createdEvents = await db
+      .select()
+      .from(identitySecurityEvents)
+      .where(
+        and(
+          eq(identitySecurityEvents.accountId, emailSetup.accountId),
+          eq(identitySecurityEvents.eventType, 'password_credential_created'),
+        ),
+      );
+    expect(createdEvents).toHaveLength(1);
+  });
+
+  it('rejects expired and revoked password-setup grants without mutating state', async () => {
+    const cases: {
+      name: string;
+      mutate: (accountId: string) => Promise<void>;
+    }[] = [
+      {
+        name: 'expired',
+        mutate: async (accountId) => {
+          await currentApp()
+            .database.db.update(setupGrants)
+            .set({
+              createdAt: '2026-07-16T13:00:00.000Z',
+              expiresAt: '2026-07-16T13:59:59.000Z',
+            })
+            .where(
+              and(
+                eq(setupGrants.accountId, accountId),
+                eq(setupGrants.purpose, 'initial_password_setup'),
+              ),
+            );
+        },
+      },
+      {
+        name: 'revoked',
+        mutate: async (accountId) => {
+          await currentApp()
+            .database.db.update(setupGrants)
+            .set({ revokedAt: FIXED_NOW })
+            .where(
+              and(
+                eq(setupGrants.accountId, accountId),
+                eq(setupGrants.purpose, 'initial_password_setup'),
+              ),
+            );
+        },
+      },
+    ];
+
+    for (const testCase of cases) {
+      await boot();
+      const emailSetup = await completeEmailSetup(
+        currentApp(),
+        currentDelivery(),
+        `Password.${testCase.name}+grant@example.com`,
+      );
+      await testCase.mutate(emailSetup.accountId);
+
+      const response = await currentApp().inject({
+        method: 'POST',
+        url: '/v1/account/password',
+        headers: { authorization: `SetupGrant ${emailSetup.setupGrant}` },
+        payload: { password: TEST_INITIAL_PASSWORD },
+      });
+      expect(response.statusCode, testCase.name).toBe(400);
+      expect(response.json(), testCase.name).toMatchObject(FAILURE_BODY);
+      await assertNoPasswordSetupSideEffects(emailSetup.accountId);
+    }
+  });
+
+  it('rejects password setup when the account is no longer pending_password', async () => {
+    for (const status of ['pending_passkey', 'active'] as const) {
+      await boot();
+      const emailSetup = await completeEmailSetup(
+        currentApp(),
+        currentDelivery(),
+        `Password.State.${status}+ok@example.com`,
+      );
+
+      if (status === 'pending_passkey') {
+        await currentApp()
+          .database.db.update(accounts)
+          .set({ status: 'pending_passkey', updatedAt: FIXED_NOW })
+          .where(eq(accounts.id, emailSetup.accountId));
+      } else {
+        await currentApp()
+          .database.db.update(accounts)
+          .set({
+            status: 'active',
+            webauthnUserHandle: Buffer.alloc(32, 7),
+            accountReadyAt: FIXED_NOW,
+            updatedAt: FIXED_NOW,
+          })
+          .where(eq(accounts.id, emailSetup.accountId));
+      }
+
+      const response = await currentApp().inject({
+        method: 'POST',
+        url: '/v1/account/password',
+        headers: { authorization: `SetupGrant ${emailSetup.setupGrant}` },
+        payload: { password: TEST_INITIAL_PASSWORD },
+      });
+      expect(response.statusCode, status).toBe(400);
+      expect(response.json(), status).toMatchObject(FAILURE_BODY);
+
+      const db = currentApp().database.db;
+      expect(
+        (
+          await db
+            .select({ value: count() })
+            .from(accountPasswordCredentials)
+            .where(eq(accountPasswordCredentials.accountId, emailSetup.accountId))
+        )[0]?.value,
+        status,
+      ).toBe(0);
+      expect(
+        (await db.select().from(accounts).where(eq(accounts.id, emailSetup.accountId)))[0]?.status,
+        status,
+      ).toBe(status);
+      expect(
+        (
+          await db
+            .select({ value: count() })
+            .from(setupGrants)
+            .where(
+              and(
+                eq(setupGrants.accountId, emailSetup.accountId),
+                eq(setupGrants.purpose, 'initial_passkey_registration'),
+              ),
+            )
+        )[0]?.value,
+        status,
+      ).toBe(0);
+      expect((await db.select({ value: count() }).from(accountSessions))[0]?.value, status).toBe(0);
+    }
+  });
+
+  it('rejects retry after an active password credential already exists', async () => {
+    const emailSetup = await completeEmailSetup(
+      currentApp(),
+      currentDelivery(),
+      'Password.Retry+exists@example.com',
+    );
+
+    const first = await currentApp().inject({
+      method: 'POST',
+      url: '/v1/account/password',
+      headers: { authorization: `SetupGrant ${emailSetup.setupGrant}` },
+      payload: { password: TEST_INITIAL_PASSWORD },
+    });
+    expect(first.statusCode).toBe(200);
+    const firstPasskeyGrant = first.json<{ data: { setupGrant: string } }>().data.setupGrant;
+
+    const replaySameGrant = await currentApp().inject({
+      method: 'POST',
+      url: '/v1/account/password',
+      headers: { authorization: `SetupGrant ${emailSetup.setupGrant}` },
+      payload: { password: `${TEST_INITIAL_PASSWORD}-retry` },
+    });
+    expect(replaySameGrant.statusCode).toBe(400);
+    expect(replaySameGrant.json()).toMatchObject(FAILURE_BODY);
+
+    // Force a fresh password-purpose grant while the credential remains active.
+    await currentApp()
+      .database.db.update(accounts)
+      .set({ status: 'pending_password', updatedAt: FIXED_NOW })
+      .where(eq(accounts.id, emailSetup.accountId));
+
+    const retryToken = `retry-password-grant-${randomUUID()}`;
+    const retryTokenHash = hashOpaqueToken({
+      hashKey: TEST_EMAIL_VERIFICATION_HASH_KEY,
+      purpose: 'initial_password_setup',
+      token: retryToken,
+    });
+    await currentApp().database.db.insert(setupGrants).values({
+      id: randomUUID(),
+      accountId: emailSetup.accountId,
+      tokenHash: retryTokenHash,
+      purpose: 'initial_password_setup',
+      createdAt: FIXED_NOW,
+      expiresAt: toIsoTimestamp(new Date(Date.parse(FIXED_NOW) + 15 * 60_000).toISOString()),
+      consumedAt: null,
+      revokedAt: null,
+    });
+
+    const retryFreshGrant = await currentApp().inject({
+      method: 'POST',
+      url: '/v1/account/password',
+      headers: { authorization: `SetupGrant ${retryToken}` },
+      payload: { password: `${TEST_INITIAL_PASSWORD}-again` },
+    });
+    expect(retryFreshGrant.statusCode).toBe(400);
+    expect(retryFreshGrant.json()).toMatchObject(FAILURE_BODY);
+
+    const db = currentApp().database.db;
+    const activeCredentials = await db
+      .select()
+      .from(accountPasswordCredentials)
+      .where(
+        and(
+          eq(accountPasswordCredentials.accountId, emailSetup.accountId),
+          isNull(accountPasswordCredentials.revokedAt),
+        ),
+      );
+    expect(activeCredentials).toHaveLength(1);
+
+    const usablePasskeyGrants = await db
+      .select()
+      .from(setupGrants)
+      .where(
+        and(
+          eq(setupGrants.accountId, emailSetup.accountId),
+          eq(setupGrants.purpose, 'initial_passkey_registration'),
+          isNull(setupGrants.consumedAt),
+          isNull(setupGrants.revokedAt),
+        ),
+      );
+    expect(usablePasskeyGrants).toHaveLength(1);
+
+    // Account remains pending_password after the forced retry attempt (no second transition).
+    expect(
+      (await db.select().from(accounts).where(eq(accounts.id, emailSetup.accountId)))[0]?.status,
+    ).toBe('pending_password');
+    expect((await db.select({ value: count() }).from(accountSessions))[0]?.value).toBe(0);
+
+    // Original passkey handoff token is still the only success payload from first setup.
+    expect(firstPasskeyGrant).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+    expect(JSON.stringify(retryFreshGrant.json())).not.toContain(firstPasskeyGrant);
   });
 });
