@@ -36,11 +36,11 @@ describe('initial password policy', () => {
 
   it('never includes the password in the policy error', () => {
     try {
-      normalizeAndValidateInitialPassword('secret-password');
+      normalizeAndValidateInitialPassword('short-secret');
       expect.unreachable('expected policy rejection');
     } catch (error) {
       expect(error).toBeInstanceOf(PasswordPolicyError);
-      expect(String(error)).not.toContain('secret-password');
+      expect(String(error)).not.toContain('short-secret');
     }
   });
 

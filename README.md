@@ -231,8 +231,8 @@ Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated em
 
 ### Setup grants vs recovery grants vs sessions
 
-| Record                  | Role                                                                                |
-| ----------------------- | ----------------------------------------------------------------------------------- |
+| Record                  | Role                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
 | `town.setup_grants`     | Purpose-bound restricted authority for initial password setup or first-passkey registration |
 | `town.recovery_grants`  | Restricted recovery authority; not a normal session                                         |
 | `town.account_sessions` | Opaque authenticated sessions for web/mobile clients                                        |
@@ -309,18 +309,18 @@ Architecture contract: `docs/authentication-ceremony-foundation.v1.json`.
 
 Email verification proves control of an email address during account setup. It does **not** authenticate a session and does **not** activate an account.
 
-| Item                   | Policy                                                                                          |
-| ---------------------- | ----------------------------------------------------------------------------------------------- |
-| Feature flag           | `EMAIL_VERIFICATION_ENABLED` (default `false`)                                                  |
-| Hash key               | `EMAIL_VERIFICATION_HASH_KEY` (HMAC-SHA-256; min 32 chars)                                      |
-| Rate-limit subject key | `CEREMONY_RATE_LIMIT_HASH_KEY` (min 32 chars)                                                   |
-| Delivery mode          | `test`, `development`, or `resend`                                                              |
-| Code                   | 6 decimal digits, crypto-secure, 10-minute TTL, max 5 attempts                                  |
-| Resend                 | invalidates prior active `verify_email` challenges (`revoked_at`)                               |
-| Success transition     | `pending_email` → `pending_password`                                                            |
+| Item                   | Policy                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Feature flag           | `EMAIL_VERIFICATION_ENABLED` (default `false`)                                                                                        |
+| Hash key               | `EMAIL_VERIFICATION_HASH_KEY` (HMAC-SHA-256; min 32 chars)                                                                            |
+| Rate-limit subject key | `CEREMONY_RATE_LIMIT_HASH_KEY` (min 32 chars)                                                                                         |
+| Delivery mode          | `test`, `development`, or `resend`                                                                                                    |
+| Code                   | 6 decimal digits, crypto-secure, 10-minute TTL, max 5 attempts                                                                        |
+| Resend                 | invalidates prior active `verify_email` challenges (`revoked_at`)                                                                     |
+| Success transition     | `pending_email` → `pending_password`                                                                                                  |
 | Success authority      | one restricted setup grant (`initial_password_setup`, 15 minutes); `pending_passkey` re-entry reissues `initial_passkey_registration` |
-| Anti-enumeration       | request always returns generic `202 VERIFICATION_REQUEST_ACCEPTED` plus a UUID `verificationId` |
-| Trusted proxy          | `TRUST_PROXY` default `false` (do not trust arbitrary `X-Forwarded-For`)                        |
+| Anti-enumeration       | request always returns generic `202 VERIFICATION_REQUEST_ACCEPTED` plus a UUID `verificationId`                                       |
+| Trusted proxy          | `TRUST_PROXY` default `false` (do not trust arbitrary `X-Forwarded-For`)                                                              |
 
 Implemented routes (also in live OpenAPI when registered):
 
@@ -344,46 +344,46 @@ Rate limits (persistent `town.ceremony_rate_limits`):
 
 Sets the initial password for `pending_password` accounts after email verification. Does **not** authenticate a session and does **not** activate an account. Public password sign-in remains out of scope.
 
-| Item               | Policy                                                                                                      |
-| ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Feature flag       | `PASSWORD_AUTH_ENABLED` (default `false`)                                                                   |
-| Authorization      | `Authorization: SetupGrant <opaque-token>` with purpose `initial_password_setup`                            |
-| Success            | `PASSWORD_SET`; stores Argon2id credential; `pending_password` → `pending_passkey`; hands off passkey grant |
-| Session issuance   | **none**                                                                                                    |
-| Public error       | `PASSWORD_SETUP_FAILED`                                                                                     |
-| Rate limit         | `password_setup_grant`: 5 / grant                                                                            |
+| Item             | Policy                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| Feature flag     | `PASSWORD_AUTH_ENABLED` (default `false`)                                                                   |
+| Authorization    | `Authorization: SetupGrant <opaque-token>` with purpose `initial_password_setup`                            |
+| Success          | `PASSWORD_SET`; stores Argon2id credential; `pending_password` → `pending_passkey`; hands off passkey grant |
+| Session issuance | **none**                                                                                                    |
+| Public error     | `PASSWORD_SETUP_FAILED`                                                                                     |
+| Rate limit       | `password_setup_grant`: 5 / grant                                                                           |
 
 Implemented route:
 
-| Method | Path                    | Behavior                                                                                          |
-| ------ | ----------------------- | ------------------------------------------------------------------------------------------------- |
-| `POST` | `/v1/account/password`  | Set initial password; consume password-setup grant; issue `initial_passkey_registration` grant    |
+| Method | Path                   | Behavior                                                                                       |
+| ------ | ---------------------- | ---------------------------------------------------------------------------------------------- |
+| `POST` | `/v1/account/password` | Set initial password; consume password-setup grant; issue `initial_passkey_registration` grant |
 
 ### WebAuthn registration runtime (Slice 3)
 
 First-passkey registration for accounts that already have a verified primary email, status `pending_passkey`, and a valid restricted setup grant.
 
-| Item                     | Policy                                                                                           |
-| ------------------------ | ------------------------------------------------------------------------------------------------ |
-| Dependency               | `@simplewebauthn/server` pinned exactly to **13.3.2** (no browser package; no second library)    |
-| Feature flag             | `WEBAUTHN_REGISTRATION_ENABLED` (default `false`)                                                |
-| RP / origin              | server-owned `WEBAUTHN_RP_ID`, `WEBAUTHN_ALLOWED_ORIGINS` (explicit list; no wildcards)          |
-| RP name                  | `WEBAUTHN_RP_NAME` default `TOWN`                                                                |
-| Challenge hash key       | `WEBAUTHN_CHALLENGE_HASH_KEY` (HMAC-SHA-256; min 32 chars)                                       |
-| Setup-grant hash key     | `EMAIL_VERIFICATION_HASH_KEY` (same keyed hash contract as Slice 2 issuance)                     |
-| Rate-limit subject key   | `CEREMONY_RATE_LIMIT_HASH_KEY`                                                                   |
-| Authorization            | `Authorization: SetupGrant <opaque-token>` only                                                  |
-| Discoverable credentials | required (`residentKey: required`, `requireResidentKey: true`)                                   |
-| User verification        | required                                                                                         |
-| Attestation              | `none`                                                                                           |
-| Algorithms               | ES256 (`-7`), RS256 (`-257`)                                                                     |
-| User handle              | opaque 32-byte `town.accounts.webauthn_user_handle` (unique, immutable, crypto-random)           |
-| Challenge TTL            | **5 minutes**; one active `register` challenge per account; hash-only storage                    |
-| Ceremony reference       | non-secret `registrationCeremonyId` locates the challenge row; setup grant remains authorization |
-| Credential storage       | `town.passkey_credentials` (credential id + public key bytes; never private keys / biometrics)   |
+| Item                     | Policy                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Dependency               | `@simplewebauthn/server` pinned exactly to **13.3.2** (no browser package; no second library)                             |
+| Feature flag             | `WEBAUTHN_REGISTRATION_ENABLED` (default `false`)                                                                         |
+| RP / origin              | server-owned `WEBAUTHN_RP_ID`, `WEBAUTHN_ALLOWED_ORIGINS` (explicit list; no wildcards)                                   |
+| RP name                  | `WEBAUTHN_RP_NAME` default `TOWN`                                                                                         |
+| Challenge hash key       | `WEBAUTHN_CHALLENGE_HASH_KEY` (HMAC-SHA-256; min 32 chars)                                                                |
+| Setup-grant hash key     | `EMAIL_VERIFICATION_HASH_KEY` (same keyed hash contract as Slice 2 issuance)                                              |
+| Rate-limit subject key   | `CEREMONY_RATE_LIMIT_HASH_KEY`                                                                                            |
+| Authorization            | `Authorization: SetupGrant <opaque-token>` only                                                                           |
+| Discoverable credentials | required (`residentKey: required`, `requireResidentKey: true`)                                                            |
+| User verification        | required                                                                                                                  |
+| Attestation              | `none`                                                                                                                    |
+| Algorithms               | ES256 (`-7`), RS256 (`-257`)                                                                                              |
+| User handle              | opaque 32-byte `town.accounts.webauthn_user_handle` (unique, immutable, crypto-random)                                    |
+| Challenge TTL            | **5 minutes**; one active `register` challenge per account; hash-only storage                                             |
+| Ceremony reference       | non-secret `registrationCeremonyId` locates the challenge row; setup grant remains authorization                          |
+| Credential storage       | `town.passkey_credentials` (credential id + public key bytes; never private keys / biometrics)                            |
 | Activation               | atomic: credential + civic actor (`community_id` null) + link + active password credential + `pending_passkey` → `active` |
-| Concurrency              | exactly one concurrent verify may succeed                                                        |
-| Session issuance         | **none**                                                                                         |
+| Concurrency              | exactly one concurrent verify may succeed                                                                                 |
+| Session issuance         | **none**                                                                                                                  |
 
 Production RP/origin policy (when `NODE_ENV=production`):
 

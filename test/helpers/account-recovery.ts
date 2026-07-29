@@ -114,6 +114,10 @@ export async function createAccountRecoveryTestApp(options?: {
       ...(options?.now !== undefined ? { now: options.now } : {}),
       ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
     },
+    passwordSetup: {
+      ...(options?.now !== undefined ? { now: options.now } : {}),
+      ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
+    },
     accountRecovery: {
       deliveryAdapter: recoveryDelivery,
       ...(options?.now !== undefined ? { now: options.now } : {}),

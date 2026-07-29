@@ -27,13 +27,9 @@ describe('initial password setup API', () => {
   let app: AppInstance | undefined;
   let pool: Awaited<ReturnType<typeof createPasskeyRegistrationTestApp>>['pool'] | undefined;
   let delivery:
-    | Awaited<ReturnType<typeof createPasskeyRegistrationTestApp>>['delivery']
-    | undefined;
+    Awaited<ReturnType<typeof createPasskeyRegistrationTestApp>>['delivery'] | undefined;
 
-  async function boot(options?: {
-    passwordEnabled?: boolean;
-    now?: () => string;
-  }): Promise<void> {
+  async function boot(options?: { passwordEnabled?: boolean; now?: () => string }): Promise<void> {
     if (app !== undefined) {
       await app.close();
       app = undefined;
@@ -56,6 +52,13 @@ describe('initial password setup API', () => {
       throw new Error('app not initialized');
     }
     return app;
+  }
+
+  function currentDelivery(): NonNullable<typeof delivery> {
+    if (delivery === undefined) {
+      throw new Error('delivery not initialized');
+    }
+    return delivery;
   }
 
   beforeEach(async () => {
@@ -85,7 +88,7 @@ describe('initial password setup API', () => {
   it('completes password setup, hands off a passkey grant, and creates no session', async () => {
     const emailSetup = await completeEmailSetup(
       currentApp(),
-      delivery!,
+      currentDelivery(),
       'Password.Setup+ok@example.com',
     );
     expect((await currentApp().database.db.select().from(accounts))[0]?.status).toBe(
@@ -111,7 +114,9 @@ describe('initial password setup API', () => {
     expect(JSON.stringify(body)).not.toMatch(/\$argon2id\$/);
 
     const db = currentApp().database.db;
-    const account = (await db.select().from(accounts).where(eq(accounts.id, emailSetup.accountId)))[0];
+    const account = (
+      await db.select().from(accounts).where(eq(accounts.id, emailSetup.accountId))
+    )[0];
     expect(account?.status).toBe('pending_passkey');
 
     const credentials = await db.select().from(accountPasswordCredentials);
@@ -148,7 +153,7 @@ describe('initial password setup API', () => {
   it('rejects missing auth, wrong-purpose grants, and policy violations with a bounded error', async () => {
     const emailSetup = await completeEmailSetup(
       currentApp(),
-      delivery!,
+      currentDelivery(),
       'Password.Fail+ok@example.com',
     );
 

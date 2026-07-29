@@ -1196,12 +1196,7 @@ export type MembershipEntitlementRow = typeof membershipEntitlements.$inferSelec
 export type MembershipSourceEventRow = typeof membershipSourceEvents.$inferSelect;
 
 export type AccountStatus =
-  | 'pending_email'
-  | 'pending_password'
-  | 'pending_passkey'
-  | 'active'
-  | 'suspended'
-  | 'closed';
+  'pending_email' | 'pending_password' | 'pending_passkey' | 'active' | 'suspended' | 'closed';
 
 export type SignalHideReason = 'immoral' | 'abusive' | 'spam' | 'off_topic' | 'illegal' | 'other';
 

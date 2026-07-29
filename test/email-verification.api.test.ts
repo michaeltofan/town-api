@@ -618,16 +618,22 @@ describe('email verification runtime API', () => {
     );
     const passkeyGrantId = 'aaaaaaaa-0000-4000-8000-000000000099';
     const passkeyTokenHash = Buffer.alloc(32, 7);
-    await currentApp().database.db.insert(setupGrants).values({
-      id: passkeyGrantId,
-      accountId: (await currentApp().database.db.select().from(accounts))[0]!.id,
-      tokenHash: passkeyTokenHash,
-      purpose: 'initial_passkey_registration',
-      expiresAt: new Date(nowMs + 15 * 60_000).toISOString(),
-      createdAt: FIXED_NOW,
-      consumedAt: null,
-      revokedAt: null,
-    });
+    const seededAccount = (await currentApp().database.db.select().from(accounts))[0];
+    if (!seededAccount) {
+      throw new Error('expected account after email verification');
+    }
+    await currentApp()
+      .database.db.insert(setupGrants)
+      .values({
+        id: passkeyGrantId,
+        accountId: seededAccount.id,
+        tokenHash: passkeyTokenHash,
+        purpose: 'initial_passkey_registration',
+        expiresAt: new Date(nowMs + 15 * 60_000).toISOString(),
+        createdAt: FIXED_NOW,
+        consumedAt: null,
+        revokedAt: null,
+      });
     const firstGrant = 'prior-passkey-grant-token';
 
     const db = currentApp().database.db;

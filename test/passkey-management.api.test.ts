@@ -80,7 +80,11 @@ describe('passkey management api', () => {
   });
 
   it('keeps SetupGrant first-passkey registration on Slice 3 paths only', async () => {
-    const setup = await completeEmailAndPasswordSetup(app, delivery, 'Initial.Setup+setup@example.com');
+    const setup = await completeEmailAndPasswordSetup(
+      app,
+      delivery,
+      'Initial.Setup+setup@example.com',
+    );
     const optionsResponse = await app.inject({
       method: 'POST',
       url: '/v1/account/passkeys/registration/options',

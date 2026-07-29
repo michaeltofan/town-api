@@ -100,9 +100,7 @@ export async function recordPasswordSetupGrantAttempt(
       metadata: {
         purpose: 'initial_password_setup',
         scope: 'password_setup_grant',
-        ...(input.failureCategory !== undefined
-          ? { failureCategory: input.failureCategory }
-          : {}),
+        ...(input.failureCategory !== undefined ? { failureCategory: input.failureCategory } : {}),
       },
     });
   }

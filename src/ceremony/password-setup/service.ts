@@ -27,15 +27,9 @@ import {
   revokeActiveSetupGrantsForAccount,
   revokeSetupGrant,
 } from '../repositories/setup-grants.js';
-import {
-  generateSetupGrantToken,
-  hashOpaqueToken,
-} from '../email-verification/crypto.js';
+import { generateSetupGrantToken, hashOpaqueToken } from '../email-verification/crypto.js';
 import { requirePasswordSetupConfig, type PasswordSetupConfig } from './config.js';
-import {
-  isPasswordSetupGrantThrottled,
-  recordPasswordSetupGrantAttempt,
-} from './rate-limits.js';
+import { isPasswordSetupGrantThrottled, recordPasswordSetupGrantAttempt } from './rate-limits.js';
 
 type Db = Database['db'];
 
@@ -207,8 +201,7 @@ export async function completeInitialPasswordSetup(
         .for('update');
       const grant = grantRows[0];
       if (
-        !grant ||
-        grant.purpose !== 'initial_password_setup' ||
+        grant?.purpose !== 'initial_password_setup' ||
         grant.consumedAt !== null ||
         grant.revokedAt !== null ||
         new Date(now).getTime() >= new Date(grant.expiresAt).getTime()
