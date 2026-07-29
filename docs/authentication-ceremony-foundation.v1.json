@@ -139,6 +139,7 @@
       "password_setup_grant",
       "password_sign_in_ip",
       "password_sign_in_email",
+      "password_change_account",
       "passkey_options_ip",
       "passkey_options_client",
       "passkey_assertion_credential",
@@ -163,6 +164,7 @@
       "Persistent atomic counters for ceremony-specific abuse controls",
       "password_setup_grant is enforced for initial password setup",
       "password_sign_in_ip and password_sign_in_email are enforced for public password sign-in",
+      "password_change_account is enforced for session-authenticated password change",
       "setup_options_grant and setup_verification_grant are enforced for WebAuthn registration",
       "recovery_request_*, recovery_email_attempt_*, recovery_options_grant, and recovery_verification_grant are enforced for account recovery",
       "passkey_inventory_account and manage_* / passkey_rename_account / passkey_revoke_account are enforced for passkey management",
@@ -249,6 +251,10 @@
     "added": [
       "passkey_registration_failed",
       "account_activated"
+    ],
+    "passwordChangeAdded": [
+      "password_credential_changed",
+      "password_change_failed"
     ],
     "passwordSetupAdded": [
       "password_credential_created"
@@ -443,6 +449,46 @@
       "DELETE /v1/account/passkeys/:passkeyId"
     ],
     "status": "implemented"
+  },
+  "passwordChangeRuntime": {
+    "authorization": "active Session (cookie or Authorization: Session)",
+    "createsAccount": false,
+    "createsSession": false,
+    "featureFlag": "PASSWORD_CHANGE_ENABLED",
+    "freshAuthenticationAgeCheck": false,
+    "independentOf": [
+      "PASSWORD_AUTH_ENABLED",
+      "PASSWORD_SIGN_IN_ENABLED",
+      "PASSKEY_AUTHENTICATION_ENABLED"
+    ],
+    "neverReturns": [
+      "accountId",
+      "email",
+      "credentialId",
+      "password",
+      "passwordHash"
+    ],
+    "publicErrorCode": "PASSWORD_CHANGE_FAILED",
+    "rateLimits": {
+      "password_change_account_30m": 10
+    },
+    "requiredAccountStatus": "active",
+    "requiresCurrentPassword": true,
+    "revokesOtherSessionsReason": "password_changed",
+    "rotatesSession": true,
+    "routes": [
+      "POST /v1/account/password/change"
+    ],
+    "securityEvents": [
+      "password_credential_changed",
+      "password_change_failed"
+    ],
+    "sessionIssuance": {
+      "mobile": "sessionToken plus sessionExpiresAt JSON only; no Set-Cookie",
+      "web": "replacement Secure HttpOnly SameSite=Lax cookie only; no token in JSON"
+    },
+    "status": "implemented",
+    "successStatus": "PASSWORD_CHANGED"
   },
   "passwordSetupRuntime": {
     "activatesAccount": false,

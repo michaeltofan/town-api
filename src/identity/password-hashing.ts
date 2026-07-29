@@ -70,3 +70,26 @@ export async function verifyPassword(plaintext: string, storedHash: string): Pro
     return false;
   }
 }
+
+/**
+ * Strict verify for session-authenticated password change.
+ * - Empty plaintext → false (caller maps to password_mismatch).
+ * - Empty/missing stored hash → throw (caller maps to 500; no failure event).
+ * - Valid hash + wrong password → false.
+ * - Malformed PHC / Argon2 / runtime exceptions → rethrow (no catch).
+ * Does not change verifyPassword behavior used by password sign-in.
+ */
+export async function verifyPasswordStrict(
+  plaintext: string,
+  storedHash: string,
+): Promise<boolean> {
+  if (typeof plaintext !== 'string' || plaintext.length === 0) {
+    return false;
+  }
+  if (typeof storedHash !== 'string' || storedHash.length === 0) {
+    throw new Error('Stored password hash must be a non-empty string');
+  }
+
+  const normalized = normalizePasswordForHashing(plaintext);
+  return await verify(storedHash, normalized);
+}

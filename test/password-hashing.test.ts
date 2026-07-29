@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { hashPassword, verifyPassword } from '../src/identity/password-hashing.js';
+import {
+  hashPassword,
+  verifyPassword,
+  verifyPasswordStrict,
+} from '../src/identity/password-hashing.js';
 import {
   PASSWORD_ARGON2_MEMORY_COST_KIB,
   PASSWORD_ARGON2_OUTPUT_LEN,
@@ -46,5 +50,42 @@ describe('password hashing', () => {
     await expect(verifyPassword('', '$argon2id$v=19$m=19456,t=2,p=1$aaaa$bbbb')).resolves.toBe(
       false,
     );
+  });
+});
+
+describe('verifyPasswordStrict', () => {
+  it('returns true for the correct plaintext', async () => {
+    const result = await hashPassword('correct-horse-battery-staple');
+    await expect(verifyPasswordStrict('correct-horse-battery-staple', result.hash)).resolves.toBe(
+      true,
+    );
+  });
+
+  it('returns false for a wrong password against a valid hash', async () => {
+    const result = await hashPassword('correct-horse-battery-staple');
+    await expect(verifyPasswordStrict('wrong-password', result.hash)).resolves.toBe(false);
+  });
+
+  it('returns false for empty plaintext', async () => {
+    const result = await hashPassword('correct-horse-battery-staple');
+    await expect(verifyPasswordStrict('', result.hash)).resolves.toBe(false);
+  });
+
+  it('throws for empty or missing stored hash', async () => {
+    await expect(verifyPasswordStrict('correct-horse-battery-staple', '')).rejects.toThrow(
+      /non-empty/,
+    );
+  });
+
+  it('rethrows malformed PHC / Argon2 verify failures', async () => {
+    await expect(
+      verifyPasswordStrict('correct-horse-battery-staple', 'not-a-valid-phc'),
+    ).rejects.toThrow();
+  });
+
+  it('does not change verifyPassword swallow behavior for tampered hashes', async () => {
+    const result = await hashPassword('correct-horse-battery-staple');
+    const tampered = `${result.hash.slice(0, -4)}xxxx`;
+    await expect(verifyPassword('correct-horse-battery-staple', tampered)).resolves.toBe(false);
   });
 });

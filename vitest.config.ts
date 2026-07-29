@@ -30,6 +30,8 @@ export default defineConfig({
       'test/password-setup.api.test.ts',
       'test/password-authentication.api.test.ts',
       'test/password-authentication.migration.test.ts',
+      'test/password-change.api.test.ts',
+      'test/password-change.migration.test.ts',
       'test/passkey-registration.api.test.ts',
       'test/passkey-registration.migration.test.ts',
       'test/passkey-authentication.api.test.ts',

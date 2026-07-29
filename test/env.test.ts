@@ -30,6 +30,7 @@ describe('loadEnv', () => {
       ACCOUNT_RECOVERY_ENABLED: false,
       PASSWORD_AUTH_ENABLED: false,
       PASSWORD_SIGN_IN_ENABLED: false,
+      PASSWORD_CHANGE_ENABLED: false,
       LOCAL_ELIGIBILITY_ENABLED: false,
       STRIPE_BILLING_ENABLED: false,
       GOOGLE_PLAY_BILLING_ENABLED: false,
@@ -82,6 +83,7 @@ describe('loadEnv', () => {
       ACCOUNT_RECOVERY_ENABLED: false,
       PASSWORD_AUTH_ENABLED: false,
       PASSWORD_SIGN_IN_ENABLED: false,
+      PASSWORD_CHANGE_ENABLED: false,
       LOCAL_ELIGIBILITY_ENABLED: false,
       STRIPE_BILLING_ENABLED: false,
       GOOGLE_PLAY_BILLING_ENABLED: false,
@@ -438,6 +440,51 @@ describe('loadEnv', () => {
       loadEnv({
         DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
         PASSWORD_SIGN_IN_ENABLED: 'true',
+        SESSION_TOKEN_HASH_KEY: 'town-ci-session-token-hash-key-32bytesxx',
+        CEREMONY_RATE_LIMIT_HASH_KEY: 'town-ci-ceremony-rate-limit-hash-key-32b',
+      }),
+    ).toThrow(/WEBAUTHN_ALLOWED_ORIGINS is required/);
+  });
+
+  it('defaults PASSWORD_CHANGE_ENABLED to false and parses true independently', () => {
+    const disabled = loadEnv({
+      DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+    });
+    expect(disabled.PASSWORD_CHANGE_ENABLED).toBe(false);
+
+    const enabled = loadEnv({
+      DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+      PASSWORD_CHANGE_ENABLED: 'true',
+      PASSWORD_AUTH_ENABLED: 'false',
+      PASSWORD_SIGN_IN_ENABLED: 'false',
+      PASSKEY_AUTHENTICATION_ENABLED: 'false',
+      SESSION_TOKEN_HASH_KEY: 'town-ci-session-token-hash-key-32bytesxx',
+      CEREMONY_RATE_LIMIT_HASH_KEY: 'town-ci-ceremony-rate-limit-hash-key-32b',
+      WEBAUTHN_ALLOWED_ORIGINS: 'http://localhost:3000',
+    });
+    expect(enabled.PASSWORD_CHANGE_ENABLED).toBe(true);
+    expect(enabled.PASSWORD_AUTH_ENABLED).toBe(false);
+    expect(enabled.PASSWORD_SIGN_IN_ENABLED).toBe(false);
+    expect(enabled.PASSKEY_AUTHENTICATION_ENABLED).toBe(false);
+    expect(enabled.SESSION_TOKEN_HASH_KEY).toBe('town-ci-session-token-hash-key-32bytesxx');
+    expect(enabled.CEREMONY_RATE_LIMIT_HASH_KEY).toBe('town-ci-ceremony-rate-limit-hash-key-32b');
+    expect(enabled.WEBAUTHN_ALLOWED_ORIGINS).toBe('http://localhost:3000');
+  });
+
+  it('requires session and rate-limit keys when PASSWORD_CHANGE_ENABLED is true', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        PASSWORD_CHANGE_ENABLED: 'true',
+      }),
+    ).toThrow(/SESSION_TOKEN_HASH_KEY is required/);
+  });
+
+  it('requires WEBAUTHN_ALLOWED_ORIGINS when PASSWORD_CHANGE_ENABLED is true', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgres://town:town@127.0.0.1:5432/town',
+        PASSWORD_CHANGE_ENABLED: 'true',
         SESSION_TOKEN_HASH_KEY: 'town-ci-session-token-hash-key-32bytesxx',
         CEREMONY_RATE_LIMIT_HASH_KEY: 'town-ci-ceremony-rate-limit-hash-key-32b',
       }),

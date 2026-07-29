@@ -23,6 +23,7 @@ import { passkeyManagementRoutes } from './routes/passkey-management.js';
 import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { passwordSetupRoutes } from './routes/password-setup.js';
 import { passwordAuthenticationRoutes } from './routes/password-authentication.js';
+import { passwordChangeRoutes } from './routes/password-change.js';
 import { signalsRoutes } from './routes/signals.js';
 import { signalModerationRoutes } from './routes/signal-moderation.js';
 import { accountModerationRoutes } from './routes/account-moderation.js';
@@ -70,6 +71,11 @@ export type BuildAppOptions = {
     generateSetupToken?: () => string;
   };
   passwordAuthentication?: {
+    now?: () => string;
+    generateId?: () => string;
+    generateToken?: () => string;
+  };
+  passwordChange?: {
     now?: () => string;
     generateId?: () => string;
     generateToken?: () => string;
@@ -123,6 +129,8 @@ const SENSITIVE_HEADER_REDACT = {
     'req.headers.stripe-signature',
     'req.cookies.*',
     'req.body.password',
+    'req.body.currentPassword',
+    'req.body.newPassword',
     'req.body.token',
     'req.body.recoveryToken',
     'req.body.setupToken',
@@ -312,6 +320,16 @@ export async function buildApp(options: BuildAppOptions) {
       : {}),
     ...(options.passwordAuthentication?.generateToken !== undefined
       ? { generateToken: options.passwordAuthentication.generateToken }
+      : {}),
+  });
+  await app.register(passwordChangeRoutes, {
+    env: options.env,
+    ...(options.passwordChange?.now !== undefined ? { now: options.passwordChange.now } : {}),
+    ...(options.passwordChange?.generateId !== undefined
+      ? { generateId: options.passwordChange.generateId }
+      : {}),
+    ...(options.passwordChange?.generateToken !== undefined
+      ? { generateToken: options.passwordChange.generateToken }
       : {}),
   });
   await app.register(passkeyManagementRoutes, {
