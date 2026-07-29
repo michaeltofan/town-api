@@ -64,6 +64,8 @@ const APPROVED_EVENT_TYPES = new Set<IdentitySecurityEventType>([
   'signal_hidden',
   'signal_unhidden',
   'password_credential_created',
+  'password_credential_changed',
+  'password_change_failed',
 ]);
 
 export async function appendIdentitySecurityEvent(

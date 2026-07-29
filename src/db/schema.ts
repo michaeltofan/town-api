@@ -649,7 +649,9 @@ export const identitySecurityEvents = town.table(
         'stripe_price_mismatch',
         'signal_hidden',
         'signal_unhidden',
-        'password_credential_created'
+        'password_credential_created',
+        'password_credential_changed',
+        'password_change_failed'
       )`,
     ),
     index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
@@ -1083,7 +1085,8 @@ export const accountSessions = town.table(
         'credential_compromised',
         'security_version_changed',
         'passkey_added',
-        'passkey_revoked'
+        'passkey_revoked',
+        'password_changed'
       )`,
     ),
     index('account_sessions_account_active_idx')
@@ -1152,7 +1155,8 @@ export const ceremonyRateLimits = town.table(
         'billing_portal_account',
         'password_setup_grant',
         'password_sign_in_ip',
-        'password_sign_in_email'
+        'password_sign_in_email',
+        'password_change_account'
       )`,
     ),
     check('ceremony_rate_limits_attempt_count_nonnegative', sql`${table.attemptCount} >= 0`),
@@ -1222,7 +1226,8 @@ export type AccountSessionRevocationReason =
   | 'credential_compromised'
   | 'security_version_changed'
   | 'passkey_added'
-  | 'passkey_revoked';
+  | 'passkey_revoked'
+  | 'password_changed';
 export type PasskeyRevocationReason = 'user_requested';
 export type CeremonyRateLimitScope =
   | 'email_verification_request_email'
@@ -1253,7 +1258,8 @@ export type CeremonyRateLimitScope =
   | 'billing_portal_account'
   | 'password_setup_grant'
   | 'password_sign_in_ip'
-  | 'password_sign_in_email';
+  | 'password_sign_in_email'
+  | 'password_change_account';
 export type IdentitySecurityEventType =
   | 'email_verification_requested'
   | 'email_verified'
@@ -1307,7 +1313,9 @@ export type IdentitySecurityEventType =
   | 'stripe_price_mismatch'
   | 'signal_hidden'
   | 'signal_unhidden'
-  | 'password_credential_created';
+  | 'password_credential_created'
+  | 'password_credential_changed'
+  | 'password_change_failed';
 
 export type MembershipStatus =
   'inactive' | 'active' | 'cancelling' | 'expired' | 'paid_pending_binding' | 'suspended';

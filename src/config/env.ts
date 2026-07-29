@@ -145,6 +145,13 @@ const EnvSchema = Type.Object(
      */
     PASSWORD_SIGN_IN_ENABLED: Type.Boolean({ default: false }),
     /**
+     * Session-authenticated password change gate. Default false / fail-closed.
+     * When true, POST /v1/account/password/change is available under an active Session.
+     * Independent of PASSWORD_AUTH_ENABLED, PASSWORD_SIGN_IN_ENABLED, and PASSKEY_AUTHENTICATION_ENABLED.
+     * Does not enable password setup or password sign-in.
+     */
+    PASSWORD_CHANGE_ENABLED: Type.Boolean({ default: false }),
+    /**
      * Reserved for a future peppered hashing slice. Not applied by hashPassword today.
      * Do not invent pepper behavior while this remains unimplemented.
      */
@@ -488,6 +495,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     source.PASSWORD_SIGN_IN_ENABLED,
     'PASSWORD_SIGN_IN_ENABLED',
   );
+  const passwordChangeEnabled = parseBooleanFlag(
+    source.PASSWORD_CHANGE_ENABLED,
+    'PASSWORD_CHANGE_ENABLED',
+  );
   const localEligibilityEnabled = parseBooleanFlag(
     source.LOCAL_ELIGIBILITY_ENABLED,
     'LOCAL_ELIGIBILITY_ENABLED',
@@ -565,6 +576,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ACCOUNT_RECOVERY_ENABLED: accountRecoveryEnabled,
     PASSWORD_AUTH_ENABLED: passwordAuthEnabled,
     PASSWORD_SIGN_IN_ENABLED: passwordSignInEnabled,
+    PASSWORD_CHANGE_ENABLED: passwordChangeEnabled,
     LOCAL_ELIGIBILITY_ENABLED: localEligibilityEnabled,
     STRIPE_BILLING_ENABLED: stripeBillingEnabled,
     GOOGLE_PLAY_BILLING_ENABLED: googlePlayBillingEnabled,
@@ -871,6 +883,47 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       );
     }
     // Validate origin vocabulary using the shared parser; does not enable passkey auth.
+    parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, {
+      nodeEnv,
+      appEnv,
+    });
+
+    const cookieName = isNonEmptyString(source.WEB_SESSION_COOKIE_NAME)
+      ? source.WEB_SESSION_COOKIE_NAME
+      : DEFAULT_WEB_SESSION_COOKIE_NAME;
+
+    candidate.SESSION_TOKEN_HASH_KEY = source.SESSION_TOKEN_HASH_KEY;
+    candidate.CEREMONY_RATE_LIMIT_HASH_KEY = source.CEREMONY_RATE_LIMIT_HASH_KEY;
+    candidate.WEB_SESSION_COOKIE_NAME = cookieName;
+    candidate.WEBAUTHN_ALLOWED_ORIGINS = source.WEBAUTHN_ALLOWED_ORIGINS;
+  }
+
+  if (passwordChangeEnabled) {
+    if (!isNonEmptyString(source.SESSION_TOKEN_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: SESSION_TOKEN_HASH_KEY is required when PASSWORD_CHANGE_ENABLED is true',
+      );
+    }
+    if (source.SESSION_TOKEN_HASH_KEY.length < SESSION_TOKEN_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: SESSION_TOKEN_HASH_KEY must be at least ${String(SESSION_TOKEN_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+    if (!isNonEmptyString(source.CEREMONY_RATE_LIMIT_HASH_KEY)) {
+      throw new Error(
+        'Invalid environment configuration: CEREMONY_RATE_LIMIT_HASH_KEY is required when PASSWORD_CHANGE_ENABLED is true',
+      );
+    }
+    if (source.CEREMONY_RATE_LIMIT_HASH_KEY.length < CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH) {
+      throw new Error(
+        `Invalid environment configuration: CEREMONY_RATE_LIMIT_HASH_KEY must be at least ${String(CEREMONY_RATE_LIMIT_HASH_KEY_MIN_LENGTH)} characters`,
+      );
+    }
+    if (!isNonEmptyString(source.WEBAUTHN_ALLOWED_ORIGINS)) {
+      throw new Error(
+        'Invalid environment configuration: WEBAUTHN_ALLOWED_ORIGINS is required when PASSWORD_CHANGE_ENABLED is true (shared web session CSRF)',
+      );
+    }
     parseAllowedOrigins(source.WEBAUTHN_ALLOWED_ORIGINS, {
       nodeEnv,
       appEnv,

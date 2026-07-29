@@ -37,6 +37,7 @@ const APPROVED_REVOCATION_REASONS = new Set<AccountSessionRevocationReason>([
   'security_version_changed',
   'passkey_added',
   'passkey_revoked',
+  'password_changed',
 ]);
 
 async function assertSessionEligibleAccount(db: Db, accountId: string): Promise<void> {
