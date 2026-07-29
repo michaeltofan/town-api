@@ -29,7 +29,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     contractVersion: '1.0.0',
     title: 'TOWN Authentication Ceremony Foundation V1',
     description:
-      'Architecture contract for ceremony data/session foundation, email verification runtime (including Resend delivery), initial password setup runtime (Model B), first-passkey WebAuthn registration runtime, passkey authentication session runtime, bounded account recovery runtime, and session-authenticated passkey management / security reauthentication runtime. Recovery login sessions, membership, and JWTs remain out of scope. Public password sign-in remains out of scope.',
+      'Architecture contract for ceremony data/session foundation, email verification runtime (including Resend delivery), initial password setup runtime (Model B), first-passkey WebAuthn registration runtime, passkey authentication session runtime, flag-gated public password sign-in runtime, bounded account recovery runtime, and session-authenticated passkey management / security reauthentication runtime. Recovery login sessions, membership, and JWTs remain out of scope.',
     status: 'partially_implemented',
     implementedLiveRoutes: true,
     implementedRoutes: [
@@ -40,6 +40,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       'POST /v1/account/passkeys/registration/verify',
       'POST /v1/authentication/passkeys/options',
       'POST /v1/authentication/passkeys/verify',
+      'POST /v1/authentication/password',
       'GET /v1/authentication/session',
       'POST /v1/authentication/session/rotate',
       'POST /v1/authentication/logout',
@@ -57,7 +58,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       'DELETE /v1/account/passkeys/:passkeyId',
     ],
     slice:
-      'ceremony_data_and_session_foundation_plus_email_verification_initial_password_setup_webauthn_registration_passkey_authentication_account_recovery_and_passkey_management_runtime',
+      'ceremony_data_and_session_foundation_plus_email_verification_initial_password_setup_webauthn_registration_passkey_authentication_password_sign_in_account_recovery_and_passkey_management_runtime',
     accountLifecycle: {
       statuses: [
         'pending_email',
@@ -160,7 +161,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     },
     sessionRuntimePolicy: {
       status: 'implemented',
-      featureFlag: 'PASSKEY_AUTHENTICATION_ENABLED',
+      featureFlag: 'PASSKEY_AUTHENTICATION_ENABLED or PASSWORD_SIGN_IN_ENABLED',
       webCookie: {
         name: '__Host-Http-town_session',
         source: 'WEB_SESSION_COOKIE_NAME',
@@ -185,6 +186,11 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         'Mobile sessions are extracted only from Authorization: Session',
         'Raw tokens, cookies, and Authorization headers are never logged intentionally',
       ],
+      signInIndependence: [
+        'Passkey options and verify are gated only by PASSKEY_AUTHENTICATION_ENABLED',
+        'Password sign-in is gated only by PASSWORD_SIGN_IN_ENABLED',
+        'Shared session introspection, rotation, logout, and logout-all are available when either flag is enabled',
+      ],
     },
     ceremonyRateLimits: {
       table: 'town.ceremony_rate_limits',
@@ -196,6 +202,8 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         'email_verification_attempt_challenge',
         'email_verification_attempt_email_ip',
         'password_setup_grant',
+        'password_sign_in_ip',
+        'password_sign_in_email',
         'passkey_options_ip',
         'passkey_options_client',
         'passkey_assertion_credential',
@@ -219,6 +227,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       semantics: [
         'Persistent atomic counters for ceremony-specific abuse controls',
         'password_setup_grant is enforced for initial password setup',
+        'password_sign_in_ip and password_sign_in_email are enforced for public password sign-in',
         'setup_options_grant and setup_verification_grant are enforced for WebAuthn registration',
         'recovery_request_*, recovery_email_attempt_*, recovery_options_grant, and recovery_verification_grant are enforced for account recovery',
         'passkey_inventory_account and manage_* / passkey_rename_account / passkey_revoke_account are enforced for passkey management',
@@ -330,6 +339,36 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         password_setup_grant: 5,
       },
       securityEvent: 'password_credential_created',
+    },
+    passwordSignInRuntime: {
+      status: 'implemented',
+      featureFlag: 'PASSWORD_SIGN_IN_ENABLED',
+      routes: ['POST /v1/authentication/password'],
+      independentOf: ['PASSWORD_AUTH_ENABLED', 'PASSKEY_AUTHENTICATION_ENABLED'],
+      createsAccount: false,
+      createsCredential: false,
+      createsSession: true,
+      sharedSessionLifecycle:
+        'GET/POST session introspection, rotation, logout, and logout-all are available when PASSWORD_SIGN_IN_ENABLED or PASSKEY_AUTHENTICATION_ENABLED is true',
+      requiredAccountStatus: 'active',
+      requires: [
+        'unrevoked canonical email',
+        'verified primary email',
+        'active password credential',
+        'session eligibility (active passkey + linked civic actor)',
+      ],
+      antiEnumeration: true,
+      publicErrorCode: 'AUTHENTICATION_FAILED',
+      dummyVerification: 'in-memory Argon2id hash with production parameters; never stored',
+      sessionIssuance: {
+        web: 'Secure HttpOnly SameSite=Lax cookie only; no token in JSON',
+        mobile: 'sessionToken plus sessionExpiresAt JSON only; no Set-Cookie',
+      },
+      rateLimits: {
+        password_sign_in_ip_30m: 30,
+        password_sign_in_email_30m: 10,
+      },
+      neverReturns: ['accountId', 'email', 'credentialId', 'password', 'passwordHash'],
     },
     webauthnRegistrationRuntime: {
       status: 'implemented',
@@ -552,7 +591,8 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     explicitExclusions: [
       'recovery login / session issuance from recovery',
       'production recovery email delivery',
-      'public password sign-in',
+      'password recovery / reset / change',
+      'phone sign-in',
       'JWTs',
       'membership',
       'Stripe',

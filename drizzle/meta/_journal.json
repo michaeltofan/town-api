@@ -190,6 +190,13 @@
       "when": 1785523200000,
       "tag": "0026_initial_password_setup_ceremony",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785609600000,
+      "tag": "0027_password_sign_in_ceremony_rate_limits",
+      "breakpoints": true
     }
   ]
 }

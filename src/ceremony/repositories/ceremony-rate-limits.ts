@@ -38,6 +38,8 @@ const APPROVED_SCOPES = new Set<CeremonyRateLimitScope>([
   'billing_checkout_account',
   'billing_portal_account',
   'password_setup_grant',
+  'password_sign_in_ip',
+  'password_sign_in_email',
 ]);
 
 function assertApprovedScope(scope: CeremonyRateLimitScope): CeremonyRateLimitScope {

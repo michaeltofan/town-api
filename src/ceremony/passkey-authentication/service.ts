@@ -33,7 +33,7 @@ import {
   revokeAllAccountSessions,
   touchAccountSession,
 } from '../repositories/account-sessions.js';
-import { requirePasskeyAuthenticationConfig } from './config.js';
+import { requirePasskeyAuthenticationConfig, requireSessionRuntimeConfig } from './config.js';
 import {
   generateSessionToken,
   hashAuthenticationChallenge,
@@ -530,7 +530,7 @@ export async function resolveActiveSession(
   deps: PasskeyAuthenticationDeps,
   input: { clientType: AccountSessionClientType; token: string },
 ): Promise<AccountSessionRow | null> {
-  const config = requirePasskeyAuthenticationConfig(deps.env);
+  const config = requireSessionRuntimeConfig(deps.env);
   const now = deps.now();
   const tokenHash = hashSessionToken({
     hashKey: config.sessionTokenHashKey,
@@ -557,7 +557,7 @@ export async function rotateCurrentSession(
   deps: PasskeyAuthenticationDeps,
   input: { clientType: AccountSessionClientType; token: string; requestId?: string | null },
 ): Promise<AuthenticationSuccess> {
-  const config = requirePasskeyAuthenticationConfig(deps.env);
+  const config = requireSessionRuntimeConfig(deps.env);
   const now = deps.now();
   const generateId = deps.generateId ?? (() => randomUUID());
   const generateToken = deps.generateToken ?? generateSessionToken;

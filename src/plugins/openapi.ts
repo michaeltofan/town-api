@@ -38,7 +38,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Authentication',
           description:
-            'Passkey authentication and opaque account sessions. Web clients use only the Secure HttpOnly session cookie; mobile clients use only Authorization: Session <token>. Sessions do not grant membership, payment, local verification, or civic entitlement.',
+            'Passkey authentication, flag-gated public password sign-in (POST /v1/authentication/password), and opaque account sessions. Passkey options/verify are gated by PASSKEY_AUTHENTICATION_ENABLED; password sign-in by PASSWORD_SIGN_IN_ENABLED. Shared session introspection, rotation, and logout are available when either flag is enabled. Web clients use only the Secure HttpOnly session cookie; mobile clients use only Authorization: Session <token>. Sessions do not grant membership, payment, local verification, or civic entitlement. Both flags default to false.',
         },
         {
           name: 'Billing',

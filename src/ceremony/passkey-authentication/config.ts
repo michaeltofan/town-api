@@ -21,6 +21,50 @@ export type PasskeyAuthenticationConfig = {
   webSessionCookieName: string;
 };
 
+/** Shared opaque-session runtime used by both passkey and password sign-in. */
+export type SessionRuntimeConfig = {
+  sessionTokenHashKey: string;
+  webSessionCookieName: string;
+  allowedOrigins: readonly string[];
+};
+
+function isSessionRuntimeEnabled(env: Env): boolean {
+  return env.PASSKEY_AUTHENTICATION_ENABLED || env.PASSWORD_SIGN_IN_ENABLED;
+}
+
+/**
+ * Resolve shared session transport config.
+ * Available when either PASSKEY_AUTHENTICATION_ENABLED or PASSWORD_SIGN_IN_ENABLED is true.
+ * Does not enable passkey options/verify.
+ */
+export function requireSessionRuntimeConfig(env: Env): SessionRuntimeConfig {
+  if (!isSessionRuntimeEnabled(env)) {
+    throw new Error('Session runtime is not enabled');
+  }
+
+  const sessionTokenHashKey = env.SESSION_TOKEN_HASH_KEY;
+  const allowedOriginsRaw = env.WEBAUTHN_ALLOWED_ORIGINS;
+  const webSessionCookieName = env.WEB_SESSION_COOKIE_NAME ?? DEFAULT_WEB_SESSION_COOKIE_NAME;
+
+  if (!sessionTokenHashKey || !allowedOriginsRaw) {
+    throw new Error('Session runtime secrets are not configured');
+  }
+  if (sessionTokenHashKey.length < SESSION_TOKEN_HASH_KEY_MIN_LENGTH) {
+    throw new Error('Session token hash key does not meet minimum length');
+  }
+
+  const allowedOrigins = parseAllowedOrigins(allowedOriginsRaw, {
+    nodeEnv: env.NODE_ENV,
+    appEnv: env.APP_ENV,
+  });
+
+  return {
+    sessionTokenHashKey,
+    webSessionCookieName,
+    allowedOrigins,
+  };
+}
+
 export function requirePasskeyAuthenticationConfig(env: Env): PasskeyAuthenticationConfig {
   if (!env.PASSKEY_AUTHENTICATION_ENABLED) {
     throw new Error('Passkey authentication is not enabled');
