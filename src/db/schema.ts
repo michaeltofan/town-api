@@ -401,7 +401,8 @@ export type PasswordKdfParametersRecord = {
 /**
  * Optional additional login credential (Argon2id PHC hash). Passkey remains required.
  * At most one active row per account (partial unique on account_id where revoked_at IS NULL).
- * Initial password setup is gated by PASSWORD_AUTH_ENABLED; password sign-in is not enabled in this slice.
+ * Initial password setup is gated by PASSWORD_AUTH_ENABLED.
+ * Public password sign-in is gated separately by PASSWORD_SIGN_IN_ENABLED.
  */
 export const accountPasswordCredentials = town.table(
   'account_password_credentials',
@@ -1149,7 +1150,9 @@ export const ceremonyRateLimits = town.table(
         'membership_inventory_account',
         'billing_checkout_account',
         'billing_portal_account',
-        'password_setup_grant'
+        'password_setup_grant',
+        'password_sign_in_ip',
+        'password_sign_in_email'
       )`,
     ),
     check('ceremony_rate_limits_attempt_count_nonnegative', sql`${table.attemptCount} >= 0`),
@@ -1248,7 +1251,9 @@ export type CeremonyRateLimitScope =
   | 'membership_inventory_account'
   | 'billing_checkout_account'
   | 'billing_portal_account'
-  | 'password_setup_grant';
+  | 'password_setup_grant'
+  | 'password_sign_in_ip'
+  | 'password_sign_in_email';
 export type IdentitySecurityEventType =
   | 'email_verification_requested'
   | 'email_verified'

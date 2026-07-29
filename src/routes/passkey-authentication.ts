@@ -1,7 +1,10 @@
 import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 import type { Env } from '../config/env.js';
-import { requirePasskeyAuthenticationConfig } from '../ceremony/passkey-authentication/config.js';
+import {
+  requirePasskeyAuthenticationConfig,
+  requireSessionRuntimeConfig,
+} from '../ceremony/passkey-authentication/config.js';
 import { assertWebCookieCsrf } from '../ceremony/passkey-authentication/csrf.js';
 import {
   PasskeyAuthenticationOptionsBodySchema,
@@ -39,6 +42,15 @@ function assertPasskeyAuthenticationEnabled(
   reply: { callNotFound: () => unknown },
 ): boolean {
   if (!env.PASSKEY_AUTHENTICATION_ENABLED) {
+    void reply.callNotFound();
+    return false;
+  }
+  return true;
+}
+
+/** Shared session lifecycle is available when either sign-in method is enabled. */
+function assertSessionRuntimeEnabled(env: Env, reply: { callNotFound: () => unknown }): boolean {
+  if (!env.PASSKEY_AUTHENTICATION_ENABLED && !env.PASSWORD_SIGN_IN_ENABLED) {
     void reply.callNotFound();
     return false;
   }
@@ -251,17 +263,17 @@ export const passkeyAuthenticationRoutes: FastifyPluginCallbackTypebox<
         tags: ['Authentication'],
         summary: 'Inspect the current authentication session',
         description:
-          'Returns current session state. Web clients authenticate only with the configured session cookie; mobile clients authenticate only with Authorization: Session <token>. Invalid or missing sessions return authenticated:false.',
+          'Returns current session state. Web clients authenticate only with the configured session cookie; mobile clients authenticate only with Authorization: Session <token>. Invalid or missing sessions return authenticated:false. Available when PASSKEY_AUTHENTICATION_ENABLED or PASSWORD_SIGN_IN_ENABLED is true.',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
         response: PasskeyAuthenticationRouteResponses.session,
       },
     },
     async (request, reply) => {
-      if (!assertPasskeyAuthenticationEnabled(env, reply)) {
+      if (!assertSessionRuntimeEnabled(env, reply)) {
         return;
       }
 
-      const config = requirePasskeyAuthenticationConfig(env);
+      const config = requireSessionRuntimeConfig(env);
       const extracted = extractSessionTransport({
         authorization: request.headers.authorization,
         cookieName: config.webSessionCookieName,
@@ -293,17 +305,17 @@ export const passkeyAuthenticationRoutes: FastifyPluginCallbackTypebox<
         tags: ['Authentication'],
         summary: 'Rotate the current authentication session',
         description:
-          'Replaces the current session token without refreshing authentication freshness. Web cookie sessions require same-origin/same-site CSRF evidence and receive a replacement Secure HttpOnly cookie. Mobile sessions use Authorization: Session <token> and receive the replacement token in JSON.',
+          'Replaces the current session token without refreshing authentication freshness. Web cookie sessions require same-origin/same-site CSRF evidence and receive a replacement Secure HttpOnly cookie. Mobile sessions use Authorization: Session <token> and receive the replacement token in JSON. Available when PASSKEY_AUTHENTICATION_ENABLED or PASSWORD_SIGN_IN_ENABLED is true.',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
         response: PasskeyAuthenticationRouteResponses.rotate,
       },
     },
     async (request, reply) => {
-      if (!assertPasskeyAuthenticationEnabled(env, reply)) {
+      if (!assertSessionRuntimeEnabled(env, reply)) {
         return;
       }
 
-      const config = requirePasskeyAuthenticationConfig(env);
+      const config = requireSessionRuntimeConfig(env);
       const extracted = extractSessionTransport({
         authorization: request.headers.authorization,
         cookieName: config.webSessionCookieName,
@@ -366,17 +378,17 @@ export const passkeyAuthenticationRoutes: FastifyPluginCallbackTypebox<
         tags: ['Authentication'],
         summary: 'Logout the current authentication session',
         description:
-          'Revokes the current session when present. Web cookie sessions require same-origin/same-site CSRF evidence and the response clears the configured session cookie. The operation is idempotent.',
+          'Revokes the current session when present. Web cookie sessions require same-origin/same-site CSRF evidence and the response clears the configured session cookie. The operation is idempotent. Available when PASSKEY_AUTHENTICATION_ENABLED or PASSWORD_SIGN_IN_ENABLED is true.',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
         response: PasskeyAuthenticationRouteResponses.logout,
       },
     },
     async (request, reply) => {
-      if (!assertPasskeyAuthenticationEnabled(env, reply)) {
+      if (!assertSessionRuntimeEnabled(env, reply)) {
         return;
       }
 
-      const config = requirePasskeyAuthenticationConfig(env);
+      const config = requireSessionRuntimeConfig(env);
       const extracted = extractSessionTransport({
         authorization: request.headers.authorization,
         cookieName: config.webSessionCookieName,
@@ -417,17 +429,17 @@ export const passkeyAuthenticationRoutes: FastifyPluginCallbackTypebox<
         tags: ['Authentication'],
         summary: 'Logout all authentication sessions',
         description:
-          'Revokes all active sessions for the authenticated account. Requires a fresh authentication session. Web cookie sessions require same-origin/same-site CSRF evidence and the response clears the configured session cookie.',
+          'Revokes all active sessions for the authenticated account. Requires a fresh authentication session. Web cookie sessions require same-origin/same-site CSRF evidence and the response clears the configured session cookie. Available when PASSKEY_AUTHENTICATION_ENABLED or PASSWORD_SIGN_IN_ENABLED is true.',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
         response: PasskeyAuthenticationRouteResponses.logoutAll,
       },
     },
     async (request, reply) => {
-      if (!assertPasskeyAuthenticationEnabled(env, reply)) {
+      if (!assertSessionRuntimeEnabled(env, reply)) {
         return;
       }
 
-      const config = requirePasskeyAuthenticationConfig(env);
+      const config = requireSessionRuntimeConfig(env);
       const extracted = extractSessionTransport({
         authorization: request.headers.authorization,
         cookieName: config.webSessionCookieName,

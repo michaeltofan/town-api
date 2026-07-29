@@ -22,6 +22,7 @@ import { membershipRoutes } from './routes/membership.js';
 import { passkeyManagementRoutes } from './routes/passkey-management.js';
 import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { passwordSetupRoutes } from './routes/password-setup.js';
+import { passwordAuthenticationRoutes } from './routes/password-authentication.js';
 import { signalsRoutes } from './routes/signals.js';
 import { signalModerationRoutes } from './routes/signal-moderation.js';
 import { accountModerationRoutes } from './routes/account-moderation.js';
@@ -67,6 +68,11 @@ export type BuildAppOptions = {
     now?: () => string;
     generateId?: () => string;
     generateSetupToken?: () => string;
+  };
+  passwordAuthentication?: {
+    now?: () => string;
+    generateId?: () => string;
+    generateToken?: () => string;
   };
   passkeyAuthentication?: {
     now?: () => string;
@@ -294,6 +300,18 @@ export async function buildApp(options: BuildAppOptions) {
       : {}),
     ...(options.passwordSetup?.generateSetupToken !== undefined
       ? { generateSetupToken: options.passwordSetup.generateSetupToken }
+      : {}),
+  });
+  await app.register(passwordAuthenticationRoutes, {
+    env: options.env,
+    ...(options.passwordAuthentication?.now !== undefined
+      ? { now: options.passwordAuthentication.now }
+      : {}),
+    ...(options.passwordAuthentication?.generateId !== undefined
+      ? { generateId: options.passwordAuthentication.generateId }
+      : {}),
+    ...(options.passwordAuthentication?.generateToken !== undefined
+      ? { generateToken: options.passwordAuthentication.generateToken }
       : {}),
   });
   await app.register(passkeyManagementRoutes, {
