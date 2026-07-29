@@ -24,6 +24,7 @@ import {
 import {
   addAccountEmail,
   findActiveEmailByNormalized,
+  findCanonicalEmailByNormalized,
   revokeEmail,
   setPrimaryEmail,
   verifyEmail,
@@ -270,6 +271,42 @@ describe('account identity repositories', () => {
     expect(
       await findActiveEmailByNormalized(db(), normalizeEmail('ownername+tag@example.com')),
     ).toBeNull();
+
+    // Permanent exact ownership: a revoked email_normalized cannot be attached to
+    // another account, and historical ownership remains inspectable.
+    await expect(
+      addAccountEmail(db(), {
+        id: '21000000-0000-4000-8000-000000000014',
+        accountId: '20000000-0000-4000-8000-000000000099',
+        email: 'ownername+tag@example.com',
+        isPrimary: false,
+        createdAt: T3,
+        updatedAt: T3,
+      }),
+    ).rejects.toMatchObject({
+      code: 'EMAIL_ALREADY_ACTIVE',
+    } satisfies Partial<IdentityInvariantError>);
+
+    const historical = await findCanonicalEmailByNormalized(
+      db(),
+      normalizeEmail('ownername+tag@example.com'),
+    );
+    expect(historical?.accountId).toBe(accountId);
+    expect(historical?.revokedAt).toBeTruthy();
+
+    // Same account cannot accumulate a second row for the same exact normalized email.
+    await expect(
+      addAccountEmail(db(), {
+        id: '21000000-0000-4000-8000-000000000015',
+        accountId,
+        email: 'ownername+tag@EXAMPLE.com',
+        isPrimary: false,
+        createdAt: T3,
+        updatedAt: T3,
+      }),
+    ).rejects.toMatchObject({
+      code: 'EMAIL_ALREADY_ACTIVE',
+    } satisfies Partial<IdentityInvariantError>);
   });
 
   it('supports multiple passkeys and protects the final active passkey', async () => {

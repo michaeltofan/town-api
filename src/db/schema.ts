@@ -322,9 +322,9 @@ export const accountEmails = town.table(
       foreignColumns: [accounts.id],
       name: 'account_emails_account_id_fkey',
     }).onDelete('restrict'),
-    uniqueIndex('account_emails_active_normalized_unique')
-      .on(table.emailNormalized)
-      .where(sql`${table.revokedAt} is null`),
+    // Permanent exact ownership: a normalized email may belong to at most
+    // one account row forever, including after revocation.
+    uniqueIndex('account_emails_normalized_unique').on(table.emailNormalized),
     uniqueIndex('account_emails_one_active_primary')
       .on(table.accountId)
       .where(sql`${table.isPrimary} = true and ${table.revokedAt} is null`),

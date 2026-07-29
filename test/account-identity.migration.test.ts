@@ -83,7 +83,7 @@ describe('account identity migration', () => {
     const indexNames = indexes.rows.map((row) => row.indexname);
     expect(indexNames).toEqual(
       expect.arrayContaining([
-        'account_emails_active_normalized_unique',
+        'account_emails_normalized_unique',
         'account_emails_one_active_primary',
         'account_password_credentials_one_active_per_account',
         'actors_account_id_unique',
