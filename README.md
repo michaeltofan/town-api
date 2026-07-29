@@ -149,11 +149,12 @@ This slice adds canonical identity tables and repository invariants. It does **n
 
 ### Account states
 
-`pending_email` → `pending_passkey` → `active` ↔ `suspended` → `closed`
+`pending_email` → `pending_password` → `pending_passkey` → `active` ↔ `suspended` → `closed`
 
 Valid transitions are repository-enforced. Active requires:
 
 - verified primary email
+- active password credential
 - at least one active passkey
 - linked civic actor
 
@@ -215,7 +216,7 @@ Live `docs/openapi.v1.json` continues to list only implemented routes.
 
 ## Authentication ceremony foundation
 
-Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated email-verification runtime for account setup. Slice 3 adds first-passkey WebAuthn registration runtime (setup-grant authorized). Slice 4 adds passkey authentication assertions, opaque web/mobile sessions, rotation, logout, logout-all, web cookies, and CSRF checks. Slice 5 adds bounded account recovery (email challenge → recovery grant → recovery passkey registration) without issuing a normal login session. These slices do **not** implement production email delivery, recovery login sessions, membership, or JWTs.
+Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated email-verification runtime for account setup. Initial password setup (Model B) sits between email verification and first-passkey registration (`pending_email` → `pending_password` → `pending_passkey` → `active`), gated by `PASSWORD_AUTH_ENABLED`. Slice 3 adds first-passkey WebAuthn registration runtime (setup-grant authorized). Slice 4 adds passkey authentication assertions, opaque web/mobile sessions, rotation, logout, logout-all, web cookies, and CSRF checks. Slice 5 adds bounded account recovery (email challenge → recovery grant → recovery passkey registration) without issuing a normal login session. These slices do **not** implement production email delivery, recovery login sessions, public password sign-in, membership, or JWTs.
 
 ### Domain separation
 
@@ -232,19 +233,19 @@ Slice 1 adds persistent ceremony data and session records. Slice 2 adds gated em
 
 | Record                  | Role                                                                                |
 | ----------------------- | ----------------------------------------------------------------------------------- |
-| `town.setup_grants`     | Restricted authority after email verification and before first passkey registration |
-| `town.recovery_grants`  | Restricted recovery authority; not a normal session                                 |
-| `town.account_sessions` | Opaque authenticated sessions for web/mobile clients                                |
+| `town.setup_grants`     | Purpose-bound restricted authority for initial password setup or first-passkey registration |
+| `town.recovery_grants`  | Restricted recovery authority; not a normal session                                         |
+| `town.account_sessions` | Opaque authenticated sessions for web/mobile clients                                        |
 
 Setup grants:
 
-- purpose: `initial_passkey_registration` only
+- purposes: `initial_password_setup` | `initial_passkey_registration` (purpose-bound; a grant never authorizes both)
 - TTL: **15 minutes**
 - stored as `token_hash` only (raw tokens never stored)
 - are **not** sessions
 - cannot access normal account APIs, civic actions, or membership operations
-- cannot create a session without completed passkey registration
-- authorize only `pending_passkey` accounts
+- cannot create a session
+- `initial_password_setup` requires `pending_password`; `initial_passkey_registration` requires `pending_passkey`
 
 ### Server-side opaque sessions
 
@@ -260,7 +261,7 @@ Client types: `web` | `mobile`.
 
 Rules:
 
-- creation requires an **active** account with verified primary email, at least one active passkey, and a linked civic actor
+- creation requires an **active** account with verified primary email, an active password credential, at least one active passkey, and a linked civic actor
 - suspended/closed/pending accounts cannot receive sessions
 - setup grants and recovery grants cannot create sessions
 - ordinary activity may extend `idle_expires_at` only (never absolute expiry, never `authenticated_at`)
@@ -277,18 +278,20 @@ Rules:
 - uniqueness: `(scope, subject_hash, window_started_at)`
 - no Redis
 - Slice 3 enforces `setup_options_grant` (5 / grant) and `setup_verification_grant` (5 failed verifies / grant)
+- Initial password setup enforces `password_setup_grant` (5 / grant)
 - Slice 4 enforces passkey authentication option/assertion limits by hashed IP, anonymous client key, and credential subject
 - Slice 5 enforces recovery request, email-attempt, options-grant, and verification-grant limits
 
 ### Additional identity security event types
 
-Preserved prior types, plus Slice 3/4/5:
+Preserved prior types, plus Slice 3/4/5 and initial password setup:
 
 - `passkey_registration_failed`
 - `account_activated`
 - `authentication_succeeded`
 - `recovery_email_verified`
 - `recovery_registration_failed`
+- `password_credential_created`
 
 ### Deterministic ceremony fixtures and contract
 
@@ -314,8 +317,8 @@ Email verification proves control of an email address during account setup. It d
 | Delivery mode          | `test`, `development`, or `resend`                                                              |
 | Code                   | 6 decimal digits, crypto-secure, 10-minute TTL, max 5 attempts                                  |
 | Resend                 | invalidates prior active `verify_email` challenges (`revoked_at`)                               |
-| Success transition     | `pending_email` → `pending_passkey`                                                             |
-| Success authority      | one restricted setup grant (`initial_passkey_registration`, 15 minutes)                         |
+| Success transition     | `pending_email` → `pending_password`                                                            |
+| Success authority      | one restricted setup grant (`initial_password_setup`, 15 minutes); `pending_passkey` re-entry reissues `initial_passkey_registration` |
 | Anti-enumeration       | request always returns generic `202 VERIFICATION_REQUEST_ACCEPTED` plus a UUID `verificationId` |
 | Trusted proxy          | `TRUST_PROXY` default `false` (do not trust arbitrary `X-Forwarded-For`)                        |
 
@@ -336,6 +339,25 @@ Rate limits (persistent `town.ceremony_rate_limits`):
 - IP: 10 / 15 minutes, 50 / 24 hours
 - delivery cooldown: 60 seconds per normalized email
 - failed attempts: 5 / challenge; 10 email+IP / 30 minutes
+
+### Initial password setup runtime (Model B)
+
+Sets the initial password for `pending_password` accounts after email verification. Does **not** authenticate a session and does **not** activate an account. Public password sign-in remains out of scope.
+
+| Item               | Policy                                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Feature flag       | `PASSWORD_AUTH_ENABLED` (default `false`)                                                                   |
+| Authorization      | `Authorization: SetupGrant <opaque-token>` with purpose `initial_password_setup`                            |
+| Success            | `PASSWORD_SET`; stores Argon2id credential; `pending_password` → `pending_passkey`; hands off passkey grant |
+| Session issuance   | **none**                                                                                                    |
+| Public error       | `PASSWORD_SETUP_FAILED`                                                                                     |
+| Rate limit         | `password_setup_grant`: 5 / grant                                                                            |
+
+Implemented route:
+
+| Method | Path                    | Behavior                                                                                          |
+| ------ | ----------------------- | ------------------------------------------------------------------------------------------------- |
+| `POST` | `/v1/account/password`  | Set initial password; consume password-setup grant; issue `initial_passkey_registration` grant    |
 
 ### WebAuthn registration runtime (Slice 3)
 
@@ -359,7 +381,7 @@ First-passkey registration for accounts that already have a verified primary ema
 | Challenge TTL            | **5 minutes**; one active `register` challenge per account; hash-only storage                    |
 | Ceremony reference       | non-secret `registrationCeremonyId` locates the challenge row; setup grant remains authorization |
 | Credential storage       | `town.passkey_credentials` (credential id + public key bytes; never private keys / biometrics)   |
-| Activation               | atomic: credential + civic actor (`community_id` null) + link + `pending_passkey` → `active`     |
+| Activation               | atomic: credential + civic actor (`community_id` null) + link + active password credential + `pending_passkey` → `active` |
 | Concurrency              | exactly one concurrent verify may succeed                                                        |
 | Session issuance         | **none**                                                                                         |
 
