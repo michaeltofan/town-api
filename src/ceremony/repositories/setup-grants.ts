@@ -3,6 +3,7 @@ import type { Database } from '../../db/client.js';
 import {
   accounts,
   setupGrants,
+  type AccountStatus,
   type SetupGrantPurpose,
   type SetupGrantRow,
 } from '../../db/schema.js';
@@ -11,7 +12,39 @@ import { CeremonyInvariantError } from '../errors.js';
 
 type Db = Database['db'];
 
-const APPROVED_PURPOSES = new Set<SetupGrantPurpose>(['initial_passkey_registration']);
+const APPROVED_PURPOSES = new Set<SetupGrantPurpose>([
+  'initial_password_setup',
+  'initial_passkey_registration',
+]);
+
+const REQUIRED_STATUS_BY_PURPOSE: Record<SetupGrantPurpose, AccountStatus> = {
+  initial_password_setup: 'pending_password',
+  initial_passkey_registration: 'pending_passkey',
+};
+
+function assertApprovedPurpose(purpose: SetupGrantPurpose): SetupGrantPurpose {
+  if (!APPROVED_PURPOSES.has(purpose)) {
+    throw new CeremonyInvariantError('INVALID_SETUP_GRANT_PURPOSE', 'Invalid setup grant purpose');
+  }
+  return purpose;
+}
+
+function requiredStatusForPurpose(purpose: SetupGrantPurpose): AccountStatus {
+  return REQUIRED_STATUS_BY_PURPOSE[assertApprovedPurpose(purpose)];
+}
+
+function statusMismatchError(purpose: SetupGrantPurpose): CeremonyInvariantError {
+  if (purpose === 'initial_password_setup') {
+    return new CeremonyInvariantError(
+      'SETUP_GRANT_REQUIRES_PENDING_PASSWORD',
+      'Password setup grants may only be issued for pending_password accounts',
+    );
+  }
+  return new CeremonyInvariantError(
+    'SETUP_GRANT_REQUIRES_PENDING_PASSKEY',
+    'Passkey setup grants may only be issued for pending_passkey accounts',
+  );
+}
 
 /**
  * Revoke previous unconsumed, unrevoked, unexpired setup grants for an account/purpose.
@@ -25,9 +58,7 @@ export async function revokeActiveSetupGrantsForAccount(
     excludeGrantId?: string;
   },
 ): Promise<number> {
-  if (!APPROVED_PURPOSES.has(input.purpose)) {
-    throw new CeremonyInvariantError('INVALID_SETUP_GRANT_PURPOSE', 'Invalid setup grant purpose');
-  }
+  assertApprovedPurpose(input.purpose);
   const conditions = [
     eq(setupGrants.accountId, input.accountId),
     eq(setupGrants.purpose, input.purpose),
@@ -49,6 +80,7 @@ export async function revokeActiveSetupGrantsForAccount(
 /**
  * Setup grants are restricted pre-authentication authority, not sessions.
  * They cannot authorize normal APIs, civic actions, membership, or session creation alone.
+ * Each purpose authorizes exactly one setup step and requires a matching account status.
  */
 export async function createSetupGrant(
   db: Db,
@@ -62,9 +94,7 @@ export async function createSetupGrant(
   },
 ): Promise<SetupGrantRow> {
   const tokenHash = assertHashedBytes(input.tokenHash, 'setup grant tokenHash');
-  if (!APPROVED_PURPOSES.has(input.purpose)) {
-    throw new CeremonyInvariantError('INVALID_SETUP_GRANT_PURPOSE', 'Invalid setup grant purpose');
-  }
+  const purpose = assertApprovedPurpose(input.purpose);
   if (new Date(input.expiresAt).getTime() <= new Date(input.createdAt).getTime()) {
     throw new CeremonyInvariantError(
       'INVALID_GRANT_WINDOW',
@@ -81,11 +111,9 @@ export async function createSetupGrant(
   if (!account) {
     throw new CeremonyInvariantError('ACCOUNT_NOT_FOUND', 'Account was not found');
   }
-  if (account.status !== 'pending_passkey') {
-    throw new CeremonyInvariantError(
-      'SETUP_GRANT_REQUIRES_PENDING_PASSKEY',
-      'Setup grants may only be issued for pending_passkey accounts',
-    );
+  const requiredStatus = requiredStatusForPurpose(purpose);
+  if (account.status !== requiredStatus) {
+    throw statusMismatchError(purpose);
   }
 
   const rows = await db
@@ -94,7 +122,7 @@ export async function createSetupGrant(
       id: input.id,
       accountId: input.accountId,
       tokenHash,
-      purpose: input.purpose,
+      purpose,
       expiresAt: input.expiresAt,
       consumedAt: null,
       revokedAt: null,
@@ -118,9 +146,7 @@ export async function findActiveSetupGrantByTokenHash(
   },
 ): Promise<SetupGrantRow> {
   const tokenHash = assertHashedBytes(input.tokenHash, 'setup grant tokenHash');
-  if (!APPROVED_PURPOSES.has(input.purpose)) {
-    throw new CeremonyInvariantError('INVALID_SETUP_GRANT_PURPOSE', 'Invalid setup grant purpose');
-  }
+  const purpose = assertApprovedPurpose(input.purpose);
 
   const rows = await db
     .select()
@@ -131,7 +157,7 @@ export async function findActiveSetupGrantByTokenHash(
   if (!grant) {
     throw new CeremonyInvariantError('SETUP_GRANT_NOT_FOUND', 'Setup grant was not found');
   }
-  if (grant.purpose !== input.purpose) {
+  if (grant.purpose !== purpose) {
     throw new CeremonyInvariantError('SETUP_GRANT_WRONG_PURPOSE', 'Setup grant purpose mismatch');
   }
   if (input.accountId !== undefined && grant.accountId !== input.accountId) {
@@ -159,11 +185,8 @@ export async function findActiveSetupGrantByTokenHash(
   if (!account) {
     throw new CeremonyInvariantError('ACCOUNT_NOT_FOUND', 'Account was not found');
   }
-  if (account.status !== 'pending_passkey') {
-    throw new CeremonyInvariantError(
-      'SETUP_GRANT_REQUIRES_PENDING_PASSKEY',
-      'Setup grants authorize only pending_passkey accounts',
-    );
+  if (account.status !== requiredStatusForPurpose(purpose)) {
+    throw statusMismatchError(purpose);
   }
 
   return grant;
@@ -178,9 +201,7 @@ export async function consumeSetupGrant(
     now: string;
   },
 ): Promise<SetupGrantRow> {
-  if (!APPROVED_PURPOSES.has(input.purpose)) {
-    throw new CeremonyInvariantError('INVALID_SETUP_GRANT_PURPOSE', 'Invalid setup grant purpose');
-  }
+  assertApprovedPurpose(input.purpose);
 
   const updated = await db
     .update(setupGrants)

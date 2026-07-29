@@ -45,7 +45,11 @@ async function assertSessionEligibleAccount(db: Db, accountId: string): Promise<
   if (!account) {
     throw new CeremonyInvariantError('ACCOUNT_NOT_FOUND', 'Account was not found');
   }
-  if (account.status === 'pending_email' || account.status === 'pending_passkey') {
+  if (
+    account.status === 'pending_email' ||
+    account.status === 'pending_password' ||
+    account.status === 'pending_passkey'
+  ) {
     throw new CeremonyInvariantError(
       'SESSION_REQUIRES_ACTIVE_ACCOUNT',
       'Sessions require an active account',

@@ -183,6 +183,13 @@
       "when": 1785436800000,
       "tag": "0025_account_emails_normalized_unique_permanent",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785523200000,
+      "tag": "0026_initial_password_setup_ceremony",
+      "breakpoints": true
     }
   ]
 }

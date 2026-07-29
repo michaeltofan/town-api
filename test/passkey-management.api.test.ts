@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq, isNull } from 'drizzle-orm';
 import { accountSessions, identitySecurityEvents, passkeyCredentials } from '../src/db/schema.js';
 import { createSoftPasskeyMaterial } from './helpers/webauthn-soft-authenticator.js';
-import { completeEmailSetup } from './helpers/passkey-registration.js';
+import { completeEmailAndPasswordSetup } from './helpers/passkey-registration.js';
 import {
   addSecondPasskeyMobile,
   authenticatePasskey,
@@ -80,7 +80,7 @@ describe('passkey management api', () => {
   });
 
   it('keeps SetupGrant first-passkey registration on Slice 3 paths only', async () => {
-    const setup = await completeEmailSetup(app, delivery, 'Initial.Setup+setup@example.com');
+    const setup = await completeEmailAndPasswordSetup(app, delivery, 'Initial.Setup+setup@example.com');
     const optionsResponse = await app.inject({
       method: 'POST',
       url: '/v1/account/passkeys/registration/options',

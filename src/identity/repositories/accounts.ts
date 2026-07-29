@@ -2,6 +2,7 @@ import { and, count, eq, isNull } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import {
   accountEmails,
+  accountPasswordCredentials,
   accounts,
   actors,
   passkeyCredentials,
@@ -15,7 +16,8 @@ type Db = Database['db'];
 const WEBAUTHN_USER_HANDLE_BYTES = 32;
 
 const VALID_TRANSITIONS: Record<AccountStatus, readonly AccountStatus[]> = {
-  pending_email: ['pending_passkey'],
+  pending_email: ['pending_password'],
+  pending_password: ['pending_passkey'],
   pending_passkey: ['active'],
   active: ['suspended', 'closed'],
   suspended: ['active', 'closed'],
@@ -162,6 +164,22 @@ async function assertActiveRequirements(db: Db, accountId: string): Promise<void
     throw new IdentityInvariantError(
       'ACTIVE_REQUIRES_ACTIVE_PASSKEY',
       'Active account requires at least one active passkey',
+    );
+  }
+
+  const passwords = await db
+    .select({ value: count() })
+    .from(accountPasswordCredentials)
+    .where(
+      and(
+        eq(accountPasswordCredentials.accountId, accountId),
+        isNull(accountPasswordCredentials.revokedAt),
+      ),
+    );
+  if ((passwords[0]?.value ?? 0) < 1) {
+    throw new IdentityInvariantError(
+      'ACTIVE_REQUIRES_ACTIVE_PASSWORD',
+      'Active account requires an active password credential',
     );
   }
 

@@ -15,7 +15,7 @@ import { CONTROLLED_TEST_ACTOR_ID } from '../src/db/seeds/controlled-actor-conte
 import { toIsoTimestamp } from '../src/lib/timestamps.js';
 import { createSoftRegistrationResponse } from './helpers/webauthn-soft-authenticator.js';
 import {
-  completeEmailSetup,
+  completeEmailAndPasswordSetup,
   createPasskeyRegistrationTestApp,
   TEST_ORIGIN,
   TEST_RP_ID,
@@ -107,7 +107,7 @@ describe('passkey registration runtime API', () => {
   }
 
   async function createSetup(email = 'Passkey.User+setup@example.com') {
-    return await completeEmailSetup(currentApp(), currentDelivery(), email);
+    return await completeEmailAndPasswordSetup(currentApp(), currentDelivery(), email);
   }
 
   async function requestOptions(setupGrant: string) {
