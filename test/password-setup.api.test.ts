@@ -253,8 +253,9 @@ describe('initial password setup API', () => {
 
     const successBodies = results
       .filter((response) => response.statusCode === 200)
-      .map((response) =>
-        response.json<{ data: { status: string; setupGrant: string } }>().data.setupGrant,
+      .map(
+        (response) =>
+          response.json<{ data: { status: string; setupGrant: string } }>().data.setupGrant,
       );
     expect(successBodies).toHaveLength(1);
 
@@ -463,16 +464,18 @@ describe('initial password setup API', () => {
       purpose: 'initial_password_setup',
       token: retryToken,
     });
-    await currentApp().database.db.insert(setupGrants).values({
-      id: randomUUID(),
-      accountId: emailSetup.accountId,
-      tokenHash: retryTokenHash,
-      purpose: 'initial_password_setup',
-      createdAt: FIXED_NOW,
-      expiresAt: toIsoTimestamp(new Date(Date.parse(FIXED_NOW) + 15 * 60_000).toISOString()),
-      consumedAt: null,
-      revokedAt: null,
-    });
+    await currentApp()
+      .database.db.insert(setupGrants)
+      .values({
+        id: randomUUID(),
+        accountId: emailSetup.accountId,
+        tokenHash: retryTokenHash,
+        purpose: 'initial_password_setup',
+        createdAt: FIXED_NOW,
+        expiresAt: toIsoTimestamp(new Date(Date.parse(FIXED_NOW) + 15 * 60_000).toISOString()),
+        consumedAt: null,
+        revokedAt: null,
+      });
 
     const retryFreshGrant = await currentApp().inject({
       method: 'POST',
