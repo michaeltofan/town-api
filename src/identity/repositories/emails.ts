@@ -6,6 +6,18 @@ import { IdentityInvariantError } from '../errors.js';
 
 type Db = Database['db'];
 
+function isNormalizedEmailUniqueViolation(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : '';
+  const causeMessage =
+    error instanceof Error && error.cause instanceof Error ? error.cause.message : '';
+  return (
+    /account_emails_normalized_unique/i.test(message) ||
+    /account_emails_normalized_unique/i.test(causeMessage) ||
+    /account_emails_active_normalized_unique/i.test(message) ||
+    /account_emails_active_normalized_unique/i.test(causeMessage)
+  );
+}
+
 export async function addAccountEmail(
   db: Db,
   input: {
@@ -60,22 +72,19 @@ export async function addAccountEmail(
     }
     return row;
   } catch (error) {
-    const message = error instanceof Error ? error.message : '';
-    const causeMessage =
-      error instanceof Error && error.cause instanceof Error ? error.cause.message : '';
-    if (
-      /account_emails_active_normalized_unique/i.test(message) ||
-      /account_emails_active_normalized_unique/i.test(causeMessage)
-    ) {
+    if (isNormalizedEmailUniqueViolation(error)) {
       throw new IdentityInvariantError(
         'EMAIL_ALREADY_ACTIVE',
-        'An active account already uses this email',
+        'An account already uses this email',
       );
     }
     throw error;
   }
 }
 
+/**
+ * Active (unrevoked) email ownership lookup.
+ */
 export async function findActiveEmailByNormalized(
   db: Db,
   emailNormalized: string,
@@ -84,6 +93,22 @@ export async function findActiveEmailByNormalized(
     .select()
     .from(accountEmails)
     .where(and(eq(accountEmails.emailNormalized, emailNormalized), isNull(accountEmails.revokedAt)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Exact ownership lookup including revoked historical rows.
+ * Under the permanent unique index there is at most one row per email_normalized.
+ */
+export async function findCanonicalEmailByNormalized(
+  db: Db,
+  emailNormalized: string,
+): Promise<AccountEmailRow | null> {
+  const rows = await db
+    .select()
+    .from(accountEmails)
+    .where(eq(accountEmails.emailNormalized, emailNormalized))
     .limit(1);
   return rows[0] ?? null;
 }

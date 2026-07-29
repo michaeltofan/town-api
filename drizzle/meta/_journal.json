@@ -176,6 +176,13 @@
       "when": 1785350400000,
       "tag": "0024_account_password_credentials_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785436800000,
+      "tag": "0025_account_emails_normalized_unique_permanent",
+      "breakpoints": true
     }
   ]
 }

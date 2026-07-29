@@ -17,7 +17,7 @@ import {
 } from '../../identity/repositories/challenges.js';
 import {
   addAccountEmail,
-  findActiveEmailByNormalized,
+  findCanonicalEmailByNormalized,
   verifyEmail,
 } from '../../identity/repositories/emails.js';
 import { appendIdentitySecurityEvent } from '../../identity/repositories/security-events.js';
@@ -108,7 +108,17 @@ function toBuffer(value: unknown): Buffer {
   throw new InvalidOrExpiredChallengeError();
 }
 
-async function ensurePendingEmailAccount(
+type EnsurePendingResult =
+  | { kind: 'created' | 'existing_active'; accountId: string; emailId: string }
+  | { kind: 'revoked_owned'; accountId: string; emailId: string };
+
+/**
+ * Atomically create a pending account shell + primary email, or converge on the
+ * existing owner for the exact normalized email (including revoked rows).
+ *
+ * Never reuses a transaction after PostgreSQL aborts it on conflict.
+ */
+export async function ensurePendingEmailAccount(
   db: Db,
   input: {
     emailOriginal: string;
@@ -116,36 +126,99 @@ async function ensurePendingEmailAccount(
     now: string;
     generateId: () => string;
   },
-): Promise<{ accountId: string; emailId: string }> {
-  const existing = await findActiveEmailByNormalized(db, input.emailNormalized);
+): Promise<EnsurePendingResult> {
+  const existing = await findCanonicalEmailByNormalized(db, input.emailNormalized);
   if (existing) {
-    return { accountId: existing.accountId, emailId: existing.id };
+    if (existing.revokedAt != null) {
+      return { kind: 'revoked_owned', accountId: existing.accountId, emailId: existing.id };
+    }
+    return { kind: 'existing_active', accountId: existing.accountId, emailId: existing.id };
   }
 
   const accountId = input.generateId();
   const emailId = input.generateId();
   try {
-    await createAccountShell(db, {
-      id: accountId,
-      createdAt: input.now,
-      updatedAt: input.now,
+    await db.transaction(async (tx) => {
+      const dbTx = tx as unknown as Db;
+      await createAccountShell(dbTx, {
+        id: accountId,
+        createdAt: input.now,
+        updatedAt: input.now,
+      });
+      await addAccountEmail(dbTx, {
+        id: emailId,
+        accountId,
+        email: input.emailOriginal,
+        isPrimary: true,
+        createdAt: input.now,
+        updatedAt: input.now,
+      });
     });
-    await addAccountEmail(db, {
-      id: emailId,
-      accountId,
-      email: input.emailOriginal,
-      isPrimary: true,
-      createdAt: input.now,
-      updatedAt: input.now,
-    });
-    return { accountId, emailId };
-  } catch {
-    const raced = await findActiveEmailByNormalized(db, input.emailNormalized);
+    return { kind: 'created', accountId, emailId };
+  } catch (error) {
+    // Conflict recovery must use the outer connection — the aborted tx is unusable.
+    const raced = await findCanonicalEmailByNormalized(db, input.emailNormalized);
     if (!raced) {
-      throw new Error('Failed to create or locate account email');
+      throw error;
     }
-    return { accountId: raced.accountId, emailId: raced.id };
+    if (raced.revokedAt != null) {
+      return { kind: 'revoked_owned', accountId: raced.accountId, emailId: raced.id };
+    }
+    return { kind: 'existing_active', accountId: raced.accountId, emailId: raced.id };
   }
+}
+
+async function acceptWithSuppressedDelivery(
+  db: Db,
+  deps: EmailVerificationDeps,
+  input: {
+    accountId: string;
+    emailOriginal: string;
+    locale: SupportedLocale;
+    now: string;
+    generateId: () => string;
+    generateCode: () => string;
+    hashKey: string;
+    outcomeCategory: 'existing_account_guidance' | 'suppressed';
+    requestId?: string | null;
+  },
+): Promise<RequestVerificationResult> {
+  const dummyId = input.generateId();
+  const dummyCode = input.generateCode();
+  hashVerificationCode({
+    hashKey: input.hashKey,
+    challengeId: dummyId,
+    purpose: 'verify_email',
+    code: dummyCode,
+  });
+  try {
+    await deps.delivery.deliverVerificationCode({
+      email: input.emailOriginal,
+      locale: input.locale,
+      code: dummyCode,
+      expiresAt: addMinutes(input.now, EMAIL_VERIFICATION_CODE_TTL_MINUTES),
+      purpose: 'verify_email',
+      outcomeCategory: input.outcomeCategory,
+      requestId: input.requestId ?? null,
+    });
+  } catch {
+    // Delivery failures must not change the public accepted response.
+  }
+  await appendIdentitySecurityEvent(db, {
+    id: input.generateId(),
+    accountId: input.accountId,
+    eventType: 'email_verification_requested',
+    occurredAt: input.now,
+    requestId: input.requestId ?? null,
+    metadata: {
+      purpose: 'verify_email',
+      deliveryOutcome: input.outcomeCategory,
+    },
+  });
+  return {
+    status: 'VERIFICATION_REQUEST_ACCEPTED',
+    verificationId: dummyId,
+  };
 }
 
 export async function requestEmailVerification(
@@ -188,12 +261,14 @@ export async function requestEmailVerification(
     };
   }
 
-  const existingEmail = await findActiveEmailByNormalized(db, emailNormalized);
+  const existingEmail = await findCanonicalEmailByNormalized(db, emailNormalized);
   let accountId: string;
   let accountStatus: string;
+  let emailRevoked = false;
 
   if (existingEmail) {
     accountId = existingEmail.accountId;
+    emailRevoked = existingEmail.revokedAt != null;
     const account = await findAccountById(db, existingEmail.accountId);
     accountStatus = account?.status ?? 'unavailable';
   } else {
@@ -204,56 +279,53 @@ export async function requestEmailVerification(
       generateId,
     });
     accountId = created.accountId;
-    accountStatus = 'pending_email';
+    if (created.kind === 'revoked_owned') {
+      emailRevoked = true;
+      const account = await findAccountById(db, created.accountId);
+      accountStatus = account?.status ?? 'unavailable';
+    } else if (created.kind === 'created') {
+      accountStatus = 'pending_email';
+    } else {
+      const account = await findAccountById(db, created.accountId);
+      accountStatus = account?.status ?? 'unavailable';
+    }
   }
 
+  // Revoked historical ownership must not create another account or reactivate.
+  if (emailRevoked) {
+    return acceptWithSuppressedDelivery(db, deps, {
+      accountId,
+      emailOriginal,
+      locale,
+      now,
+      generateId,
+      generateCode,
+      hashKey,
+      outcomeCategory: 'suppressed',
+      ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+    });
+  }
+
+  // Active / suspended / closed keep existing safe guidance/suppression.
+  // pending_passkey is intentionally excluded so setup can re-enter safely.
   if (
     accountStatus === 'suspended' ||
     accountStatus === 'closed' ||
     accountStatus === 'active' ||
-    accountStatus === 'pending_passkey' ||
     accountStatus === 'unavailable'
   ) {
-    const outcomeCategory =
-      accountStatus === 'active' || accountStatus === 'pending_passkey'
-        ? 'existing_account_guidance'
-        : 'suppressed';
-    const dummyId = generateId();
-    const dummyCode = generateCode();
-    hashVerificationCode({
-      hashKey,
-      challengeId: dummyId,
-      purpose: 'verify_email',
-      code: dummyCode,
-    });
-    try {
-      await deps.delivery.deliverVerificationCode({
-        email: emailOriginal,
-        locale,
-        code: dummyCode,
-        expiresAt: addMinutes(now, EMAIL_VERIFICATION_CODE_TTL_MINUTES),
-        purpose: 'verify_email',
-        outcomeCategory,
-        requestId: input.requestId ?? null,
-      });
-    } catch {
-      // Delivery failures must not change the public accepted response.
-    }
-    await appendIdentitySecurityEvent(db, {
-      id: generateId(),
+    const outcomeCategory = accountStatus === 'active' ? 'existing_account_guidance' : 'suppressed';
+    return acceptWithSuppressedDelivery(db, deps, {
       accountId,
-      eventType: 'email_verification_requested',
-      occurredAt: now,
-      requestId: input.requestId ?? null,
-      metadata: {
-        purpose: 'verify_email',
-        deliveryOutcome: outcomeCategory,
-      },
+      emailOriginal,
+      locale,
+      now,
+      generateId,
+      generateCode,
+      hashKey,
+      outcomeCategory,
+      ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
     });
-    return {
-      status: 'VERIFICATION_REQUEST_ACCEPTED',
-      verificationId: dummyId,
-    };
   }
 
   const latest = await findLatestEmailChallengeForSetup(db, {
@@ -428,7 +500,9 @@ export async function completeEmailVerification(
         SELECT id, status FROM town.accounts WHERE id = ${accountId} FOR UPDATE
       `);
       const account = accountRows.rows[0];
-      if (account?.status !== 'pending_email') {
+      const isInitialVerification = account?.status === 'pending_email';
+      const isPendingPasskeyReentry = account?.status === 'pending_passkey';
+      if (!isInitialVerification && !isPendingPasskeyReentry) {
         return { ok: false };
       }
 
@@ -446,7 +520,11 @@ export async function completeEmailVerification(
         FOR UPDATE
       `);
       const email = emailRows.rows[0];
-      if (email?.is_primary !== true || email.verified_at !== null) {
+      if (email?.is_primary !== true) {
+        return { ok: false };
+      }
+      // Initial path still requires an unverified primary email.
+      if (isInitialVerification && email.verified_at !== null) {
         return { ok: false };
       }
 
@@ -490,11 +568,13 @@ export async function completeEmailVerification(
       }
 
       await verifyEmail(dbTx, { emailId: email.id, verifiedAt: now });
-      await transitionAccountState(dbTx, {
-        accountId,
-        to: 'pending_passkey',
-        at: now,
-      });
+      if (isInitialVerification) {
+        await transitionAccountState(dbTx, {
+          accountId,
+          to: 'pending_passkey',
+          at: now,
+        });
+      }
       await revokeActiveEmailChallengesForSetup(dbTx, {
         accountId,
         emailNormalized,
@@ -533,6 +613,7 @@ export async function completeEmailVerification(
         metadata: {
           purpose: 'verify_email',
           challengeState: 'consumed',
+          ...(isPendingPasskeyReentry ? { reentry: true } : {}),
         },
       });
 

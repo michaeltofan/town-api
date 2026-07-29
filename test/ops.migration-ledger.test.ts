@@ -128,7 +128,7 @@ describe('compareMigrationSequences', () => {
   it('loadExpectedMigrations matches the cached journal sequence', () => {
     const loaded = loadExpectedMigrations();
     expect(loaded).toEqual([...EXPECTED_MIGRATIONS]);
-    expect(loaded).toHaveLength(25);
+    expect(loaded).toHaveLength(26);
     for (const row of loaded) {
       expect(row.hash).toMatch(/^[a-f0-9]{64}$/);
       expect(row.tag.length).toBeGreaterThan(0);
