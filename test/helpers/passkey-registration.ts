@@ -161,7 +161,9 @@ export async function completePasswordSetup(
     payload: { password },
   });
   if (response.statusCode !== 200) {
-    throw new Error(`password setup failed with status ${String(response.statusCode)}`);
+    throw new Error(
+      `password setup failed with status ${String(response.statusCode)}: ${response.body}`,
+    );
   }
   return {
     setupGrant: response.json<{ data: { setupGrant: string } }>().data.setupGrant,
