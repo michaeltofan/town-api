@@ -29,12 +29,13 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     contractVersion: '1.0.0',
     title: 'TOWN Authentication Ceremony Foundation V1',
     description:
-      'Architecture contract for ceremony data/session foundation, email verification runtime (including Resend delivery), first-passkey WebAuthn registration runtime, passkey authentication session runtime, bounded account recovery runtime, and session-authenticated passkey management / security reauthentication runtime. Recovery login sessions, membership, and JWTs remain out of scope.',
+      'Architecture contract for ceremony data/session foundation, email verification runtime (including Resend delivery), initial password setup runtime (Model B), first-passkey WebAuthn registration runtime, passkey authentication session runtime, bounded account recovery runtime, and session-authenticated passkey management / security reauthentication runtime. Recovery login sessions, membership, and JWTs remain out of scope. Public password sign-in remains out of scope.',
     status: 'partially_implemented',
     implementedLiveRoutes: true,
     implementedRoutes: [
       'POST /v1/account/email-verifications',
       'POST /v1/account/email-verifications/complete',
+      'POST /v1/account/password',
       'POST /v1/account/passkeys/registration/options',
       'POST /v1/account/passkeys/registration/verify',
       'POST /v1/authentication/passkeys/options',
@@ -56,11 +57,35 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       'DELETE /v1/account/passkeys/:passkeyId',
     ],
     slice:
-      'ceremony_data_and_session_foundation_plus_email_verification_webauthn_registration_passkey_authentication_account_recovery_and_passkey_management_runtime',
+      'ceremony_data_and_session_foundation_plus_email_verification_initial_password_setup_webauthn_registration_passkey_authentication_account_recovery_and_passkey_management_runtime',
+    accountLifecycle: {
+      statuses: [
+        'pending_email',
+        'pending_password',
+        'pending_passkey',
+        'active',
+        'suspended',
+        'closed',
+      ],
+      setupTransitions: [
+        'pending_email -> pending_password',
+        'pending_password -> pending_passkey',
+        'pending_passkey -> active',
+      ],
+      activationRequires: [
+        'verified primary email',
+        'active password credential',
+        'at least one active passkey',
+        'linked civic actor',
+        'webauthn user handle',
+      ],
+    },
     domainSeparation: {
-      accountIdentity: 'Account shell, verified email, passkeys, challenges, recovery grants',
+      accountIdentity:
+        'Account shell, verified email, password credential, passkeys, challenges, recovery grants',
       civicActor: 'Local civic participation identity; optionally linked 1:1 to an account',
-      authenticationCeremony: 'Challenges, setup grants, WebAuthn challenge records, rate limits',
+      authenticationCeremony:
+        'Challenges, purpose-bound setup grants, WebAuthn challenge records, rate limits',
       authenticatedSession:
         'Opaque server-side account_sessions; not membership or civic entitlement',
       localVerification: 'Out of scope',
@@ -68,17 +93,19 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     },
     setupGrants: {
       table: 'town.setup_grants',
-      purpose: ['initial_passkey_registration'],
+      purpose: ['initial_password_setup', 'initial_passkey_registration'],
       ttlMinutes: SETUP_GRANT_TTL_MINUTES,
       storage: 'token_hash only; raw tokens never stored',
       semantics: [
-        'Restricted pre-authentication authority after email verification and before first passkey registration',
+        'Restricted pre-authentication authority; purpose-bound and never authorizes both password setup and passkey registration',
+        'initial_password_setup requires account status pending_password',
+        'initial_passkey_registration requires account status pending_passkey',
         'Not a session',
         'Cannot access normal account APIs',
         'Cannot perform civic actions',
         'Cannot authorize membership operations',
-        'Cannot create a session without completed passkey registration',
-        'Active only when unconsumed, unrevoked, unexpired, and account status is pending_passkey',
+        'Cannot create a session',
+        'Active only when unconsumed, unrevoked, unexpired, and account status matches the grant purpose',
         'Single-use consumption is concurrency-safe',
       ],
     },
@@ -92,7 +119,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       semantics: [
         'Opaque server-side sessions for authenticated web and mobile clients',
         'Do not imply membership, payment, local verification, civic entitlement, or Stripe state',
-        'Creation requires active account, verified primary email, at least one active passkey, and linked civic actor',
+        'Creation requires active account, verified primary email, active password credential, at least one active passkey, and linked civic actor',
         'Setup grants and recovery grants cannot create sessions',
         'Ordinary activity may extend idle_expires_at but never absolute_expires_at or authenticated_at',
         'idle_expires_at must never exceed absolute_expires_at',
@@ -168,6 +195,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         'email_verification_request_ip',
         'email_verification_attempt_challenge',
         'email_verification_attempt_email_ip',
+        'password_setup_grant',
         'passkey_options_ip',
         'passkey_options_client',
         'passkey_assertion_credential',
@@ -190,6 +218,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       ],
       semantics: [
         'Persistent atomic counters for ceremony-specific abuse controls',
+        'password_setup_grant is enforced for initial password setup',
         'setup_options_grant and setup_verification_grant are enforced for WebAuthn registration',
         'recovery_request_*, recovery_email_attempt_*, recovery_options_grant, and recovery_verification_grant are enforced for account recovery',
         'passkey_inventory_account and manage_* / passkey_rename_account / passkey_revoke_account are enforced for passkey management',
@@ -226,9 +255,11 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         'passkey_reauthentication_failed',
         'passkey_renamed',
       ],
+      passwordSetupAdded: ['password_credential_created'],
     },
     grantVersusSessionDistinction: {
-      setupGrant: 'Restricted setup authority before first passkey; not authenticated access',
+      setupGrant:
+        'Purpose-bound restricted setup authority for initial_password_setup or initial_passkey_registration; never both; not authenticated access',
       recoveryGrant:
         'Restricted recovery authority; revokes sessions; does not create a normal session',
       accountSession: 'Opaque authenticated session after eligible active account authentication',
@@ -273,9 +304,32 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       antiEnumeration: true,
       createsSession: false,
       activatesAccount: false,
-      transitions: ['pending_email -> pending_passkey'],
-      issues: ['restricted setup grant initial_passkey_registration'],
+      transitions: ['pending_email -> pending_password'],
+      issues: {
+        pending_email: 'restricted setup grant initial_password_setup',
+        pending_password_reentry: 'restricted setup grant initial_password_setup',
+        pending_passkey_reentry: 'restricted setup grant initial_passkey_registration',
+      },
       deliveryModes: ['test', 'development', 'resend'],
+    },
+    passwordSetupRuntime: {
+      status: 'implemented',
+      featureFlag: 'PASSWORD_AUTH_ENABLED',
+      routes: ['POST /v1/account/password'],
+      authorization: 'Authorization: SetupGrant <opaque-token> with purpose initial_password_setup',
+      requiredAccountStatus: 'pending_password',
+      createsSession: false,
+      activatesAccount: false,
+      success: {
+        status: 'PASSWORD_SET',
+        transition: 'pending_password -> pending_passkey',
+        handoff: 'fresh restricted setup grant initial_passkey_registration',
+      },
+      publicErrorCode: 'PASSWORD_SETUP_FAILED',
+      rateLimits: {
+        password_setup_grant: 5,
+      },
+      securityEvent: 'password_credential_created',
     },
     webauthnRegistrationRuntime: {
       status: 'implemented',
@@ -308,6 +362,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         createsCivicActor: true,
         actorCommunityId: null,
         transition: 'pending_passkey -> active',
+        requiresActivePasswordCredential: true,
       },
       publicErrorCode: 'PASSKEY_REGISTRATION_FAILED',
       rateLimits: {
@@ -497,6 +552,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     explicitExclusions: [
       'recovery login / session issuance from recovery',
       'production recovery email delivery',
+      'public password sign-in',
       'JWTs',
       'membership',
       'Stripe',

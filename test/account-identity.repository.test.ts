@@ -35,6 +35,8 @@ import {
   revokePasskey,
   updateSignCount,
 } from '../src/identity/repositories/passkeys.js';
+import { createAccountPasswordCredential } from '../src/identity/repositories/password-credentials.js';
+import { hashPassword } from '../src/identity/password-hashing.js';
 import {
   consumeRecoveryGrant,
   createRecoveryGrant,
@@ -112,6 +114,20 @@ describe('account identity repositories', () => {
       updatedAt: T0,
     });
     await verifyEmail(db(), { emailId, verifiedAt: T1 });
+    await transitionAccountState(db(), {
+      accountId,
+      to: 'pending_password',
+      at: T1,
+    });
+    const password = await hashPassword('test-password-15chars');
+    await createAccountPasswordCredential(db(), {
+      id: `24000000-0000-4000-8000-${suffix}`,
+      accountId,
+      passwordHash: password.hash,
+      algorithm: password.algorithm,
+      parameters: password.parameters,
+      createdAt: T1,
+    });
     await transitionAccountState(db(), {
       accountId,
       to: 'pending_passkey',

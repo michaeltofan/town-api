@@ -81,12 +81,16 @@ export const accounts = town.table(
   (table) => [
     check(
       'accounts_status_valid',
-      sql`${table.status} in ('pending_email', 'pending_passkey', 'active', 'suspended', 'closed')`,
+      sql`${table.status} in ('pending_email', 'pending_password', 'pending_passkey', 'active', 'suspended', 'closed')`,
     ),
     check(
       'accounts_status_timestamps',
       sql`(
         (${table.status} = 'pending_email'
+          and ${table.accountReadyAt} is null
+          and ${table.suspendedAt} is null
+          and ${table.closedAt} is null)
+        or (${table.status} = 'pending_password'
           and ${table.accountReadyAt} is null
           and ${table.suspendedAt} is null
           and ${table.closedAt} is null)
@@ -113,7 +117,7 @@ export const accounts = town.table(
     ),
     check(
       'accounts_webauthn_user_handle_required_after_setup',
-      sql`${table.status} in ('pending_email', 'pending_passkey') or ${table.webauthnUserHandle} is not null`,
+      sql`${table.status} in ('pending_email', 'pending_password', 'pending_passkey') or ${table.webauthnUserHandle} is not null`,
     ),
     uniqueIndex('accounts_webauthn_user_handle_unique')
       .on(table.webauthnUserHandle)
@@ -397,7 +401,7 @@ export type PasswordKdfParametersRecord = {
 /**
  * Optional additional login credential (Argon2id PHC hash). Passkey remains required.
  * At most one active row per account (partial unique on account_id where revoked_at IS NULL).
- * Inert foundation — no HTTP routes in this slice.
+ * Initial password setup is gated by PASSWORD_AUTH_ENABLED; password sign-in is not enabled in this slice.
  */
 export const accountPasswordCredentials = town.table(
   'account_password_credentials',
@@ -643,7 +647,8 @@ export const identitySecurityEvents = town.table(
         'stripe_payment_failed',
         'stripe_price_mismatch',
         'signal_hidden',
-        'signal_unhidden'
+        'signal_unhidden',
+        'password_credential_created'
       )`,
     ),
     index('identity_security_events_account_occurred_idx').on(table.accountId, table.occurredAt),
@@ -969,7 +974,10 @@ export const setupGrants = town.table(
       name: 'setup_grants_account_id_fkey',
     }).onDelete('restrict'),
     unique('setup_grants_token_hash_unique').on(table.tokenHash),
-    check('setup_grants_purpose_valid', sql`${table.purpose} in ('initial_passkey_registration')`),
+    check(
+      'setup_grants_purpose_valid',
+      sql`${table.purpose} in ('initial_password_setup', 'initial_passkey_registration')`,
+    ),
     check('setup_grants_expires_after_created', sql`${table.expiresAt} > ${table.createdAt}`),
     check(
       'setup_grants_consumed_not_before_created',
@@ -1140,7 +1148,8 @@ export const ceremonyRateLimits = town.table(
         'passkey_revoke_account',
         'membership_inventory_account',
         'billing_checkout_account',
-        'billing_portal_account'
+        'billing_portal_account',
+        'password_setup_grant'
       )`,
     ),
     check('ceremony_rate_limits_attempt_count_nonnegative', sql`${table.attemptCount} >= 0`),
@@ -1186,7 +1195,8 @@ export type GooglePlayRtdnInboxRow = typeof googlePlayRtdnInbox.$inferSelect;
 export type MembershipEntitlementRow = typeof membershipEntitlements.$inferSelect;
 export type MembershipSourceEventRow = typeof membershipSourceEvents.$inferSelect;
 
-export type AccountStatus = 'pending_email' | 'pending_passkey' | 'active' | 'suspended' | 'closed';
+export type AccountStatus =
+  'pending_email' | 'pending_password' | 'pending_passkey' | 'active' | 'suspended' | 'closed';
 
 export type SignalHideReason = 'immoral' | 'abusive' | 'spam' | 'off_topic' | 'illegal' | 'other';
 
@@ -1197,7 +1207,7 @@ export type WebAuthnChallengePurpose =
   | 'recover_register'
   | 'manage_passkeys_authenticate'
   | 'manage_passkeys_register';
-export type SetupGrantPurpose = 'initial_passkey_registration';
+export type SetupGrantPurpose = 'initial_password_setup' | 'initial_passkey_registration';
 export type AccountSessionClientType = 'web' | 'mobile';
 export type AccountSessionRevocationReason =
   | 'logout'
@@ -1237,7 +1247,8 @@ export type CeremonyRateLimitScope =
   | 'passkey_revoke_account'
   | 'membership_inventory_account'
   | 'billing_checkout_account'
-  | 'billing_portal_account';
+  | 'billing_portal_account'
+  | 'password_setup_grant';
 export type IdentitySecurityEventType =
   | 'email_verification_requested'
   | 'email_verified'
@@ -1290,7 +1301,8 @@ export type IdentitySecurityEventType =
   | 'stripe_payment_failed'
   | 'stripe_price_mismatch'
   | 'signal_hidden'
-  | 'signal_unhidden';
+  | 'signal_unhidden'
+  | 'password_credential_created';
 
 export type MembershipStatus =
   'inactive' | 'active' | 'cancelling' | 'expired' | 'paid_pending_binding' | 'suspended';

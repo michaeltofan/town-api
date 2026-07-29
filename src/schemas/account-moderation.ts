@@ -28,6 +28,7 @@ export const AccountUnbanBodySchema = Type.Object(
 export const AccountStatusSchema = Type.Union(
   [
     Type.Literal('pending_email'),
+    Type.Literal('pending_password'),
     Type.Literal('pending_passkey'),
     Type.Literal('active'),
     Type.Literal('suspended'),

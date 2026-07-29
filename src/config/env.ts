@@ -132,11 +132,15 @@ const EnvSchema = Type.Object(
       Type.Union([Type.Literal('test'), Type.Literal('development')]),
     ),
     /**
-     * Password-as-additional-login foundation. Default false / fail-closed.
-     * This slice defines the flag and optional pepper name only — no routes gated yet.
+     * Initial password-setup ceremony gate. Default false / fail-closed.
+     * When true, POST /v1/account/password is available under a purpose-bound SetupGrant.
+     * Does not enable password sign-in.
      */
     PASSWORD_AUTH_ENABLED: Type.Boolean({ default: false }),
-    /** Optional future pepper for password hashing; not required in this inert slice. */
+    /**
+     * Reserved for a future peppered hashing slice. Not applied by hashPassword today.
+     * Do not invent pepper behavior while this remains unimplemented.
+     */
     PASSWORD_HASH_PEPPER: Type.Optional(
       Type.String({ minLength: PASSWORD_HASH_PEPPER_MIN_LENGTH }),
     ),

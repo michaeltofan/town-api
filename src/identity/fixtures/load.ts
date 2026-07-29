@@ -13,10 +13,12 @@ import {
 } from '../repositories/challenges.js';
 import { addAccountEmail, verifyEmail } from '../repositories/emails.js';
 import { addPasskeyCredential } from '../repositories/passkeys.js';
+import { createAccountPasswordCredential } from '../repositories/password-credentials.js';
 import { createRecoveryGrant } from '../repositories/recovery-grants.js';
 import { appendIdentitySecurityEvent } from '../repositories/security-events.js';
 import { normalizeEmail } from '../email-normalize.js';
 import { deterministicSha256 } from '../hashing.js';
+import { hashPassword } from '../password-hashing.js';
 import {
   IDENTITY_ACCOUNT_IDS,
   IDENTITY_ACTOR_IDS,
@@ -29,9 +31,12 @@ import {
   IDENTITY_GRANT_IDS,
   IDENTITY_HASHES,
   IDENTITY_PASSKEY_IDS,
+  IDENTITY_PASSWORD_IDS,
 } from './content.js';
 
 type Db = Database['db'];
+
+const FIXTURE_PASSWORD = 'fixture-password-15';
 
 async function bootstrapAccountWithEmailPasskeyActor(
   db: Db,
@@ -39,6 +44,7 @@ async function bootstrapAccountWithEmailPasskeyActor(
     accountId: string;
     emailId: string;
     email: string;
+    passwordCredentialId: string;
     passkeyIds: string[];
     credentialIds: Buffer[];
     publicKeys: Buffer[];
@@ -58,6 +64,20 @@ async function bootstrapAccountWithEmailPasskeyActor(
     updatedAt: t0,
   });
   await verifyEmail(db, { emailId: options.emailId, verifiedAt: t1 });
+  await transitionAccountState(db, {
+    accountId: options.accountId,
+    to: 'pending_password',
+    at: t1,
+  });
+  const password = await hashPassword(FIXTURE_PASSWORD);
+  await createAccountPasswordCredential(db, {
+    id: options.passwordCredentialId,
+    accountId: options.accountId,
+    passwordHash: password.hash,
+    algorithm: password.algorithm,
+    parameters: password.parameters,
+    createdAt: t1,
+  });
   await transitionAccountState(db, {
     accountId: options.accountId,
     to: 'pending_passkey',
@@ -162,6 +182,20 @@ export async function loadIdentityFixtures(db: Db): Promise<void> {
   });
   await transitionAccountState(db, {
     accountId: IDENTITY_ACCOUNT_IDS.pendingPasskey,
+    to: 'pending_password',
+    at: t1,
+  });
+  const pendingPasskeyPassword = await hashPassword(FIXTURE_PASSWORD);
+  await createAccountPasswordCredential(db, {
+    id: IDENTITY_PASSWORD_IDS.pendingPasskey,
+    accountId: IDENTITY_ACCOUNT_IDS.pendingPasskey,
+    passwordHash: pendingPasskeyPassword.hash,
+    algorithm: pendingPasskeyPassword.algorithm,
+    parameters: pendingPasskeyPassword.parameters,
+    createdAt: t1,
+  });
+  await transitionAccountState(db, {
+    accountId: IDENTITY_ACCOUNT_IDS.pendingPasskey,
     to: 'pending_passkey',
     at: t1,
   });
@@ -170,6 +204,7 @@ export async function loadIdentityFixtures(db: Db): Promise<void> {
     accountId: IDENTITY_ACCOUNT_IDS.active,
     emailId: IDENTITY_EMAIL_IDS.activePrimary,
     email: IDENTITY_FIXTURE_EMAILS.active,
+    passwordCredentialId: IDENTITY_PASSWORD_IDS.active,
     passkeyIds: [IDENTITY_PASSKEY_IDS.activeOne, IDENTITY_PASSKEY_IDS.activeTwo],
     credentialIds: [IDENTITY_HASHES.passkeyCredentialOne, IDENTITY_HASHES.passkeyCredentialTwo],
     publicKeys: [IDENTITY_HASHES.passkeyPublicKeyOne, IDENTITY_HASHES.passkeyPublicKeyTwo],
@@ -182,6 +217,7 @@ export async function loadIdentityFixtures(db: Db): Promise<void> {
     accountId: IDENTITY_ACCOUNT_IDS.suspended,
     emailId: IDENTITY_EMAIL_IDS.suspendedPrimary,
     email: IDENTITY_FIXTURE_EMAILS.suspended,
+    passwordCredentialId: IDENTITY_PASSWORD_IDS.suspended,
     passkeyIds: [IDENTITY_PASSKEY_IDS.suspendedOne],
     credentialIds: [IDENTITY_HASHES.passkeyCredentialSuspended],
     publicKeys: [IDENTITY_HASHES.passkeyPublicKeySuspended],
@@ -194,6 +230,7 @@ export async function loadIdentityFixtures(db: Db): Promise<void> {
     accountId: IDENTITY_ACCOUNT_IDS.closed,
     emailId: IDENTITY_EMAIL_IDS.closedPrimary,
     email: IDENTITY_FIXTURE_EMAILS.closed,
+    passwordCredentialId: IDENTITY_PASSWORD_IDS.closed,
     passkeyIds: [IDENTITY_PASSKEY_IDS.closedOne],
     credentialIds: [IDENTITY_HASHES.passkeyCredentialClosed],
     publicKeys: [IDENTITY_HASHES.passkeyPublicKeyClosed],

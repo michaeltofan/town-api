@@ -1,5 +1,6 @@
 import { hash, verify, type Options } from '@node-rs/argon2';
 import {
+  normalizePasswordForHashing,
   PASSWORD_ARGON2_MEMORY_COST_KIB,
   PASSWORD_ARGON2_OUTPUT_LEN,
   PASSWORD_ARGON2_PARALLELISM,
@@ -28,15 +29,19 @@ export type PasswordHashResult = {
 
 /**
  * Hash a plaintext password with Argon2id using pinned OWASP-safe parameters.
- * Returns the PHC string plus algorithm/parameter metadata for durable storage.
+ * Applies NFC normalization so hash and verify share one rule.
+ * Callers must validate initial-password policy before calling this for setup.
  * Never log `plaintext` or the returned hash in application logs.
+ *
+ * Does not apply PASSWORD_HASH_PEPPER — pepper remains reserved/unimplemented.
  */
 export async function hashPassword(plaintext: string): Promise<PasswordHashResult> {
   if (typeof plaintext !== 'string' || plaintext.length === 0) {
     throw new Error('Password plaintext must be a non-empty string');
   }
 
-  const encoded = await hash(plaintext, HASH_OPTIONS);
+  const normalized = normalizePasswordForHashing(plaintext);
+  const encoded = await hash(normalized, HASH_OPTIONS);
   return {
     hash: encoded,
     algorithm: PASSWORD_KDF_ALGORITHM,
@@ -46,6 +51,7 @@ export async function hashPassword(plaintext: string): Promise<PasswordHashResul
 
 /**
  * Verify plaintext against a stored PHC password hash.
+ * Applies the same NFC normalization as hashing.
  * Returns false for mismatches and for malformed/tampered hashes (never throws on verify failure).
  * Underlying Argon2 verify is constant-time for valid hashes of equal structure.
  */
@@ -58,7 +64,8 @@ export async function verifyPassword(plaintext: string, storedHash: string): Pro
   }
 
   try {
-    return await verify(storedHash, plaintext);
+    const normalized = normalizePasswordForHashing(plaintext);
+    return await verify(storedHash, normalized);
   } catch {
     return false;
   }

@@ -33,7 +33,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Account',
           description:
-            'Account setup email verification, first-passkey WebAuthn registration, bounded account recovery, session-authenticated passkey management, session-authenticated membership entitlement inventory read at GET /v1/account/membership, and flag-gated set-once local eligibility bind at PUT /v1/account/eligibility. First-passkey registration requires SetupGrant. Passkey management (including add-passkey) requires an active Session only. Recovery grants are restricted authorization, not sessions. Membership inventory never exposes Stripe customer or subscription identifiers. LOCAL_ELIGIBILITY_ENABLED defaults to false.',
+            'Account setup email verification, flag-gated initial password setup (POST /v1/account/password), first-passkey WebAuthn registration, bounded account recovery, session-authenticated passkey management, session-authenticated membership entitlement inventory read at GET /v1/account/membership, and flag-gated set-once local eligibility bind at PUT /v1/account/eligibility. Initial password setup and first-passkey registration require purpose-bound SetupGrant tokens. Passkey management (including add-passkey) requires an active Session only. Recovery grants are restricted authorization, not sessions. Membership inventory never exposes Stripe customer or subscription identifiers. PASSWORD_AUTH_ENABLED and LOCAL_ELIGIBILITY_ENABLED default to false.',
         },
         {
           name: 'Authentication',
@@ -60,7 +60,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
             in: 'header',
             name: 'Authorization',
             description:
-              'Restricted setup-grant authorization for first-passkey registration. Exact header form: Authorization: SetupGrant <opaque-token>. Not an account session and not a Bearer token.',
+              'Restricted setup-grant authorization for initial password setup (purpose initial_password_setup) and first-passkey registration (purpose initial_passkey_registration). Exact header form: Authorization: SetupGrant <opaque-token>. Purpose is bound into the token hash; a grant never authorizes both steps. Not an account session and not a Bearer token.',
           },
           recoveryGrantAuth: {
             type: 'apiKey',

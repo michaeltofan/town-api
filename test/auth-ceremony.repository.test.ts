@@ -52,6 +52,8 @@ import {
 } from '../src/identity/repositories/accounts.js';
 import { addAccountEmail, verifyEmail } from '../src/identity/repositories/emails.js';
 import { addPasskeyCredential } from '../src/identity/repositories/passkeys.js';
+import { createAccountPasswordCredential } from '../src/identity/repositories/password-credentials.js';
+import { hashPassword } from '../src/identity/password-hashing.js';
 import { createRecoveryGrant } from '../src/identity/repositories/recovery-grants.js';
 import {
   appendIdentitySecurityEvent,
@@ -117,6 +119,20 @@ describe('authentication ceremony repositories', () => {
     await verifyEmail(db(), { emailId, verifiedAt: T1 });
     await transitionAccountState(db(), {
       accountId,
+      to: 'pending_password',
+      at: T1,
+    });
+    const password = await hashPassword('test-password-15chars');
+    await createAccountPasswordCredential(db(), {
+      id: `35000000-0000-4000-8000-${suffix}`,
+      accountId,
+      passwordHash: password.hash,
+      algorithm: password.algorithm,
+      parameters: password.parameters,
+      createdAt: T1,
+    });
+    await transitionAccountState(db(), {
+      accountId,
       to: 'pending_passkey',
       at: T1,
     });
@@ -143,6 +159,20 @@ describe('authentication ceremony repositories', () => {
       updatedAt: T0,
     });
     await verifyEmail(db(), { emailId, verifiedAt: T1 });
+    await transitionAccountState(db(), {
+      accountId,
+      to: 'pending_password',
+      at: T1,
+    });
+    const password = await hashPassword('test-password-15chars');
+    await createAccountPasswordCredential(db(), {
+      id: `37000000-0000-4000-8000-${suffix}`,
+      accountId,
+      passwordHash: password.hash,
+      algorithm: password.algorithm,
+      parameters: password.parameters,
+      createdAt: T1,
+    });
     await transitionAccountState(db(), {
       accountId,
       to: 'pending_passkey',

@@ -70,6 +70,10 @@ export async function createPasskeyManagementTestApp(options?: {
       ...(options?.now !== undefined ? { now: options.now } : {}),
       ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
     },
+    passwordSetup: {
+      ...(options?.now !== undefined ? { now: options.now } : {}),
+      ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
+    },
     passkeyRegistration: {
       ...(options?.now !== undefined ? { now: options.now } : {}),
       ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),

@@ -307,7 +307,7 @@ export async function requestEmailVerification(
   }
 
   // Active / suspended / closed keep existing safe guidance/suppression.
-  // pending_passkey is intentionally excluded so setup can re-enter safely.
+  // pending_password and pending_passkey are intentionally excluded so setup can re-enter safely.
   if (
     accountStatus === 'suspended' ||
     accountStatus === 'closed' ||
@@ -501,8 +501,9 @@ export async function completeEmailVerification(
       `);
       const account = accountRows.rows[0];
       const isInitialVerification = account?.status === 'pending_email';
+      const isPendingPasswordReentry = account?.status === 'pending_password';
       const isPendingPasskeyReentry = account?.status === 'pending_passkey';
-      if (!isInitialVerification && !isPendingPasskeyReentry) {
+      if (!isInitialVerification && !isPendingPasswordReentry && !isPendingPasskeyReentry) {
         return { ok: false };
       }
 
@@ -571,7 +572,7 @@ export async function completeEmailVerification(
       if (isInitialVerification) {
         await transitionAccountState(dbTx, {
           accountId,
-          to: 'pending_passkey',
+          to: 'pending_password',
           at: now,
         });
       }
@@ -582,16 +583,21 @@ export async function completeEmailVerification(
         now,
         excludeChallengeId: challenge.id,
       });
+
+      const setupPurpose = isPendingPasskeyReentry
+        ? ('initial_passkey_registration' as const)
+        : ('initial_password_setup' as const);
+
       await revokeActiveSetupGrantsForAccount(dbTx, {
         accountId,
-        purpose: 'initial_passkey_registration',
+        purpose: setupPurpose,
         now,
       });
 
       const rawToken = generateSetupToken();
       const tokenHash = hashOpaqueToken({
         hashKey,
-        purpose: 'initial_passkey_registration',
+        purpose: setupPurpose,
         token: rawToken,
       });
       const grantExpiresAt = computeSetupGrantExpiresAt(now);
@@ -599,7 +605,7 @@ export async function completeEmailVerification(
         id: generateId(),
         accountId,
         tokenHash,
-        purpose: 'initial_passkey_registration',
+        purpose: setupPurpose,
         createdAt: now,
         expiresAt: grantExpiresAt,
       });
@@ -613,7 +619,7 @@ export async function completeEmailVerification(
         metadata: {
           purpose: 'verify_email',
           challengeState: 'consumed',
-          ...(isPendingPasskeyReentry ? { reentry: true } : {}),
+          ...(isPendingPasswordReentry || isPendingPasskeyReentry ? { reentry: true } : {}),
         },
       });
 

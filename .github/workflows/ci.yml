@@ -60,6 +60,8 @@ jobs:
       ACCOUNT_RECOVERY_HASH_KEY: town-ci-account-recovery-hash-key-32byt
       ACCOUNT_RECOVERY_TOKEN_HASH_KEY: town-ci-account-recovery-token-key-32b
       ACCOUNT_RECOVERY_DELIVERY_MODE: test
+      # CI-only initial password-setup ceremony gate.
+      PASSWORD_AUTH_ENABLED: 'true'
       # CI-only isolated Stripe billing placeholders (never Stripe live secrets; fake adapter drives tests).
       STRIPE_BILLING_ENABLED: 'true'
       STRIPE_SECRET_KEY: sk_test_town_ci_fake_stripe_secret_placeholder

@@ -52,6 +52,7 @@ export function createAccountRecoveryEnv(overrides: Partial<NodeJS.ProcessEnv> =
     EMAIL_VERIFICATION_HASH_KEY: TEST_EMAIL_VERIFICATION_HASH_KEY,
     CEREMONY_RATE_LIMIT_HASH_KEY: TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
     EMAIL_VERIFICATION_DELIVERY_MODE: 'test',
+    PASSWORD_AUTH_ENABLED: 'true',
     WEBAUTHN_REGISTRATION_ENABLED: 'true',
     WEBAUTHN_RP_ID: TEST_RP_ID,
     WEBAUTHN_RP_NAME: 'TOWN',
@@ -110,6 +111,10 @@ export async function createAccountRecoveryTestApp(options?: {
     database,
     emailVerification: {
       deliveryAdapter: emailDelivery,
+      ...(options?.now !== undefined ? { now: options.now } : {}),
+      ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
+    },
+    passwordSetup: {
       ...(options?.now !== undefined ? { now: options.now } : {}),
       ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
     },

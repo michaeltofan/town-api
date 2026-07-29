@@ -13,6 +13,7 @@ export const TEST_CEREMONY_RATE_LIMIT_HASH_KEY = 'town-ci-ceremony-rate-limit-ha
 export const TEST_WEBAUTHN_CHALLENGE_HASH_KEY = 'town-ci-webauthn-challenge-hash-key-32by';
 export const TEST_RP_ID = 'localhost';
 export const TEST_ORIGIN = 'http://localhost:3000';
+export const TEST_INITIAL_PASSWORD = 'correct-horse-battery';
 
 export function createPasskeyRegistrationEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): Env {
   return loadEnv({
@@ -29,6 +30,7 @@ export function createPasskeyRegistrationEnv(overrides: Partial<NodeJS.ProcessEn
     EMAIL_VERIFICATION_HASH_KEY: TEST_EMAIL_VERIFICATION_HASH_KEY,
     CEREMONY_RATE_LIMIT_HASH_KEY: TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
     EMAIL_VERIFICATION_DELIVERY_MODE: 'test',
+    PASSWORD_AUTH_ENABLED: 'true',
     WEBAUTHN_REGISTRATION_ENABLED: 'true',
     WEBAUTHN_RP_ID: TEST_RP_ID,
     WEBAUTHN_RP_NAME: 'TOWN',
@@ -41,6 +43,7 @@ export function createPasskeyRegistrationEnv(overrides: Partial<NodeJS.ProcessEn
 
 export async function createPasskeyRegistrationTestApp(options?: {
   enabled?: boolean;
+  passwordEnabled?: boolean;
   now?: () => string;
   generateId?: () => string;
 }): Promise<{
@@ -54,13 +57,11 @@ export async function createPasskeyRegistrationTestApp(options?: {
   await resetMigrateSeedFoundationAndActor(pool);
 
   const enabled = options?.enabled ?? true;
-  const env = createPasskeyRegistrationEnv(
-    enabled
-      ? {}
-      : {
-          WEBAUTHN_REGISTRATION_ENABLED: 'false',
-        },
-  );
+  const passwordEnabled = options?.passwordEnabled ?? true;
+  const env = createPasskeyRegistrationEnv({
+    ...(enabled ? {} : { WEBAUTHN_REGISTRATION_ENABLED: 'false' }),
+    ...(passwordEnabled ? {} : { PASSWORD_AUTH_ENABLED: 'false' }),
+  });
   const delivery = createInMemoryTestDeliveryAdapter();
   const database = createDatabase({
     connectionString: env.DATABASE_URL,
@@ -78,6 +79,10 @@ export async function createPasskeyRegistrationTestApp(options?: {
       ...(options?.now !== undefined ? { now: options.now } : {}),
       ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
     },
+    passwordSetup: {
+      ...(options?.now !== undefined ? { now: options.now } : {}),
+      ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
+    },
     passkeyRegistration: {
       ...(options?.now !== undefined ? { now: options.now } : {}),
       ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
@@ -88,6 +93,7 @@ export async function createPasskeyRegistrationTestApp(options?: {
   return { app, pool, env, delivery };
 }
 
+/** Completes email verification and returns the initial_password_setup grant. */
 export async function completeEmailSetup(
   app: AppInstance,
   delivery: ReturnType<typeof createInMemoryTestDeliveryAdapter>,
@@ -139,5 +145,42 @@ export async function completeEmailSetup(
   return {
     setupGrant: completed.json<{ data: { setupGrant: string } }>().data.setupGrant,
     accountId: accountEmail.accountId,
+  };
+}
+
+/** Completes initial password setup and returns the initial_passkey_registration grant. */
+export async function completePasswordSetup(
+  app: AppInstance,
+  passwordSetupGrant: string,
+  password: string = TEST_INITIAL_PASSWORD,
+): Promise<{ setupGrant: string }> {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/account/password',
+    headers: { authorization: `SetupGrant ${passwordSetupGrant}` },
+    payload: { password },
+  });
+  if (response.statusCode !== 200) {
+    throw new Error(
+      `password setup failed with status ${String(response.statusCode)}: ${response.body}`,
+    );
+  }
+  return {
+    setupGrant: response.json<{ data: { setupGrant: string } }>().data.setupGrant,
+  };
+}
+
+/** Email verify + password setup → passkey SetupGrant for first-passkey registration. */
+export async function completeEmailAndPasswordSetup(
+  app: AppInstance,
+  delivery: ReturnType<typeof createInMemoryTestDeliveryAdapter>,
+  email: string,
+  password: string = TEST_INITIAL_PASSWORD,
+): Promise<{ setupGrant: string; accountId: string }> {
+  const emailSetup = await completeEmailSetup(app, delivery, email);
+  const passwordSetup = await completePasswordSetup(app, emailSetup.setupGrant, password);
+  return {
+    setupGrant: passwordSetup.setupGrant,
+    accountId: emailSetup.accountId,
   };
 }

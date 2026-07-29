@@ -30,6 +30,7 @@ describe('authentication ceremony architecture contract', () => {
       };
       setupGrants: { purpose: string[] };
       explicitExclusions: string[];
+      passwordSetupRuntime: { status: string; featureFlag: string; routes: string[] };
       webauthnRegistrationRuntime: { status: string; dependency: string };
       passkeyAuthenticationRuntime: { status: string; featureFlag: string };
       accountRecoveryRuntime: { status: string; featureFlag: string; routes: string[] };
@@ -65,7 +66,18 @@ describe('authentication ceremony architecture contract', () => {
     expect(document.accountSessions.idleTimeoutMinutes).toBe(60);
     expect(document.accountSessions.absoluteTimeoutHours).toBe(24);
     expect(document.accountSessions.sensitiveReauthFreshnessMinutes).toBe(10);
-    expect(document.setupGrants.purpose).toEqual(['initial_passkey_registration']);
+    expect(document.setupGrants.purpose).toEqual([
+      'initial_password_setup',
+      'initial_passkey_registration',
+    ]);
+    expect(document.passwordSetupRuntime).toMatchObject({
+      status: 'implemented',
+      featureFlag: 'PASSWORD_AUTH_ENABLED',
+      routes: ['POST /v1/account/password'],
+    });
+    expect(document.implementedRoutes).toEqual(
+      expect.arrayContaining(['POST /v1/account/password']),
+    );
     expect(document.webauthnRegistrationRuntime.status).toBe('implemented');
     expect(document.webauthnRegistrationRuntime.dependency).toBe('@simplewebauthn/server@13.3.2');
     expect(document.passkeyAuthenticationRuntime.status).toBe('implemented');

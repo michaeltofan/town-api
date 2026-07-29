@@ -7,7 +7,7 @@ import { createDatabase } from '../../src/db/client.js';
 import { accounts } from '../../src/db/schema.js';
 import { requireDatabaseUrl, resetMigrateSeedFoundationAndActor } from './pg.js';
 import {
-  completeEmailSetup,
+  completeEmailAndPasswordSetup,
   TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
   TEST_EMAIL_VERIFICATION_HASH_KEY,
   TEST_ORIGIN,
@@ -48,6 +48,7 @@ export function createPasskeyAuthenticationEnv(overrides: Partial<NodeJS.Process
     EMAIL_VERIFICATION_HASH_KEY: TEST_EMAIL_VERIFICATION_HASH_KEY,
     CEREMONY_RATE_LIMIT_HASH_KEY: TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
     EMAIL_VERIFICATION_DELIVERY_MODE: 'test',
+    PASSWORD_AUTH_ENABLED: 'true',
     WEBAUTHN_REGISTRATION_ENABLED: 'true',
     WEBAUTHN_RP_ID: TEST_RP_ID,
     WEBAUTHN_RP_NAME: 'TOWN',
@@ -102,6 +103,10 @@ export async function createPasskeyAuthenticationTestApp(options?: {
       ...(options?.now !== undefined ? { now: options.now } : {}),
       ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
     },
+    passwordSetup: {
+      ...(options?.now !== undefined ? { now: options.now } : {}),
+      ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
+    },
     passkeyRegistration: {
       ...(options?.now !== undefined ? { now: options.now } : {}),
       ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
@@ -127,7 +132,7 @@ export async function registerActivePasskeyAccount(
   material: SoftPasskeyMaterial;
   userHandle: Uint8Array;
 }> {
-  const setup = await completeEmailSetup(app, delivery, email);
+  const setup = await completeEmailAndPasswordSetup(app, delivery, email);
   const optionsResponse = await app.inject({
     method: 'POST',
     url: '/v1/account/passkeys/registration/options',
