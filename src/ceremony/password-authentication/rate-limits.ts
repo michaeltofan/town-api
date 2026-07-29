@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { sql } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
-import type { CeremonyRateLimitScope } from '../../db/schema.js';
+import { ceremonyRateLimits, type CeremonyRateLimitScope } from '../../db/schema.js';
 import { appendIdentitySecurityEvent } from '../../identity/repositories/security-events.js';
 import { hashRateLimitSubject } from '../email-verification/crypto.js';
 import {
@@ -17,6 +18,16 @@ function floorWindowStart(nowMs: number, windowMs: number): Date {
   return new Date(Math.floor(nowMs / windowMs) * windowMs);
 }
 
+function passwordSignInIpWindow(now: string): {
+  windowStartedAt: string;
+  windowExpiresAt: string;
+} {
+  const nowMs = new Date(now).getTime();
+  const windowStartedAt = floorWindowStart(nowMs, WINDOW_MS).toISOString();
+  const windowExpiresAt = new Date(new Date(windowStartedAt).getTime() + WINDOW_MS).toISOString();
+  return { windowStartedAt, windowExpiresAt };
+}
+
 async function countInWindow(
   db: Db,
   input: {
@@ -26,9 +37,7 @@ async function countInWindow(
     now: string;
   },
 ): Promise<{ count: number; bucketId: string }> {
-  const nowMs = new Date(input.now).getTime();
-  const windowStartedAt = floorWindowStart(nowMs, WINDOW_MS).toISOString();
-  const windowExpiresAt = new Date(new Date(windowStartedAt).getTime() + WINDOW_MS).toISOString();
+  const { windowStartedAt, windowExpiresAt } = passwordSignInIpWindow(input.now);
   const subjectHash = hashRateLimitSubject({
     hashKey: input.rateLimitHashKey,
     scope: input.scope,
@@ -59,12 +68,11 @@ async function incrementWindow(
   return updated.attemptCount;
 }
 
-export async function isPasswordSignInThrottled(
+export async function isPasswordSignInEmailThrottled(
   db: Db,
   input: {
     rateLimitHashKey: string;
     emailNormalized: string;
-    ip: string;
     now: string;
   },
 ): Promise<boolean> {
@@ -74,25 +82,143 @@ export async function isPasswordSignInThrottled(
     subject: `email:${input.emailNormalized}:30m`,
     now: input.now,
   });
-  if (email.count >= PASSWORD_SIGN_IN_EMAIL_LIMIT_30M) {
-    return true;
-  }
-
-  const ip = await countInWindow(db, {
-    rateLimitHashKey: input.rateLimitHashKey,
-    scope: 'password_sign_in_ip',
-    subject: `ip:${input.ip}:30m`,
-    now: input.now,
-  });
-  return ip.count >= PASSWORD_SIGN_IN_IP_LIMIT_30M;
+  return email.count >= PASSWORD_SIGN_IN_EMAIL_LIMIT_30M;
 }
 
-export async function recordPasswordSignInAttempt(
+export type PasswordSignInIpReservation =
+  { status: 'reserved'; attemptCount: number } | { status: 'throttled'; attemptCount: number };
+
+/**
+ * Atomically consume one password-sign-in IP slot for the current window.
+ *
+ * Uses a single INSERT ... ON CONFLICT DO UPDATE ... WHERE attempt_count < limit
+ * RETURNING attempt_count. Empty RETURNING means the window is already at the
+ * limit (no increment). Completes before any Argon2 work and does not hold a
+ * transaction open across verification.
+ */
+export async function reservePasswordSignInIpAttempt(
+  db: Db,
+  input: {
+    rateLimitHashKey: string;
+    ip: string;
+    now: string;
+    accountId?: string | null;
+    requestId?: string | null;
+    failureCategory?: string;
+  },
+): Promise<PasswordSignInIpReservation> {
+  const { windowStartedAt, windowExpiresAt } = passwordSignInIpWindow(input.now);
+  const subjectHash = hashRateLimitSubject({
+    hashKey: input.rateLimitHashKey,
+    scope: 'password_sign_in_ip',
+    subject: `ip:${input.ip}:30m`,
+  });
+
+  let rows: { attemptCount: number }[];
+  try {
+    rows = await db
+      .insert(ceremonyRateLimits)
+      .values({
+        id: randomUUID(),
+        scope: 'password_sign_in_ip',
+        subjectHash,
+        windowStartedAt,
+        windowExpiresAt,
+        attemptCount: 1,
+        blockedUntil: null,
+        createdAt: input.now,
+        updatedAt: input.now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          ceremonyRateLimits.scope,
+          ceremonyRateLimits.subjectHash,
+          ceremonyRateLimits.windowStartedAt,
+        ],
+        set: {
+          attemptCount: sql`${ceremonyRateLimits.attemptCount} + 1`,
+          updatedAt: input.now,
+        },
+        setWhere: sql`${ceremonyRateLimits.attemptCount} < ${PASSWORD_SIGN_IN_IP_LIMIT_30M}`,
+      })
+      .returning({ attemptCount: ceremonyRateLimits.attemptCount });
+  } catch {
+    // Fail closed: treat reservation failure as throttled without Argon2 work.
+    await maybeEmitRateLimitTriggered(db, {
+      throttled: true,
+      crossedLimit: true,
+      now: input.now,
+      ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+      ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+      failureCategory: input.failureCategory ?? 'rate_limited',
+    }).catch(() => undefined);
+    return { status: 'throttled', attemptCount: PASSWORD_SIGN_IN_IP_LIMIT_30M };
+  }
+
+  const attemptCount = rows[0]?.attemptCount;
+  if (attemptCount === undefined) {
+    await maybeEmitRateLimitTriggered(db, {
+      throttled: true,
+      crossedLimit: true,
+      now: input.now,
+      ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+      ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+      failureCategory: input.failureCategory ?? 'rate_limited',
+    });
+    return { status: 'throttled', attemptCount: PASSWORD_SIGN_IN_IP_LIMIT_30M };
+  }
+
+  if (attemptCount >= PASSWORD_SIGN_IN_IP_LIMIT_30M) {
+    await maybeEmitRateLimitTriggered(db, {
+      throttled: false,
+      crossedLimit: true,
+      now: input.now,
+      ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+      ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+      ...(input.failureCategory !== undefined ? { failureCategory: input.failureCategory } : {}),
+    });
+  }
+
+  return { status: 'reserved', attemptCount };
+}
+
+async function maybeEmitRateLimitTriggered(
+  db: Db,
+  input: {
+    throttled: boolean;
+    crossedLimit: boolean;
+    now: string;
+    accountId?: string | null;
+    requestId?: string | null;
+    failureCategory?: string;
+  },
+): Promise<void> {
+  if (!input.throttled && !input.crossedLimit) {
+    return;
+  }
+  await appendIdentitySecurityEvent(db, {
+    id: randomUUID(),
+    accountId: input.accountId ?? null,
+    eventType: 'rate_limit_triggered',
+    occurredAt: input.now,
+    requestId: input.requestId ?? null,
+    metadata: {
+      purpose: 'password_sign_in',
+      scope: 'password_sign_in',
+      ...(input.failureCategory !== undefined ? { failureCategory: input.failureCategory } : {}),
+    },
+  });
+}
+
+/**
+ * Record only the normalized-email subject. IP slots are reserved before Argon2
+ * and must not be incremented again for the same request.
+ */
+export async function recordPasswordSignInEmailAttempt(
   db: Db,
   input: {
     rateLimitHashKey: string;
     emailNormalized: string;
-    ip: string;
     now: string;
     throttled: boolean;
     accountId?: string | null;
@@ -106,29 +232,13 @@ export async function recordPasswordSignInAttempt(
     subject: `email:${input.emailNormalized}:30m`,
     now: input.now,
   });
-  const ipCount = await incrementWindow(db, {
-    rateLimitHashKey: input.rateLimitHashKey,
-    scope: 'password_sign_in_ip',
-    subject: `ip:${input.ip}:30m`,
-    now: input.now,
-  });
 
-  if (
-    input.throttled ||
-    emailCount >= PASSWORD_SIGN_IN_EMAIL_LIMIT_30M ||
-    ipCount >= PASSWORD_SIGN_IN_IP_LIMIT_30M
-  ) {
-    await appendIdentitySecurityEvent(db, {
-      id: randomUUID(),
-      accountId: input.accountId ?? null,
-      eventType: 'rate_limit_triggered',
-      occurredAt: input.now,
-      requestId: input.requestId ?? null,
-      metadata: {
-        purpose: 'password_sign_in',
-        scope: 'password_sign_in',
-        ...(input.failureCategory !== undefined ? { failureCategory: input.failureCategory } : {}),
-      },
-    });
-  }
+  await maybeEmitRateLimitTriggered(db, {
+    throttled: input.throttled,
+    crossedLimit: emailCount >= PASSWORD_SIGN_IN_EMAIL_LIMIT_30M,
+    now: input.now,
+    ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+    ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+    ...(input.failureCategory !== undefined ? { failureCategory: input.failureCategory } : {}),
+  });
 }

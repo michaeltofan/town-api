@@ -21,7 +21,11 @@ import { generateSessionToken, hashSessionToken } from '../passkey-authenticatio
 import { createAccountSession } from '../repositories/account-sessions.js';
 import { requirePasswordSignInConfig } from './config.js';
 import { getPasswordSignInDummyHash } from './dummy-hash.js';
-import { isPasswordSignInThrottled, recordPasswordSignInAttempt } from './rate-limits.js';
+import {
+  isPasswordSignInEmailThrottled,
+  recordPasswordSignInEmailAttempt,
+  reservePasswordSignInIpAttempt,
+} from './rate-limits.js';
 
 type Db = Database['db'];
 
@@ -30,6 +34,16 @@ export type PasswordSignInDeps = {
   now: () => string;
   generateId?: () => string;
   generateToken?: () => string;
+  /**
+   * Optional test seam for observing Argon2 verification without weakening
+   * production defaults. Production always uses verifyPassword.
+   */
+  verifyPassword?: typeof verifyPassword;
+  /**
+   * Optional test seam for observing dummy-hash retrieval. Production always
+   * uses getPasswordSignInDummyHash.
+   */
+  getDummyHash?: typeof getPasswordSignInDummyHash;
 };
 
 export class AuthenticationFailedError extends Error {
@@ -79,28 +93,12 @@ export async function authenticateWithPassword(
   const now = deps.now();
   const generateId = deps.generateId ?? (() => randomUUID());
   const generateToken = deps.generateToken ?? generateSessionToken;
-
-  let emailNormalized: string;
-  try {
-    emailNormalized = normalizeEmail(input.email);
-  } catch {
-    await verifyPassword(input.password, await getPasswordSignInDummyHash()).catch(() => false);
-    throw new AuthenticationFailedError('email_invalid');
-  }
+  const verify = deps.verifyPassword ?? verifyPassword;
+  const getDummyHash = deps.getDummyHash ?? getPasswordSignInDummyHash;
 
   let accountIdForEvents: string | null = null;
 
-  const fail = async (category: string): Promise<never> => {
-    await recordPasswordSignInAttempt(db, {
-      rateLimitHashKey: config.rateLimitHashKey,
-      emailNormalized,
-      ip: input.ip,
-      now,
-      throttled: category === 'rate_limited',
-      accountId: accountIdForEvents,
-      requestId: input.requestId ?? null,
-      failureCategory: category,
-    }).catch(() => undefined);
+  const emitAuthenticationFailed = async (category: string): Promise<never> => {
     await appendIdentitySecurityEvent(db, {
       id: generateId(),
       accountId: accountIdForEvents,
@@ -116,15 +114,47 @@ export async function authenticateWithPassword(
     throw new AuthenticationFailedError(category);
   };
 
-  if (
-    await isPasswordSignInThrottled(db, {
+  const failEmailOnly = async (category: string, emailNormalized: string): Promise<never> => {
+    await recordPasswordSignInEmailAttempt(db, {
       rateLimitHashKey: config.rateLimitHashKey,
       emailNormalized,
-      ip: input.ip,
+      now,
+      throttled: category === 'rate_limited',
+      accountId: accountIdForEvents,
+      requestId: input.requestId ?? null,
+      failureCategory: category,
+    }).catch(() => undefined);
+    return await emitAuthenticationFailed(category);
+  };
+
+  // Atomically consume one IP slot before normalization and any Argon2 work.
+  const ipReservation = await reservePasswordSignInIpAttempt(db, {
+    rateLimitHashKey: config.rateLimitHashKey,
+    ip: input.ip,
+    now,
+    requestId: input.requestId ?? null,
+    failureCategory: 'rate_limited',
+  });
+  if (ipReservation.status === 'throttled') {
+    return await emitAuthenticationFailed('rate_limited');
+  }
+
+  let emailNormalized: string;
+  try {
+    emailNormalized = normalizeEmail(input.email);
+  } catch {
+    await verify(input.password, await getDummyHash()).catch(() => false);
+    return await emitAuthenticationFailed('email_invalid');
+  }
+
+  if (
+    await isPasswordSignInEmailThrottled(db, {
+      rateLimitHashKey: config.rateLimitHashKey,
+      emailNormalized,
       now,
     })
   ) {
-    return await fail('rate_limited');
+    return await failEmailOnly('rate_limited', emailNormalized);
   }
 
   const emailRow = await findActiveEmailByNormalized(db, emailNormalized);
@@ -135,44 +165,44 @@ export async function authenticateWithPassword(
 
   const credential = account ? await findActiveAccountPasswordCredential(db, account.id) : null;
 
-  const targetHash = credential?.passwordHash ?? (await getPasswordSignInDummyHash());
-  const passwordOk = await verifyPassword(input.password, targetHash);
+  const targetHash = credential?.passwordHash ?? (await getDummyHash());
+  const passwordOk = await verify(input.password, targetHash);
 
   if (!emailRow) {
-    return await fail('email_unknown');
+    return await failEmailOnly('email_unknown', emailNormalized);
   }
   if (emailRow.revokedAt !== null) {
-    return await fail('email_revoked');
+    return await failEmailOnly('email_revoked', emailNormalized);
   }
   if (!emailRow.isPrimary || emailRow.verifiedAt == null) {
-    return await fail('email_not_verified_primary');
+    return await failEmailOnly('email_not_verified_primary', emailNormalized);
   }
   if (!account) {
-    return await fail('account_unknown');
+    return await failEmailOnly('account_unknown', emailNormalized);
   }
   if (account.status === 'pending_email') {
-    return await fail('account_pending_email');
+    return await failEmailOnly('account_pending_email', emailNormalized);
   }
   if (account.status === 'pending_password') {
-    return await fail('account_pending_password');
+    return await failEmailOnly('account_pending_password', emailNormalized);
   }
   if (account.status === 'pending_passkey') {
-    return await fail('account_pending_passkey');
+    return await failEmailOnly('account_pending_passkey', emailNormalized);
   }
   if (account.status === 'suspended') {
-    return await fail('account_suspended');
+    return await failEmailOnly('account_suspended', emailNormalized);
   }
   if (account.status === 'closed') {
-    return await fail('account_closed');
+    return await failEmailOnly('account_closed', emailNormalized);
   }
   if (account.status !== 'active') {
-    return await fail('account_not_active');
+    return await failEmailOnly('account_not_active', emailNormalized);
   }
   if (credential?.revokedAt !== null) {
-    return await fail('password_credential_missing');
+    return await failEmailOnly('password_credential_missing', emailNormalized);
   }
   if (!passwordOk) {
-    return await fail('password_mismatch');
+    return await failEmailOnly('password_mismatch', emailNormalized);
   }
 
   const sessionId = generateId();
@@ -243,18 +273,17 @@ export async function authenticateWithPassword(
     });
   } catch (error) {
     if (error instanceof AuthenticationFailedError) {
-      return await fail(error.failureCategory);
+      return await failEmailOnly(error.failureCategory, emailNormalized);
     }
     if (error instanceof CeremonyInvariantError) {
-      return await fail(`session_${error.code.toLowerCase()}`);
+      return await failEmailOnly(`session_${error.code.toLowerCase()}`, emailNormalized);
     }
-    return await fail('session_create_failed');
+    return await failEmailOnly('session_create_failed', emailNormalized);
   }
 
-  await recordPasswordSignInAttempt(db, {
+  await recordPasswordSignInEmailAttempt(db, {
     rateLimitHashKey: config.rateLimitHashKey,
     emailNormalized,
-    ip: input.ip,
     now,
     throttled: false,
     accountId: account.id,

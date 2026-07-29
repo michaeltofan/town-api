@@ -1,11 +1,18 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, count, eq, isNull } from 'drizzle-orm';
 import { Pool } from 'pg';
 import type { AppInstance } from '../src/app.js';
 import { buildApp } from '../src/app.js';
 import { hashRateLimitSubject } from '../src/ceremony/email-verification/crypto.js';
-import { PASSWORD_SIGN_IN_EMAIL_LIMIT_30M } from '../src/ceremony/password-authentication/policy.js';
-import { authenticateWithPassword } from '../src/ceremony/password-authentication/service.js';
+import {
+  PASSWORD_SIGN_IN_EMAIL_LIMIT_30M,
+  PASSWORD_SIGN_IN_IP_LIMIT_30M,
+} from '../src/ceremony/password-authentication/policy.js';
+import {
+  authenticateWithPassword,
+  AuthenticationFailedError,
+} from '../src/ceremony/password-authentication/service.js';
 import {
   accountEmails,
   accountPasswordCredentials,
@@ -512,7 +519,7 @@ describe('password sign-in API', () => {
     expect(sessions[0]?.value).toBe(0);
   });
 
-  it('creates no session on every failure path', async () => {
+  it('creates no session on wrong-password and unknown-email failures', async () => {
     const email = 'Password.SignIn+fail-session@example.com';
     await registerActivePasskeyAccount(currentApp(), currentDelivery(), email);
 
@@ -532,6 +539,533 @@ describe('password sign-in API', () => {
       .database.db.select({ value: count() })
       .from(accountSessions);
     expect(sessions[0]?.value).toBe(0);
+  });
+
+  it('applies IP rate limits to schema-valid non-normalizable emails without inventing email subjects', async () => {
+    const invalidEmails = ['a@b', 'user@localhost'] as const;
+    const remoteAddress = '127.0.0.60';
+    const expectedIpSubjectHash = hashRateLimitSubject({
+      hashKey: TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
+      scope: 'password_sign_in_ip',
+      subject: `ip:${remoteAddress}:30m`,
+    });
+
+    let verifyCalls = 0;
+    const fastVerify = (): Promise<boolean> => {
+      verifyCalls += 1;
+      return Promise.resolve(false);
+    };
+    const fastDummyHash = (): Promise<string> =>
+      Promise.resolve(
+        '$argon2id$v=19$m=65536,t=3,p=1$AAAAAAAAAAAAAAAAAAAAAA$BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      );
+
+    for (let i = 0; i < PASSWORD_SIGN_IN_IP_LIMIT_30M; i += 1) {
+      const email = invalidEmails[i % invalidEmails.length];
+      if (email === undefined) {
+        throw new Error('expected invalid email fixture');
+      }
+      await expect(
+        authenticateWithPassword(
+          currentApp().database.db,
+          {
+            env: currentEnv(),
+            now: () => FIXED_NOW,
+            verifyPassword: fastVerify,
+            getDummyHash: fastDummyHash,
+          },
+          {
+            email,
+            password: 'non-normalizable-password',
+            clientType: 'web',
+            ip: remoteAddress,
+            requestId: `non-norm-${String(i)}`,
+          },
+        ),
+      ).rejects.toMatchObject({ code: 'AUTHENTICATION_FAILED', failureCategory: 'email_invalid' });
+    }
+    expect(verifyCalls).toBe(PASSWORD_SIGN_IN_IP_LIMIT_30M);
+
+    verifyCalls = 0;
+    await expect(
+      authenticateWithPassword(
+        currentApp().database.db,
+        {
+          env: currentEnv(),
+          now: () => FIXED_NOW,
+          verifyPassword: fastVerify,
+          getDummyHash: fastDummyHash,
+        },
+        {
+          email: 'a@b',
+          password: 'non-normalizable-password',
+          clientType: 'web',
+          ip: remoteAddress,
+          requestId: 'non-norm-throttled',
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'AUTHENTICATION_FAILED', failureCategory: 'rate_limited' });
+    expect(verifyCalls).toBe(0);
+
+    const publicThrottled = await signInWithPassword({
+      app: currentApp(),
+      email: 'user@localhost',
+      password: 'non-normalizable-password',
+      clientType: 'web',
+      remoteAddress,
+    });
+    assertFailureEnvelope(publicThrottled);
+
+    const ipBuckets = await currentApp()
+      .database.db.select()
+      .from(ceremonyRateLimits)
+      .where(eq(ceremonyRateLimits.scope, 'password_sign_in_ip'));
+    expect(
+      ipBuckets.some((bucket) => Buffer.compare(bucket.subjectHash, expectedIpSubjectHash) === 0),
+    ).toBe(true);
+    const matchingIp = ipBuckets.find(
+      (bucket) => Buffer.compare(bucket.subjectHash, expectedIpSubjectHash) === 0,
+    );
+    expect(matchingIp?.attemptCount).toBe(PASSWORD_SIGN_IN_IP_LIMIT_30M);
+    for (const bucket of ipBuckets) {
+      const asText = bucket.subjectHash.toString('utf8');
+      expect(asText).not.toContain('a@b');
+      expect(asText).not.toContain('user@localhost');
+      expect(asText).not.toContain('@');
+    }
+
+    const emailBuckets = await currentApp()
+      .database.db.select()
+      .from(ceremonyRateLimits)
+      .where(eq(ceremonyRateLimits.scope, 'password_sign_in_email'));
+    expect(emailBuckets).toHaveLength(0);
+
+    const events = await currentApp().database.db.select().from(identitySecurityEvents);
+    const invalidFailures = events.filter(
+      (event) =>
+        event.eventType === 'authentication_failed' &&
+        (event.metadata as { failureCategory?: string } | null)?.failureCategory ===
+          'email_invalid',
+    );
+    expect(invalidFailures.length).toBeGreaterThan(0);
+    for (const event of invalidFailures) {
+      const metadata = JSON.stringify(event.metadata ?? {});
+      expect(metadata).not.toContain('a@b');
+      expect(metadata).not.toContain('user@localhost');
+      expect(metadata).not.toContain('non-normalizable-password');
+      expect(metadata).not.toMatch(/\$argon2id\$/);
+      expect(metadata).not.toMatch(/domain is invalid|normalize|Email domain/i);
+      expect(metadata).not.toMatch(/"password"\s*:/);
+    }
+  });
+
+  it('skips dummy Argon2 when the IP subject is already throttled for non-normalizable email', async () => {
+    const remoteAddress = '127.0.0.61';
+    const windowMs = 30 * 60_000;
+    const nowMs = new Date(FIXED_NOW).getTime();
+    const windowStartedAt = new Date(Math.floor(nowMs / windowMs) * windowMs).toISOString();
+    const windowExpiresAt = new Date(new Date(windowStartedAt).getTime() + windowMs).toISOString();
+    await currentApp()
+      .database.db.insert(ceremonyRateLimits)
+      .values({
+        id: randomUUID(),
+        scope: 'password_sign_in_ip',
+        subjectHash: hashRateLimitSubject({
+          hashKey: TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
+          scope: 'password_sign_in_ip',
+          subject: `ip:${remoteAddress}:30m`,
+        }),
+        windowStartedAt,
+        windowExpiresAt,
+        attemptCount: PASSWORD_SIGN_IN_IP_LIMIT_30M,
+        blockedUntil: null,
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+      });
+
+    let verifyCalls = 0;
+    let dummyHashCalls = 0;
+    await expect(
+      authenticateWithPassword(
+        currentApp().database.db,
+        {
+          env: currentEnv(),
+          now: () => FIXED_NOW,
+          verifyPassword: () => {
+            verifyCalls += 1;
+            return Promise.resolve(false);
+          },
+          getDummyHash: () => {
+            dummyHashCalls += 1;
+            return Promise.resolve(
+              '$argon2id$v=19$m=65536,t=3,p=1$AAAAAAAAAAAAAAAAAAAAAA$BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+            );
+          },
+        },
+        {
+          email: 'a@b',
+          password: 'should-not-verify',
+          clientType: 'mobile',
+          ip: remoteAddress,
+          requestId: 'already-throttled-non-norm',
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'AUTHENTICATION_FAILED', failureCategory: 'rate_limited' });
+    expect(verifyCalls).toBe(0);
+    expect(dummyHashCalls).toBe(0);
+
+    const emailBuckets = await currentApp()
+      .database.db.select()
+      .from(ceremonyRateLimits)
+      .where(eq(ceremonyRateLimits.scope, 'password_sign_in_email'));
+    expect(emailBuckets).toHaveLength(0);
+  });
+
+  it('atomically reserves only one IP slot among concurrent non-normalizable requests at count 29', async () => {
+    const remoteAddress = '127.0.0.70';
+    const windowMs = 30 * 60_000;
+    const nowMs = new Date(FIXED_NOW).getTime();
+    const windowStartedAt = new Date(Math.floor(nowMs / windowMs) * windowMs).toISOString();
+    const windowExpiresAt = new Date(new Date(windowStartedAt).getTime() + windowMs).toISOString();
+    const subjectHash = hashRateLimitSubject({
+      hashKey: TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
+      scope: 'password_sign_in_ip',
+      subject: `ip:${remoteAddress}:30m`,
+    });
+    await currentApp()
+      .database.db.insert(ceremonyRateLimits)
+      .values({
+        id: randomUUID(),
+        scope: 'password_sign_in_ip',
+        subjectHash,
+        windowStartedAt,
+        windowExpiresAt,
+        attemptCount: PASSWORD_SIGN_IN_IP_LIMIT_30M - 1,
+        blockedUntil: null,
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+      });
+
+    let verifyCalls = 0;
+    let dummyHashCalls = 0;
+    let inFlight = 0;
+    let inFlightPeak = 0;
+    let releaseVerify!: () => void;
+    const holdVerify = new Promise<void>((resolve) => {
+      releaseVerify = resolve;
+    });
+
+    const promises = Array.from({ length: 20 }, (_, index) =>
+      authenticateWithPassword(
+        currentApp().database.db,
+        {
+          env: currentEnv(),
+          now: () => FIXED_NOW,
+          verifyPassword: async () => {
+            verifyCalls += 1;
+            inFlight += 1;
+            inFlightPeak = Math.max(inFlightPeak, inFlight);
+            await holdVerify;
+            inFlight -= 1;
+            return false;
+          },
+          getDummyHash: () => {
+            dummyHashCalls += 1;
+            return Promise.resolve(
+              '$argon2id$v=19$m=65536,t=3,p=1$AAAAAAAAAAAAAAAAAAAAAA$BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+            );
+          },
+        },
+        {
+          email: index % 2 === 0 ? 'a@b' : 'user@localhost',
+          password: 'concurrent-non-norm',
+          clientType: 'web',
+          ip: remoteAddress,
+          requestId: `concurrent-29-${String(index)}`,
+        },
+      ),
+    );
+    const settled = Promise.allSettled(promises);
+
+    const deadline = Date.now() + 5_000;
+    while (verifyCalls < 1 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    // Allow throttled peers to finish while the reserved request remains in verify.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(verifyCalls).toBe(1);
+    expect(dummyHashCalls).toBe(1);
+    expect(inFlightPeak).toBe(1);
+
+    releaseVerify();
+    const results = await settled;
+
+    const categories = results.map((result) =>
+      result.status === 'rejected' && result.reason instanceof AuthenticationFailedError
+        ? result.reason.failureCategory
+        : 'unexpected',
+    );
+    expect(categories.filter((category) => category === 'email_invalid')).toHaveLength(1);
+    expect(categories.filter((category) => category === 'rate_limited')).toHaveLength(19);
+    expect(verifyCalls).toBe(1);
+    expect(dummyHashCalls).toBe(1);
+    expect(inFlightPeak).toBe(1);
+
+    const ipBuckets = await currentApp()
+      .database.db.select()
+      .from(ceremonyRateLimits)
+      .where(eq(ceremonyRateLimits.scope, 'password_sign_in_ip'));
+    const matchingIp = ipBuckets.find(
+      (bucket) => Buffer.compare(bucket.subjectHash, subjectHash) === 0,
+    );
+    expect(matchingIp?.attemptCount).toBe(PASSWORD_SIGN_IN_IP_LIMIT_30M);
+
+    const emailBucketsAfter = await currentApp()
+      .database.db.select()
+      .from(ceremonyRateLimits)
+      .where(eq(ceremonyRateLimits.scope, 'password_sign_in_email'));
+    expect(emailBucketsAfter).toHaveLength(0);
+
+    const sessions = await currentApp()
+      .database.db.select({ value: count() })
+      .from(accountSessions);
+    expect(sessions[0]?.value).toBe(0);
+
+    const events = await currentApp().database.db.select().from(identitySecurityEvents);
+    for (const event of events) {
+      const metadata = JSON.stringify(event.metadata ?? {});
+      expect(metadata).not.toContain('a@b');
+      expect(metadata).not.toContain('user@localhost');
+      expect(metadata).not.toContain('concurrent-non-norm');
+      expect(metadata).not.toMatch(/\$argon2id\$/);
+    }
+  });
+
+  it('executes zero Argon2 for concurrent requests when the IP bucket is already at 30', async () => {
+    const remoteAddress = '127.0.0.71';
+    const windowMs = 30 * 60_000;
+    const nowMs = new Date(FIXED_NOW).getTime();
+    const windowStartedAt = new Date(Math.floor(nowMs / windowMs) * windowMs).toISOString();
+    const windowExpiresAt = new Date(new Date(windowStartedAt).getTime() + windowMs).toISOString();
+    const subjectHash = hashRateLimitSubject({
+      hashKey: TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
+      scope: 'password_sign_in_ip',
+      subject: `ip:${remoteAddress}:30m`,
+    });
+    await currentApp().database.db.insert(ceremonyRateLimits).values({
+      id: randomUUID(),
+      scope: 'password_sign_in_ip',
+      subjectHash,
+      windowStartedAt,
+      windowExpiresAt,
+      attemptCount: PASSWORD_SIGN_IN_IP_LIMIT_30M,
+      blockedUntil: null,
+      createdAt: FIXED_NOW,
+      updatedAt: FIXED_NOW,
+    });
+
+    let verifyCalls = 0;
+    let dummyHashCalls = 0;
+    const results = await Promise.allSettled(
+      Array.from({ length: 12 }, (_, index) =>
+        authenticateWithPassword(
+          currentApp().database.db,
+          {
+            env: currentEnv(),
+            now: () => FIXED_NOW,
+            verifyPassword: () => {
+              verifyCalls += 1;
+              return Promise.resolve(false);
+            },
+            getDummyHash: () => {
+              dummyHashCalls += 1;
+              return Promise.resolve(
+                '$argon2id$v=19$m=65536,t=3,p=1$AAAAAAAAAAAAAAAAAAAAAA$BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+              );
+            },
+          },
+          {
+            email: 'a@b',
+            password: 'already-full',
+            clientType: 'mobile',
+            ip: remoteAddress,
+            requestId: `concurrent-full-${String(index)}`,
+          },
+        ),
+      ),
+    );
+
+    expect(
+      results.every(
+        (result) =>
+          result.status === 'rejected' &&
+          result.reason instanceof AuthenticationFailedError &&
+          result.reason.failureCategory === 'rate_limited',
+      ),
+    ).toBe(true);
+    expect(verifyCalls).toBe(0);
+    expect(dummyHashCalls).toBe(0);
+
+    const ipBuckets = await currentApp()
+      .database.db.select()
+      .from(ceremonyRateLimits)
+      .where(eq(ceremonyRateLimits.scope, 'password_sign_in_ip'));
+    const matchingIp = ipBuckets.find(
+      (bucket) => Buffer.compare(bucket.subjectHash, subjectHash) === 0,
+    );
+    expect(matchingIp?.attemptCount).toBe(PASSWORD_SIGN_IN_IP_LIMIT_30M);
+  });
+
+  it('creates a missing IP bucket race-safely and never reserves beyond 30 concurrent slots', async () => {
+    const remoteAddress = '127.0.0.72';
+    const subjectHash = hashRateLimitSubject({
+      hashKey: TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
+      scope: 'password_sign_in_ip',
+      subject: `ip:${remoteAddress}:30m`,
+    });
+
+    let verifyCalls = 0;
+    let inFlight = 0;
+    let inFlightPeak = 0;
+    const concurrency = PASSWORD_SIGN_IN_IP_LIMIT_30M + 10;
+
+    const results = await Promise.allSettled(
+      Array.from({ length: concurrency }, (_, index) =>
+        authenticateWithPassword(
+          currentApp().database.db,
+          {
+            env: currentEnv(),
+            now: () => FIXED_NOW,
+            verifyPassword: async () => {
+              verifyCalls += 1;
+              inFlight += 1;
+              inFlightPeak = Math.max(inFlightPeak, inFlight);
+              await new Promise((resolve) => setTimeout(resolve, 15));
+              inFlight -= 1;
+              return false;
+            },
+            getDummyHash: () =>
+              Promise.resolve(
+                '$argon2id$v=19$m=65536,t=3,p=1$AAAAAAAAAAAAAAAAAAAAAA$BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+              ),
+          },
+          {
+            email: 'user@localhost',
+            password: 'missing-bucket-race',
+            clientType: 'web',
+            ip: remoteAddress,
+            requestId: `concurrent-missing-${String(index)}`,
+          },
+        ),
+      ),
+    );
+
+    const categories = results.map((result) =>
+      result.status === 'rejected' && result.reason instanceof AuthenticationFailedError
+        ? result.reason.failureCategory
+        : 'unexpected',
+    );
+    expect(categories.filter((category) => category === 'email_invalid')).toHaveLength(
+      PASSWORD_SIGN_IN_IP_LIMIT_30M,
+    );
+    expect(categories.filter((category) => category === 'rate_limited')).toHaveLength(10);
+    expect(verifyCalls).toBe(PASSWORD_SIGN_IN_IP_LIMIT_30M);
+    expect(inFlightPeak).toBeLessThanOrEqual(PASSWORD_SIGN_IN_IP_LIMIT_30M);
+
+    const ipBuckets = await currentApp()
+      .database.db.select()
+      .from(ceremonyRateLimits)
+      .where(eq(ceremonyRateLimits.scope, 'password_sign_in_ip'));
+    const matchingIp = ipBuckets.filter(
+      (bucket) => Buffer.compare(bucket.subjectHash, subjectHash) === 0,
+    );
+    expect(matchingIp).toHaveLength(1);
+    expect(matchingIp[0]?.attemptCount).toBe(PASSWORD_SIGN_IN_IP_LIMIT_30M);
+
+    const emailBuckets = await currentApp()
+      .database.db.select()
+      .from(ceremonyRateLimits)
+      .where(eq(ceremonyRateLimits.scope, 'password_sign_in_email'));
+    expect(emailBuckets).toHaveLength(0);
+  });
+
+  it('unknown normalizable emails still use IP and hash-safe normalized-email limiting', async () => {
+    const email = 'Password.SignIn+unknown-limits@example.com';
+    const remoteAddress = '127.0.0.62';
+    assertFailureEnvelope(
+      await signInWithPassword({
+        app: currentApp(),
+        email,
+        password: 'wrong-password-value',
+        clientType: 'web',
+        remoteAddress,
+      }),
+    );
+
+    const emailBuckets = await currentApp()
+      .database.db.select()
+      .from(ceremonyRateLimits)
+      .where(eq(ceremonyRateLimits.scope, 'password_sign_in_email'));
+    const ipBuckets = await currentApp()
+      .database.db.select()
+      .from(ceremonyRateLimits)
+      .where(eq(ceremonyRateLimits.scope, 'password_sign_in_ip'));
+
+    const expectedEmailHash = hashRateLimitSubject({
+      hashKey: TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
+      scope: 'password_sign_in_email',
+      subject: `email:${normalizeEmail(email)}:30m`,
+    });
+    const expectedIpHash = hashRateLimitSubject({
+      hashKey: TEST_CEREMONY_RATE_LIMIT_HASH_KEY,
+      scope: 'password_sign_in_ip',
+      subject: `ip:${remoteAddress}:30m`,
+    });
+
+    expect(
+      emailBuckets.some((bucket) => Buffer.compare(bucket.subjectHash, expectedEmailHash) === 0),
+    ).toBe(true);
+    expect(
+      ipBuckets.some((bucket) => Buffer.compare(bucket.subjectHash, expectedIpHash) === 0),
+    ).toBe(true);
+    for (const bucket of [...emailBuckets, ...ipBuckets]) {
+      const asText = bucket.subjectHash.toString('utf8');
+      expect(asText).not.toContain(email);
+      expect(asText).not.toContain('example.com');
+    }
+  });
+
+  it('wrong password and unknown email retain the same public failure envelope', async () => {
+    const email = 'Password.SignIn+envelope@example.com';
+    await registerActivePasskeyAccount(currentApp(), currentDelivery(), email);
+
+    const wrongPassword = await signInWithPassword({
+      app: currentApp(),
+      email,
+      password: 'wrong-password-value',
+      clientType: 'web',
+    });
+    const unknownEmail = await signInWithPassword({
+      app: currentApp(),
+      email: 'Password.SignIn+envelope-missing@example.com',
+      password: 'wrong-password-value',
+      clientType: 'mobile',
+    });
+    const nonNormalizable = await signInWithPassword({
+      app: currentApp(),
+      email: 'a@b',
+      password: 'wrong-password-value',
+      clientType: 'web',
+    });
+
+    assertFailureEnvelope(wrongPassword);
+    assertFailureEnvelope(unknownEmail);
+    assertFailureEnvelope(nonNormalizable);
+    expect(wrongPassword.json()).toMatchObject(FAILURE_BODY);
+    expect(unknownEmail.json()).toMatchObject(FAILURE_BODY);
+    expect(nonNormalizable.json()).toMatchObject(FAILURE_BODY);
+    expect(wrongPassword.statusCode).toBe(unknownEmail.statusCode);
+    expect(wrongPassword.statusCode).toBe(nonNormalizable.statusCode);
   });
 
   it('rate limits by normalized email and IP without persisting raw email', async () => {
