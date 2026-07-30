@@ -1,11 +1,23 @@
+import { randomUUID } from 'node:crypto';
 import { desc, eq } from 'drizzle-orm';
 import { Pool } from 'pg';
 import { buildApp, type AppInstance } from '../../src/app.js';
+import {
+  generateSetupGrantToken,
+  hashOpaqueToken,
+} from '../../src/ceremony/email-verification/crypto.js';
 import { createInMemoryTestDeliveryAdapter } from '../../src/ceremony/email-verification/delivery.js';
+import { computeSetupGrantExpiresAt } from '../../src/ceremony/policy.js';
+import { createSetupGrant } from '../../src/ceremony/repositories/setup-grants.js';
 import { loadEnv, type Env } from '../../src/config/env.js';
 import { createDatabase } from '../../src/db/client.js';
 import { accountEmails, emailChallenges } from '../../src/db/schema.js';
 import { normalizeEmail } from '../../src/identity/email-normalize.js';
+import {
+  findAccountById,
+  transitionAccountState,
+} from '../../src/identity/repositories/accounts.js';
+import { verifyEmail } from '../../src/identity/repositories/emails.js';
 import { requireDatabaseUrl, resetMigrateSeedFoundationAndActor } from './pg.js';
 
 export const TEST_EMAIL_VERIFICATION_HASH_KEY = 'town-ci-email-verification-hash-key-32b';
@@ -93,7 +105,7 @@ export async function createPasskeyRegistrationTestApp(options?: {
   return { app, pool, env, delivery };
 }
 
-/** Completes email verification and returns the initial_password_setup grant. */
+/** Completes email verification and returns the initial_passkey_registration grant. */
 export async function completeEmailSetup(
   app: AppInstance,
   delivery: ReturnType<typeof createInMemoryTestDeliveryAdapter>,
@@ -148,6 +160,84 @@ export async function completeEmailSetup(
   };
 }
 
+/**
+ * Places a new account in pending_password with an initial_password_setup grant.
+ * Used by password-setup API tests; ordinary public email completion no longer
+ * forces this handoff.
+ */
+export async function preparePendingPasswordSetup(
+  app: AppInstance,
+  _delivery: ReturnType<typeof createInMemoryTestDeliveryAdapter>,
+  email: string,
+  options?: { now?: string },
+): Promise<{ setupGrant: string; accountId: string }> {
+  await app.inject({
+    method: 'POST',
+    url: '/v1/account/email-verifications',
+    payload: { email },
+  });
+
+  const normalized = normalizeEmail(email);
+  const challenge = (
+    await app.database.db
+      .select()
+      .from(emailChallenges)
+      .where(eq(emailChallenges.emailNormalized, normalized))
+      .orderBy(desc(emailChallenges.createdAt))
+      .limit(1)
+  )[0];
+  if (!challenge) {
+    throw new Error('expected email verification challenge');
+  }
+  const accountEmail = (
+    await app.database.db
+      .select()
+      .from(accountEmails)
+      .where(eq(accountEmails.emailNormalized, normalized))
+      .limit(1)
+  )[0];
+  if (!accountEmail) {
+    throw new Error('expected account email');
+  }
+
+  const now = options?.now ?? new Date().toISOString();
+  const account = await findAccountById(app.database.db, accountEmail.accountId);
+  if (account?.status !== 'pending_email') {
+    throw new Error(`expected pending_email account, got ${account?.status ?? 'missing'}`);
+  }
+
+  await verifyEmail(app.database.db, { emailId: accountEmail.id, verifiedAt: now });
+  await transitionAccountState(app.database.db, {
+    accountId: accountEmail.accountId,
+    to: 'pending_password',
+    at: now,
+  });
+  await app.database.db
+    .update(emailChallenges)
+    .set({ consumedAt: now })
+    .where(eq(emailChallenges.id, challenge.id));
+
+  const rawToken = generateSetupGrantToken();
+  const tokenHash = hashOpaqueToken({
+    hashKey: TEST_EMAIL_VERIFICATION_HASH_KEY,
+    purpose: 'initial_password_setup',
+    token: rawToken,
+  });
+  await createSetupGrant(app.database.db, {
+    id: randomUUID(),
+    accountId: accountEmail.accountId,
+    tokenHash,
+    purpose: 'initial_password_setup',
+    createdAt: now,
+    expiresAt: computeSetupGrantExpiresAt(now),
+  });
+
+  return {
+    setupGrant: rawToken,
+    accountId: accountEmail.accountId,
+  };
+}
+
 /** Completes initial password setup and returns the initial_passkey_registration grant. */
 export async function completePasswordSetup(
   app: AppInstance,
@@ -170,17 +260,21 @@ export async function completePasswordSetup(
   };
 }
 
-/** Email verify + password setup → passkey SetupGrant for first-passkey registration. */
+/**
+ * Optional password path for tests that need an active password credential:
+ * pending_password setup → passkey SetupGrant.
+ */
 export async function completeEmailAndPasswordSetup(
   app: AppInstance,
   delivery: ReturnType<typeof createInMemoryTestDeliveryAdapter>,
   email: string,
   password: string = TEST_INITIAL_PASSWORD,
+  options?: { now?: string },
 ): Promise<{ setupGrant: string; accountId: string }> {
-  const emailSetup = await completeEmailSetup(app, delivery, email);
-  const passwordSetup = await completePasswordSetup(app, emailSetup.setupGrant, password);
+  const passwordPrepared = await preparePendingPasswordSetup(app, delivery, email, options);
+  const passwordSetup = await completePasswordSetup(app, passwordPrepared.setupGrant, password);
   return {
     setupGrant: passwordSetup.setupGrant,
-    accountId: emailSetup.accountId,
+    accountId: passwordPrepared.accountId,
   };
 }

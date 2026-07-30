@@ -128,7 +128,7 @@ export const emailVerificationRoutes: FastifyPluginCallbackTypebox<
         tags: ['Account'],
         summary: 'Complete account email verification',
         description:
-          'Completes email verification with a six-digit code. On success for a new pending_email account transitions to pending_password and returns a one-time restricted initial_password_setup grant. pending_password re-entry reissues a password-setup grant; pending_passkey re-entry reissues a passkey-registration grant. Failures return a generic invalid/expired challenge error. Does not create a session or activate the account.',
+          'Completes email verification with a six-digit code. On success for a new pending_email account transitions to pending_passkey and returns a one-time restricted initial_passkey_registration grant. pending_password re-entry reissues a password-setup grant; pending_passkey re-entry reissues a passkey-registration grant. Failures return a generic invalid/expired challenge error. Does not create a session or activate the account.',
         body: EmailVerificationCompleteBodySchema,
         response: EmailVerificationRouteResponses.complete,
       },
