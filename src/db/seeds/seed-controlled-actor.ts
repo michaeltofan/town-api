@@ -16,6 +16,8 @@ function toActorInsert(row: CanonicalControlledActor): ActorRow {
     communityId: row.communityId,
     accountId: null,
     localEligibilityVerifiedAt: null,
+    communityCommitmentAcceptedAt: null,
+    communityCommitmentVersion: null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

@@ -14,6 +14,7 @@ export type ParticipationDenialReason =
   | 'inactive_membership'
   | 'expired_membership'
   | 'elapsed_access_until'
+  | 'community_commitment_missing'
   | 'local_not_verified'
   | 'local_expired'
   | 'local_mismatched_community'

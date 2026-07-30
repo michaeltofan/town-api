@@ -6,6 +6,7 @@ import type {
   MembershipEntitlementRow,
   MembershipStatus,
 } from '../db/schema.js';
+import { hasValidCommunityCommitment } from './community-commitment.js';
 import type { CivicAccessEvaluation, ParticipationDenialReason } from './types.js';
 
 export function isMembershipTemporallyValid(
@@ -34,34 +35,24 @@ export function resolveEffectiveMembershipStatus(
   return entitlement.status as MembershipStatus;
 }
 
-function mapLocalEligibilityToDenial(
-  localEligibility: LocalParticipationEligibility,
-): ParticipationDenialReason | null {
-  switch (localEligibility) {
-    case 'eligible':
-      return null;
-    case 'not_verified':
-      return 'local_not_verified';
-    case 'expired':
-      return 'local_expired';
-    case 'mismatched_community':
-      return 'local_mismatched_community';
-    case 'unavailable':
-      return 'local_unavailable';
-  }
-}
-
 /**
  * Owner accounts (`isOwner === true`) bypass membership/payment entitlement checks
- * only. Session, active-account, actor, community, and local-eligibility gates are
+ * only. Session, active-account, actor, community, and community-commitment gates are
  * unchanged. Owner access is the same `participant` level granted for active/cancelling
  * membership — nothing beyond that.
+ *
+ * Membership V1 participation requires paid access AND a valid recorded community
+ * commitment (personal self-declaration). Technical local-eligibility / GPS
+ * verification is not a participation gate for this V1 path.
  */
 export function evaluateCivicAccess(input: {
   session: null | { accountId: string };
   account: null | Pick<AccountRow, 'id' | 'status' | 'isOwner'>;
   entitlement: null | MembershipEntitlementRow;
-  actor: null | Pick<ActorRow, 'id' | 'accountId' | 'communityId' | 'kind' | 'status'>;
+  actor: null | (Pick<ActorRow, 'id' | 'accountId' | 'communityId' | 'kind' | 'status'> & {
+    communityCommitmentAcceptedAt?: string | null;
+    communityCommitmentVersion?: string | null;
+  });
   communityId?: string;
   localEligibility: LocalParticipationEligibility;
   now: string;
@@ -133,10 +124,24 @@ export function evaluateCivicAccess(input: {
       };
     }
 
+    if (effectiveStatus === 'suspended') {
+      return {
+        ...base,
+        denialReason: 'inactive_membership',
+      };
+    }
+
     if (!isMembershipTemporallyValid(input.entitlement, input.now)) {
       return {
         ...base,
         denialReason: 'elapsed_access_until',
+      };
+    }
+
+    if (!['active', 'cancelling'].includes(effectiveStatus)) {
+      return {
+        ...base,
+        denialReason: 'inactive_membership',
       };
     }
   }
@@ -162,26 +167,19 @@ export function evaluateCivicAccess(input: {
     };
   }
 
-  const localDenial = mapLocalEligibilityToDenial(input.localEligibility);
-  if (localDenial) {
+  // Personal community commitment (self-declaration) — not technical verification.
+  // Existing community_id without explicit acceptance must fail closed.
+  if (!hasValidCommunityCommitment(input.actor)) {
     return {
       ...base,
-      denialReason: localDenial,
+      denialReason: 'community_commitment_missing',
     };
-  }
-
-  if (!isOwner) {
-    if (effectiveStatus === null || !['active', 'cancelling'].includes(effectiveStatus)) {
-      return {
-        ...base,
-        denialReason: 'inactive_membership',
-      };
-    }
   }
 
   return {
     level: 'participant',
     canParticipate: true,
+    // Echo resolver output for honesty; never claim technical verification from commitment.
     localEligibility: input.localEligibility,
   };
 }

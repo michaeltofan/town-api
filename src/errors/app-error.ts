@@ -94,6 +94,38 @@ export function billingPortalFailedError(): AppError {
   return new AppError(502, 'BILLING_PORTAL_FAILED', 'Billing portal could not be started.');
 }
 
+export function communityCommitmentRequiredError(): AppError {
+  return new AppError(
+    409,
+    'COMMUNITY_COMMITMENT_REQUIRED',
+    'A recorded community commitment is required before Checkout.',
+  );
+}
+
+export function communityCommitmentLockedError(): AppError {
+  return new AppError(
+    409,
+    'COMMUNITY_COMMITMENT_LOCKED',
+    'The community commitment cannot be changed while paid membership access is active.',
+  );
+}
+
+export function communityCommitmentAcceptanceRequiredError(): AppError {
+  return new AppError(
+    400,
+    'COMMUNITY_COMMITMENT_ACCEPTANCE_REQUIRED',
+    'Explicit acceptance of personal responsibility is required.',
+  );
+}
+
+export function communityCommitmentPersistFailedError(): AppError {
+  return new AppError(
+    500,
+    'COMMUNITY_COMMITMENT_PERSIST_FAILED',
+    'Community commitment could not be recorded.',
+  );
+}
+
 export function googlePlayBillingNotAvailableError(): AppError {
   return new AppError(
     503,

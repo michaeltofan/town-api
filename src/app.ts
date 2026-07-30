@@ -31,6 +31,7 @@ import { billingRoutes } from './routes/billing.js';
 import { googlePlayRoutes } from './routes/google-play.js';
 import { googlePlayRtdnRoutes } from './routes/google-play-rtdn.js';
 import { localEligibilityRoutes } from './routes/local-eligibility.js';
+import { communityCommitmentRoutes } from './routes/community-commitment.js';
 import { signalSubmissionRoutes } from './routes/signal-submissions.js';
 import type { LocalParticipationEligibilityResolver } from './membership/local-eligibility.js';
 import type { TownStripeAdapter } from './billing/stripe-adapter.js';
@@ -371,6 +372,10 @@ export async function buildApp(options: BuildAppOptions) {
     ...(options.membership?.localEligibilityResolver !== undefined
       ? { localEligibilityResolver: options.membership.localEligibilityResolver }
       : {}),
+  });
+  await app.register(communityCommitmentRoutes, {
+    env: options.env,
+    ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
   });
   await app.register(localEligibilityRoutes, {
     env: options.env,

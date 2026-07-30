@@ -24,3 +24,16 @@ export async function findActiveCommunityBySlug(
 
   return rows[0] ?? null;
 }
+
+export async function findActiveCommunityById(
+  db: Db,
+  id: string,
+): Promise<CommunityRow | null> {
+  const rows = await db
+    .select()
+    .from(communities)
+    .where(and(eq(communities.status, 'active'), eq(communities.id, id)))
+    .limit(1);
+
+  return rows[0] ?? null;
+}

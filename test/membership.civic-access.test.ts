@@ -9,6 +9,7 @@ import {
   evaluateCivicAccess,
   resolveEffectiveMembershipStatus,
 } from '../src/membership/civic-access.js';
+import { COMMUNITY_COMMITMENT_VERSION } from '../src/membership/community-commitment.js';
 import { createDefaultLocalEligibilityResolver } from '../src/membership/local-eligibility.js';
 
 const NOW = '2026-07-17T12:00:00.000Z';
@@ -42,6 +43,8 @@ function makeActor(overrides: Partial<ActorRow> = {}): ActorRow {
     communityId: COMMUNITY_ID,
     accountId: ACCOUNT_ID,
     localEligibilityVerifiedAt: null,
+    communityCommitmentAcceptedAt: NOW,
+    communityCommitmentVersion: COMMUNITY_COMMITMENT_VERSION,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -205,7 +208,24 @@ describe('evaluateCivicAccess', () => {
     expect(result.denialReason).toBe('expired_membership');
   });
 
-  it('rejects when local eligibility is unavailable (fail-closed)', () => {
+  it('rejects when community commitment is missing (community alone is not acceptance)', () => {
+    const result = evaluateCivicAccess({
+      session: { accountId: ACCOUNT_ID },
+      account: makeAccount(),
+      entitlement: makeEntitlement(),
+      actor: makeActor({
+        communityCommitmentAcceptedAt: null,
+        communityCommitmentVersion: null,
+      }),
+      communityId: COMMUNITY_ID,
+      localEligibility: 'unavailable',
+      now: NOW,
+    });
+    expect(result.level).toBe('read_only');
+    expect(result.denialReason).toBe('community_commitment_missing');
+  });
+
+  it('does not treat localEligibility as the Membership V1 participation gate', () => {
     const result = evaluateCivicAccess({
       session: { accountId: ACCOUNT_ID },
       account: makeAccount(),
@@ -215,8 +235,9 @@ describe('evaluateCivicAccess', () => {
       localEligibility: 'unavailable',
       now: NOW,
     });
-    expect(result.level).toBe('read_only');
-    expect(result.denialReason).toBe('local_unavailable');
+    expect(result.level).toBe('participant');
+    expect(result.canParticipate).toBe(true);
+    expect(result.localEligibility).toBe('unavailable');
   });
 
   it('rejects when actor community does not match the request community', () => {
@@ -245,7 +266,7 @@ describe('evaluateCivicAccess', () => {
     expect(result.denialReason).toBe('inactive_account');
   });
 
-  it('grants participant on active membership + eligible local + matching actor', () => {
+  it('grants participant on active membership + valid community commitment + matching actor', () => {
     const result = evaluateCivicAccess({
       session: { accountId: ACCOUNT_ID },
       account: makeAccount(),
@@ -327,19 +348,22 @@ describe('evaluateCivicAccess', () => {
     expect(result.denialReason).toBe('actor_missing');
   });
 
-  it('still denies is_owner when local eligibility fails', () => {
+  it('still denies is_owner when community commitment is missing', () => {
     const result = evaluateCivicAccess({
       session: { accountId: ACCOUNT_ID },
       account: makeAccount({ isOwner: true }),
       entitlement: null,
-      actor: makeActor(),
+      actor: makeActor({
+        communityCommitmentAcceptedAt: null,
+        communityCommitmentVersion: null,
+      }),
       communityId: COMMUNITY_ID,
       localEligibility: 'not_verified',
       now: NOW,
     });
     expect(result.level).toBe('read_only');
     expect(result.canParticipate).toBe(false);
-    expect(result.denialReason).toBe('local_not_verified');
+    expect(result.denialReason).toBe('community_commitment_missing');
   });
 
   it('still denies non-owner with no membership (isOwner false)', () => {

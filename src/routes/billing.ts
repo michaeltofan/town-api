@@ -18,6 +18,7 @@ import {
   billingManageExistingSubscriptionError,
   billingNotAvailableError,
   billingPortalFailedError,
+  communityCommitmentRequiredError,
   membershipAlreadyActiveError,
 } from '../errors/app-error.js';
 import { ERROR_CODE } from '../schemas/error.js';
@@ -108,6 +109,8 @@ function mapCheckoutRejection(rejection: CheckoutServiceRejection): AppError {
       return membershipAlreadyActiveError();
     case 'BILLING_MANAGE_EXISTING_SUBSCRIPTION':
       return billingManageExistingSubscriptionError();
+    case 'COMMUNITY_COMMITMENT_REQUIRED':
+      return communityCommitmentRequiredError();
     case 'BILLING_NOT_AVAILABLE':
       return billingNotAvailableError();
     case 'BILLING_CHECKOUT_FAILED':
