@@ -572,7 +572,7 @@ export async function completeEmailVerification(
       if (isInitialVerification) {
         await transitionAccountState(dbTx, {
           accountId,
-          to: 'pending_password',
+          to: 'pending_passkey',
           at: now,
         });
       }
@@ -584,9 +584,11 @@ export async function completeEmailVerification(
         excludeChallengeId: challenge.id,
       });
 
-      const setupPurpose = isPendingPasskeyReentry
-        ? ('initial_passkey_registration' as const)
-        : ('initial_password_setup' as const);
+      // Ordinary new-account and pending_passkey re-entry hand off passkey registration.
+      // pending_password re-entry preserves the optional password-setup grant path.
+      const setupPurpose = isPendingPasswordReentry
+        ? ('initial_password_setup' as const)
+        : ('initial_passkey_registration' as const);
 
       await revokeActiveSetupGrantsForAccount(dbTx, {
         accountId,

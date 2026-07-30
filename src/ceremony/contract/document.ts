@@ -69,13 +69,13 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         'closed',
       ],
       setupTransitions: [
+        'pending_email -> pending_passkey',
         'pending_email -> pending_password',
         'pending_password -> pending_passkey',
         'pending_passkey -> active',
       ],
       activationRequires: [
         'verified primary email',
-        'active password credential',
         'at least one active passkey',
         'linked civic actor',
         'webauthn user handle',
@@ -83,7 +83,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     },
     domainSeparation: {
       accountIdentity:
-        'Account shell, verified email, password credential, passkeys, challenges, recovery grants',
+        'Account shell, verified email, optional password credential, passkeys, challenges, recovery grants',
       civicActor: 'Local civic participation identity; optionally linked 1:1 to an account',
       authenticationCeremony:
         'Challenges, purpose-bound setup grants, WebAuthn challenge records, rate limits',
@@ -120,7 +120,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       semantics: [
         'Opaque server-side sessions for authenticated web and mobile clients',
         'Do not imply membership, payment, local verification, civic entitlement, or Stripe state',
-        'Creation requires active account, verified primary email, active password credential, at least one active passkey, and linked civic actor',
+        'Creation requires active account, verified primary email, at least one active passkey, and linked civic actor',
         'Setup grants and recovery grants cannot create sessions',
         'Ordinary activity may extend idle_expires_at but never absolute_expires_at or authenticated_at',
         'idle_expires_at must never exceed absolute_expires_at',
@@ -316,9 +316,9 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       antiEnumeration: true,
       createsSession: false,
       activatesAccount: false,
-      transitions: ['pending_email -> pending_password'],
+      transitions: ['pending_email -> pending_passkey'],
       issues: {
-        pending_email: 'restricted setup grant initial_password_setup',
+        pending_email: 'restricted setup grant initial_passkey_registration',
         pending_password_reentry: 'restricted setup grant initial_password_setup',
         pending_passkey_reentry: 'restricted setup grant initial_passkey_registration',
       },
