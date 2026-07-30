@@ -200,7 +200,7 @@ export async function preparePendingPasswordSetup(
     throw new Error('expected account email');
   }
 
-  const now = options?.now ?? new Date().toISOString();
+  const now = options?.now ?? challenge.createdAt;
   const account = await findAccountById(app.database.db, accountEmail.accountId);
   if (account?.status !== 'pending_email') {
     throw new Error(`expected pending_email account, got ${account?.status ?? 'missing'}`);
