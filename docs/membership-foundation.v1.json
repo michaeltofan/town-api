@@ -277,7 +277,9 @@
     "publicMembershipMutationRoutes": [],
     "publicMembershipRoutes": [
       "GET /v1/account/membership"
-    ]
+    ],
+    "signalDiscussionContributionCreate": "POST /v1/signals/:signalId/discussion-session/contributions",
+    "signalDiscussionSessionRead": "GET /v1/signals/:signalId/discussion-session"
   },
   "slice": "membership_entitlement_and_civic_access_runtime",
   "sourceEvents": {

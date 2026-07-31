@@ -134,6 +134,17 @@ Persistence after restart is proven by an integration test that closes app insta
 
 No public confirmation counts or social mechanics are exposed.
 
+## Signal discussion sessions
+
+Civic contributions toward a local solution on a published signal — not chat, comments, or social threading.
+
+| Method | Path                                                     | Behavior                                                                      |
+| ------ | -------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `GET`  | `/v1/signals/:signalId/discussion-session`               | get-or-create session + ordered contributions                                 |
+| `POST` | `/v1/signals/:signalId/discussion-session/contributions` | publish `{ text, intent }` where intent is `observation\|proposal\|next_step` |
+
+Both routes require an active web/mobile session and `evaluateCivicAccess(...).canParticipate === true`. SetupGrant / RecoveryGrant / Bearer are rejected. Denials return `403 CIVIC_PARTICIPATION_NOT_AUTHORIZED` without leaking the reason and append `civic_participation_denied`. Response shape never exposes actor or account identifiers — only `authorDisplayName` (civic `display_label`).
+
 ## Account identity foundation (database + contract only)
 
 This slice adds canonical identity tables and repository invariants. It does **not** implement live authentication, email delivery, WebAuthn ceremonies, sessions, or public account endpoints.

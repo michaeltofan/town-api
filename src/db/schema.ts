@@ -329,6 +329,66 @@ export const signalSubmissions = town.table(
   ],
 );
 
+/**
+ * One discussion session per published signal. Civic contributions toward a
+ * local solution — not chat, comments, or social threading.
+ */
+export const signalDiscussionSessions = town.table(
+  'signal_discussion_sessions',
+  {
+    id: uuid('id').primaryKey(),
+    signalId: uuid('signal_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.signalId],
+      foreignColumns: [signals.id],
+      name: 'signal_discussion_sessions_signal_id_fkey',
+    }).onDelete('restrict'),
+    unique('signal_discussion_sessions_signal_id_unique').on(table.signalId),
+  ],
+);
+
+export const signalDiscussionContributions = town.table(
+  'signal_discussion_contributions',
+  {
+    id: uuid('id').primaryKey(),
+    sessionId: uuid('session_id').notNull(),
+    signalId: uuid('signal_id').notNull(),
+    actorId: uuid('actor_id').notNull(),
+    text: text('text').notNull(),
+    intent: text('intent').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.sessionId],
+      foreignColumns: [signalDiscussionSessions.id],
+      name: 'signal_discussion_contributions_session_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.signalId],
+      foreignColumns: [signals.id],
+      name: 'signal_discussion_contributions_signal_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.actorId],
+      foreignColumns: [actors.id],
+      name: 'signal_discussion_contributions_actor_id_fkey',
+    }).onDelete('restrict'),
+    check(
+      'signal_discussion_contributions_intent_valid',
+      sql`${table.intent} in ('observation', 'proposal', 'next_step')`,
+    ),
+    index('signal_discussion_contributions_session_created_at_idx').on(
+      table.sessionId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const accountEmails = town.table(
   'account_emails',
   {
@@ -1206,6 +1266,8 @@ export type SignalRow = typeof signals.$inferSelect;
 export type ActorRow = typeof actors.$inferSelect;
 export type SignalConfirmationRow = typeof signalConfirmations.$inferSelect;
 export type SignalSubmissionRow = typeof signalSubmissions.$inferSelect;
+export type SignalDiscussionSessionRow = typeof signalDiscussionSessions.$inferSelect;
+export type SignalDiscussionContributionRow = typeof signalDiscussionContributions.$inferSelect;
 export type AccountRow = typeof accounts.$inferSelect;
 export type AccountEmailRow = typeof accountEmails.$inferSelect;
 export type PasskeyCredentialRow = typeof passkeyCredentials.$inferSelect;

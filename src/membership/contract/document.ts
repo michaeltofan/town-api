@@ -377,6 +377,9 @@ export function generateMembershipContractDocument(): unknown {
       localEligibilityBindRoute: 'PUT /v1/account/eligibility',
       participantSignalConfirmation: 'PUT /v1/signals/:signalId/confirmation',
       controlledSignalConfirmationRead: 'GET /v1/signals/:signalId/confirmation',
+      signalDiscussionSessionRead: 'GET /v1/signals/:signalId/discussion-session',
+      signalDiscussionContributionCreate:
+        'POST /v1/signals/:signalId/discussion-session/contributions',
     },
     participantPolicy: {
       requiresActiveSession: true,
