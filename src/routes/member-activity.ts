@@ -29,10 +29,6 @@ function rateLimitedError(): AppError {
   return new AppError(429, 'RATE_LIMITED', 'Rate limit exceeded.');
 }
 
-function singleHeader(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
 function extractSessionTransport(input: {
   authorization: string | string[] | undefined;
   cookieName: string;
