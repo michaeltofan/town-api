@@ -10,9 +10,7 @@ export type TownObjectStorageAdapter = {
     body: Uint8Array | Buffer | string;
     contentType: string;
   }) => Promise<ObjectStoragePutResult>;
-  getObject: (input: {
-    key: string;
-  }) => Promise<ObjectStorageGetResult>;
+  getObject: (input: { key: string }) => Promise<ObjectStorageGetResult>;
 };
 
 export type ObjectStoragePutResult = { ok: true } | { ok: false; reason: 'sdk_error' };

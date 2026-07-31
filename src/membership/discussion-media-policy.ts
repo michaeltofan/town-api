@@ -13,14 +13,8 @@ export const MAX_DISCUSSION_VIDEO_BYTES = 32 * 1024 * 1024;
 export const MAX_DISCUSSION_MEDIA_BYTES = MAX_DISCUSSION_VIDEO_BYTES;
 export const DISCUSSION_MEDIA_UPLOAD_TTL_MS = 60 * 60 * 1000;
 
-export function discussionMediaKindForContentType(
-  contentType: string,
-): DiscussionMediaKind | null {
-  if (
-    contentType === 'image/jpeg' ||
-    contentType === 'image/png' ||
-    contentType === 'image/webp'
-  ) {
+export function discussionMediaKindForContentType(contentType: string): DiscussionMediaKind | null {
+  if (contentType === 'image/jpeg' || contentType === 'image/png' || contentType === 'image/webp') {
     return 'image';
   }
   if (contentType === 'video/mp4') {

@@ -433,9 +433,7 @@ export const discussionSessionRoutes: FastifyPluginCallbackTypebox<
       }
 
       const nowIso = now();
-      const expiresAt = new Date(
-        Date.parse(nowIso) + DISCUSSION_MEDIA_UPLOAD_TTL_MS,
-      ).toISOString();
+      const expiresAt = new Date(Date.parse(nowIso) + DISCUSSION_MEDIA_UPLOAD_TTL_MS).toISOString();
 
       await insertPendingDiscussionMediaUpload(app.database.db, {
         id: mediaUploadId,

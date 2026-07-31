@@ -1,9 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import {
-  signalDiscussionMediaUploads,
-  type SignalDiscussionMediaUploadRow,
-} from '../schema.js';
+import { signalDiscussionMediaUploads, type SignalDiscussionMediaUploadRow } from '../schema.js';
 import type {
   DiscussionMediaContentType,
   DiscussionMediaKind,

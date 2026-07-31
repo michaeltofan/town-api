@@ -19,9 +19,7 @@ describe('discussion-media-policy', () => {
   });
 
   it('checks magic bytes and builds private object keys', () => {
-    expect(matchesDiscussionMediaMagic('image/jpeg', Buffer.from([0xff, 0xd8, 0xff]))).toBe(
-      true,
-    );
+    expect(matchesDiscussionMediaMagic('image/jpeg', Buffer.from([0xff, 0xd8, 0xff]))).toBe(true);
     expect(matchesDiscussionMediaMagic('image/jpeg', Buffer.from('nope'))).toBe(false);
     expect(
       matchesDiscussionMediaMagic(

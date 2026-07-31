@@ -8,9 +8,7 @@ import {
  * Creates a private object-storage adapter when OBJECT_STORAGE_ENABLED is true.
  * Returns null when storage is disabled (media upload routes should fail honestly).
  */
-export function createObjectStorageAdapterFromEnv(
-  env: Env,
-): TownObjectStorageAdapter | null {
+export function createObjectStorageAdapterFromEnv(env: Env): TownObjectStorageAdapter | null {
   if (!env.OBJECT_STORAGE_ENABLED) {
     return null;
   }
