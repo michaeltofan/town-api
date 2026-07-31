@@ -384,6 +384,427 @@
         ]
       }
     },
+    "/v1/account/activity": {
+      "get": {
+        "description": "Returns the authenticated account’s real civic Activity from durable backend rows only: own confirmations, own published discussion contributions, own published member signals, and current evolution (status/latest update) for signals the member participates in. Hidden signals are excluded. Never invents demo/example rows. Requires an active web or mobile session. SetupGrant, RecoveryGrant, and Bearer are rejected.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "enum": [
+                                      "confirmation"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "occurredAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "signal": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "community": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "displayName": {
+                                            "type": "string"
+                                          },
+                                          "slug": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "slug",
+                                          "displayName"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "headline": {
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "slug": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "slug",
+                                      "headline",
+                                      "community"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "occurredAt",
+                                  "signal"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "contribution": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "intent": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "observation"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "enum": [
+                                              "proposal"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "enum": [
+                                              "next_step"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        ]
+                                      },
+                                      "text": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "text",
+                                      "intent"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "contribution"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "occurredAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "signal": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "community": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "displayName": {
+                                            "type": "string"
+                                          },
+                                          "slug": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "slug",
+                                          "displayName"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "headline": {
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "slug": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "slug",
+                                      "headline",
+                                      "community"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "occurredAt",
+                                  "signal",
+                                  "contribution"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "enum": [
+                                      "signal_published"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "occurredAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "signal": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "community": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "displayName": {
+                                            "type": "string"
+                                          },
+                                          "slug": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "slug",
+                                          "displayName"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "headline": {
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "slug": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "slug",
+                                      "headline",
+                                      "community"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "occurredAt",
+                                  "signal"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "evolution": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "latestUpdate": {
+                                        "type": "string"
+                                      },
+                                      "statusLabel": {
+                                        "type": "string"
+                                      },
+                                      "statusNote": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "statusLabel",
+                                      "statusNote",
+                                      "latestUpdate"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "signal_evolution"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "occurredAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "signal": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "community": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "displayName": {
+                                            "type": "string"
+                                          },
+                                          "slug": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "slug",
+                                          "displayName"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "headline": {
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "slug": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "slug",
+                                      "headline",
+                                      "community"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "occurredAt",
+                                  "signal",
+                                  "evolution"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Read the authenticated member civic Activity feed",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
     "/v1/account/community-commitment": {
       "get": {
         "description": "Returns whether the authenticated natural person has recorded an explicit community choice and personal responsibility declaration. Community association without acceptance is reported as none. Never claims technical location or residence verification.",
