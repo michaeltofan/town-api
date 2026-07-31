@@ -56,5 +56,29 @@ export const AccountModerationResponseSchema = Type.Object(
   { additionalProperties: false, $id: 'AccountModerationResponse' },
 );
 
+export const SuspendedAccountModerationItemSchema = Type.Object(
+  {
+    accountId: Type.String({ format: 'uuid' }),
+    email: Type.Union([Type.String(), Type.Null()]),
+    suspendedAt: Type.String({ format: 'date-time' }),
+  },
+  { additionalProperties: false, $id: 'SuspendedAccountModerationItem' },
+);
+
+export const SuspendedAccountsModerationResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        accounts: Type.Array(SuspendedAccountModerationItemSchema),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'SuspendedAccountsModerationResponse' },
+);
+
 export type AccountBanBody = Static<typeof AccountBanBodySchema>;
 export type AccountModerationResponse = Static<typeof AccountModerationResponseSchema>;
+export type SuspendedAccountsModerationResponse = Static<
+  typeof SuspendedAccountsModerationResponseSchema
+>;

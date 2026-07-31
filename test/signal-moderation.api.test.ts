@@ -381,4 +381,59 @@ describe('owner signal hide / unhide', () => {
     expect(list.statusCode).toBe(200);
     expect(list.json<SignalListResponse>().data.signals.map((s) => s.id)).toContain(signalId);
   });
+
+  it('owner moderation inventory includes hidden signals; non-owner gets NOT_FOUND', async () => {
+    const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal1;
+    await clearHideState(signalId);
+    const owner = await registerOwner('OwnerModerationInventory+setup@example.com');
+    const nonOwner = await registerNonOwner('NonOwnerModerationInventory+setup@example.com');
+
+    await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/signals/${signalId}/hide`,
+      headers: { authorization: `Session ${owner.sessionToken}` },
+      payload: { reason: 'abusive' },
+    });
+
+    const ownerList = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/communities/milano-it/moderation/signals',
+      headers: { authorization: `Session ${owner.sessionToken}` },
+    });
+    expect(ownerList.statusCode).toBe(200);
+    const ownerBody = ownerList.json<{
+      data: {
+        community: { slug: string };
+        signals: {
+          id: string;
+          hidden: boolean;
+          hiddenReason: string | null;
+          authorAccountId: string | null;
+        }[];
+      };
+    }>();
+    expect(ownerBody.data.community.slug).toBe('milano-it');
+    const hiddenRow = ownerBody.data.signals.find((row) => row.id === signalId);
+    expect(hiddenRow).toMatchObject({
+      id: signalId,
+      hidden: true,
+      hiddenReason: 'abusive',
+      authorAccountId: null,
+    });
+
+    const publicList = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/communities/milano-it/signals',
+    });
+    expect(publicList.json<SignalListResponse>().data.signals.map((row) => row.id)).not.toContain(
+      signalId,
+    );
+
+    const denied = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/communities/milano-it/moderation/signals',
+      headers: { authorization: `Session ${nonOwner.sessionToken}` },
+    });
+    expect(denied.statusCode).toBe(404);
+  });
 });

@@ -1,4 +1,4 @@
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, isNull } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import {
   accountEmails,
@@ -280,4 +280,41 @@ export async function setAccountRecoveryCompletedAt(
     throw new IdentityInvariantError('ACCOUNT_NOT_FOUND', 'Account was not found');
   }
   return row;
+}
+
+export type SuspendedAccountModerationRow = {
+  accountId: string;
+  email: string | null;
+  suspendedAt: string;
+};
+
+/** Owner moderation inventory of suspended accounts (for unban). */
+export async function listSuspendedAccountsForOwnerModeration(
+  db: Db,
+): Promise<SuspendedAccountModerationRow[]> {
+  const rows = await db
+    .select({
+      accountId: accounts.id,
+      email: accountEmails.emailOriginal,
+      suspendedAt: accounts.suspendedAt,
+    })
+    .from(accounts)
+    .leftJoin(
+      accountEmails,
+      and(
+        eq(accountEmails.accountId, accounts.id),
+        eq(accountEmails.isPrimary, true),
+        isNull(accountEmails.revokedAt),
+      ),
+    )
+    .where(eq(accounts.status, 'suspended'))
+    .orderBy(asc(accounts.suspendedAt));
+
+  return rows
+    .filter((row): row is typeof row & { suspendedAt: string } => row.suspendedAt !== null)
+    .map((row) => ({
+      accountId: row.accountId,
+      email: row.email,
+      suspendedAt: row.suspendedAt,
+    }));
 }

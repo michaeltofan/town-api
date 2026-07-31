@@ -71,5 +71,6 @@ export async function getAccountMembershipView(
       canParticipate: access.canParticipate,
       localEligibility: access.localEligibility,
     },
+    isOwner: account?.isOwner === true,
   };
 }

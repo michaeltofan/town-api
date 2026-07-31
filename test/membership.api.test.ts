@@ -72,6 +72,7 @@ describe('GET /v1/account/membership', () => {
       data: {
         membership: { status: string; accessUntil: null | string; cancelAtPeriodEnd: boolean };
         access: { level: string; canParticipate: boolean; localEligibility: string };
+        isOwner: boolean;
       };
     }>();
     expect(body.data.membership).toEqual({
@@ -81,6 +82,7 @@ describe('GET /v1/account/membership', () => {
     });
     expect(body.data.access.level).toBe('read_only');
     expect(body.data.access.canParticipate).toBe(false);
+    expect(body.data.isOwner).toBe(false);
     // No Stripe identifiers surface in the response.
     expect(JSON.stringify(body)).not.toMatch(/cus_|sub_|sourceCustomerId|sourceSubscriptionId/);
   });
@@ -107,6 +109,7 @@ describe('GET /v1/account/membership', () => {
       data: {
         membership: { status: string; accessUntil: string; cancelAtPeriodEnd: boolean };
         access: { level: string; canParticipate: boolean; localEligibility: string };
+        isOwner: boolean;
       };
     }>();
     expect(body.data.membership.status).toBe('active');
@@ -115,6 +118,7 @@ describe('GET /v1/account/membership', () => {
     expect(body.data.access.level).toBe('participant');
     expect(body.data.access.canParticipate).toBe(true);
     expect(body.data.access.localEligibility).toBe('eligible');
+    expect(body.data.isOwner).toBe(false);
   });
 
   it('reports cancelling status when scheduled cancellation is pending', async () => {

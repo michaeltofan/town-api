@@ -44,6 +44,7 @@ export const AccountMembershipResponseSchema = Type.Object(
           },
           { additionalProperties: false },
         ),
+        isOwner: Type.Boolean(),
       },
       { additionalProperties: false },
     ),

@@ -42,4 +42,6 @@ export type AccountMembershipView = {
     canParticipate: boolean;
     localEligibility: import('../db/schema.js').LocalParticipationEligibility;
   };
+  /** Self-only: whether this authenticated account holds the owner label. */
+  isOwner: boolean;
 };

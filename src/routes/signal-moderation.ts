@@ -9,14 +9,21 @@ import {
   type SessionTransportExtraction,
 } from '../ceremony/passkey-authentication/session-transport.js';
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
-import { hideSignal, unhideSignal } from '../db/repositories/signals.js';
+import { findActiveCommunityBySlug } from '../db/repositories/communities.js';
+import {
+  hideSignal,
+  listPublishedSignalsForOwnerModeration,
+  unhideSignal,
+} from '../db/repositories/signals.js';
 import type { SignalHideReason, SignalRow } from '../db/schema.js';
-import { lockAccountById } from '../identity/repositories/accounts.js';
+import { findAccountById, lockAccountById } from '../identity/repositories/accounts.js';
 import { appendIdentitySecurityEvent } from '../identity/repositories/security-events.js';
 import { toIsoTimestamp } from '../lib/timestamps.js';
-import { signalNotFoundError } from '../errors/app-error.js';
+import { communityNotFoundError, signalNotFoundError } from '../errors/app-error.js';
+import { CommunitySlugParamsSchema } from '../schemas/communities.js';
 import { SignalIdParamsSchema } from '../schemas/signals.js';
 import {
+  OwnerModerationSignalsResponseSchema,
   SignalHideBodySchema,
   SignalModerationResponseSchema,
   SignalUnhideBodySchema,
@@ -289,6 +296,73 @@ export const signalModerationRoutes: FastifyPluginCallbackTypebox<SignalModerati
         throw signalNotFoundError();
       }
       return toModerationResponse(result.unhideResult);
+    },
+  );
+
+  app.get(
+    '/v1/communities/:communitySlug/moderation/signals',
+    {
+      schema: {
+        tags: ['SignalModeration'],
+        summary: 'List published signals for owner moderation (includes hidden)',
+        description:
+          'Owner-only read surface for existing hide/unhide tools. Returns published signals for the community including hidden rows, with authorAccountId when the signal is member-authored. Non-owner and no-session callers receive generic NOT_FOUND.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: CommunitySlugParamsSchema,
+        response: {
+          200: OwnerModerationSignalsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const accountId = await resolveOwnerAccountId(request);
+      if (!accountId) {
+        reply.callNotFound();
+        return;
+      }
+
+      const ownerAccount = await findAccountById(app.database.db, accountId);
+      if (!ownerAccount?.isOwner || ownerAccount.status !== 'active') {
+        reply.callNotFound();
+        return;
+      }
+
+      const community = await findActiveCommunityBySlug(
+        app.database.db,
+        request.params.communitySlug,
+      );
+      if (!community) {
+        throw communityNotFoundError();
+      }
+
+      const rows = await listPublishedSignalsForOwnerModeration(app.database.db, community.id);
+
+      return {
+        data: {
+          community: {
+            id: community.id,
+            slug: community.slug,
+            displayName: community.displayName,
+          },
+          signals: rows.map((row) => {
+            const hidden = row.hiddenAt !== null;
+            return {
+              id: row.id,
+              slug: row.slug,
+              headline: row.headline,
+              category: row.category,
+              area: row.area,
+              authorDisplayName: row.authorDisplayName,
+              authorAccountId: row.authorAccountId,
+              hidden,
+              hiddenAt: row.hiddenAt === null ? null : toIsoTimestamp(row.hiddenAt),
+              hiddenReason: (row.hiddenReason as SignalHideReason | null) ?? null,
+              publishedAt: toIsoTimestamp(row.publishedAt),
+            };
+          }),
+        },
+      };
     },
   );
 
