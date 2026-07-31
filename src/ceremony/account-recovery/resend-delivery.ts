@@ -1,30 +1,30 @@
-import { isSupportedLocale, type SupportedLocale } from './policy.js';
-import { buildVerificationEmail } from './messages.js';
-import type {
-  EmailVerificationDeliveryAdapter,
-  EmailVerificationDeliveryInput,
-  EmailVerificationDeliveryResult,
-} from './delivery.js';
 import {
   sendResendPlainTextEmail,
   type ResendEmailDeliveryFailureReason,
 } from '../delivery/resend-email.js';
+import { buildRecoveryEmail } from './messages.js';
+import { isSupportedLocale, type SupportedLocale } from './policy.js';
+import type {
+  AccountRecoveryDeliveryAdapter,
+  AccountRecoveryDeliveryInput,
+  AccountRecoveryDeliveryResult,
+} from './delivery.js';
 
-export type ResendDeliveryLogEvent = {
-  event: 'email_delivery_failed';
+export type RecoveryResendDeliveryLogEvent = {
+  event: 'recovery_email_delivery_failed';
   provider: 'resend';
   reason: ResendEmailDeliveryFailureReason;
   status?: number;
   requestId?: string | null;
 };
 
-export type CreateResendDeliveryAdapterOptions = {
+export type CreateRecoveryResendDeliveryAdapterOptions = {
   apiKey: string;
   from: string;
   replyTo?: string;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
-  log?: (event: ResendDeliveryLogEvent) => void;
+  log?: (event: RecoveryResendDeliveryLogEvent) => void;
 };
 
 function resolveLocale(locale: string): SupportedLocale {
@@ -35,21 +35,21 @@ function resolveLocale(locale: string): SupportedLocale {
 }
 
 /**
- * Production-capable Resend delivery adapter for email verification (zero npm dependencies).
- * Sends only for outcomeCategory === 'verification_code'; never retries.
- * Uses shared Resend HTTP helper; never logs codes or API keys.
+ * Production-capable Resend delivery adapter for account recovery.
+ * Sends only for outcomeCategory === 'recovery_code'; never retries.
+ * Reuses shared Resend HTTP helper; never logs codes or API keys.
  */
-export function createResendDeliveryAdapter(
-  options: CreateResendDeliveryAdapterOptions,
-): EmailVerificationDeliveryAdapter {
+export function createRecoveryResendDeliveryAdapter(
+  options: CreateRecoveryResendDeliveryAdapterOptions,
+): AccountRecoveryDeliveryAdapter {
   const { apiKey, from, replyTo, log } = options;
 
   return {
     mode: 'resend',
-    async deliverVerificationCode(
-      input: EmailVerificationDeliveryInput,
-    ): Promise<EmailVerificationDeliveryResult> {
-      if (input.outcomeCategory !== 'verification_code') {
+    async deliverRecoveryCode(
+      input: AccountRecoveryDeliveryInput,
+    ): Promise<AccountRecoveryDeliveryResult> {
+      if (input.outcomeCategory !== 'recovery_code') {
         return {
           delivered: false,
           outcomeCategory: input.outcomeCategory,
@@ -57,7 +57,7 @@ export function createResendDeliveryAdapter(
       }
 
       const locale = resolveLocale(input.locale);
-      const { subject, text } = buildVerificationEmail(locale, {
+      const { subject, text } = buildRecoveryEmail(locale, {
         code: input.code,
         expiresAt: input.expiresAt,
       });
@@ -81,7 +81,7 @@ export function createResendDeliveryAdapter(
       }
 
       log?.({
-        event: 'email_delivery_failed',
+        event: 'recovery_email_delivery_failed',
         provider: 'resend',
         reason: result.reason,
         ...(result.status !== undefined ? { status: result.status } : {}),

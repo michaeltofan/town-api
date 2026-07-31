@@ -57,6 +57,7 @@ export const AccountRecoveryRequestAcceptedSchema = Type.Object(
     data: Type.Object(
       {
         status: Type.Literal('RECOVERY_REQUEST_ACCEPTED'),
+        recoveryVerificationId: UuidSchema,
       },
       { additionalProperties: false },
     ),

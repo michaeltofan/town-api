@@ -151,8 +151,11 @@ credentials, or Stripe state. The route never calls Stripe.
 
 Email verification may be enabled in production only with
 `EMAIL_VERIFICATION_DELIVERY_MODE=resend` (plus Resend credentials).
-`ACCOUNT_RECOVERY_ENABLED` cannot be true in production while only
-test/development delivery adapters exist.
+`ACCOUNT_RECOVERY_ENABLED` may be true in production only with
+`ACCOUNT_RECOVERY_DELIVERY_MODE=resend` (reuses
+`EMAIL_VERIFICATION_RESEND_API_KEY` and `EMAIL_VERIFICATION_FROM_ADDRESS`).
+Test/development recovery delivery modes are rejected when
+`NODE_ENV=production`.
 
 ## 7. Graceful shutdown
 

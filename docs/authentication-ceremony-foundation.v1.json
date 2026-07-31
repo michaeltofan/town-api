@@ -38,7 +38,8 @@
     },
     "deliveryModes": [
       "test",
-      "development"
+      "development",
+      "resend"
     ],
     "eligibility": "active account with verified primary email matching the request",
     "featureFlag": "ACCOUNT_RECOVERY_ENABLED",
@@ -69,6 +70,11 @@
       "recovery_verification_grant": 5,
       "requestEmail24h": 3,
       "requestIp24h": 10
+    },
+    "requestResponse": {
+      "alwaysIncludesRecoveryVerificationId": true,
+      "dummyIdForIneligibleOrThrottled": true,
+      "status": "RECOVERY_REQUEST_ACCEPTED"
     },
     "routes": [
       "POST /v1/account/recovery",
@@ -229,7 +235,6 @@
   },
   "explicitExclusions": [
     "recovery login / session issuance from recovery",
-    "production recovery email delivery",
     "password recovery / reset / change",
     "phone sign-in",
     "JWTs",

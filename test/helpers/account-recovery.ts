@@ -1,7 +1,10 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { Pool } from 'pg';
 import { buildApp, type AppInstance } from '../../src/app.js';
-import { createInMemoryTestRecoveryDeliveryAdapter } from '../../src/ceremony/account-recovery/delivery.js';
+import {
+  createInMemoryTestRecoveryDeliveryAdapter,
+  type AccountRecoveryDeliveryAdapter,
+} from '../../src/ceremony/account-recovery/delivery.js';
 import { createInMemoryTestDeliveryAdapter } from '../../src/ceremony/email-verification/delivery.js';
 import { loadEnv, type Env } from '../../src/config/env.js';
 import { createDatabase } from '../../src/db/client.js';
@@ -77,6 +80,7 @@ export async function createAccountRecoveryTestApp(options?: {
   generateCode?: () => string;
   generateRecoveryToken?: () => string;
   generateId?: () => string;
+  recoveryDeliveryAdapter?: AccountRecoveryDeliveryAdapter;
 }): Promise<{
   app: AppInstance;
   pool: Pool;
@@ -98,6 +102,7 @@ export async function createAccountRecoveryTestApp(options?: {
   );
   const emailDelivery = createInMemoryTestDeliveryAdapter();
   const recoveryDelivery = createInMemoryTestRecoveryDeliveryAdapter();
+  const activeRecoveryDelivery = options?.recoveryDeliveryAdapter ?? recoveryDelivery;
   const database = createDatabase({
     connectionString: env.DATABASE_URL,
     poolMax: env.DB_POOL_MAX,
@@ -119,7 +124,7 @@ export async function createAccountRecoveryTestApp(options?: {
       ...(options?.generateId !== undefined ? { generateId: options.generateId } : {}),
     },
     accountRecovery: {
-      deliveryAdapter: recoveryDelivery,
+      deliveryAdapter: activeRecoveryDelivery,
       ...(options?.now !== undefined ? { now: options.now } : {}),
       ...(options?.generateCode !== undefined ? { generateCode: options.generateCode } : {}),
       ...(options?.generateRecoveryToken !== undefined

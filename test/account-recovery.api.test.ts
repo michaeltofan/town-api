@@ -26,6 +26,18 @@ import {
 } from './helpers/account-recovery.js';
 import { TEST_ORIGIN, TEST_RP_ID } from './helpers/passkey-authentication.js';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function acceptedRecoveryId(response: { statusCode: number; json: () => unknown }): string {
+  expect(response.statusCode).toBe(202);
+  const body = response.json() as {
+    data: { status: string; recoveryVerificationId: string };
+  };
+  expect(body.data.status).toBe('RECOVERY_REQUEST_ACCEPTED');
+  expect(body.data.recoveryVerificationId).toMatch(UUID_RE);
+  return body.data.recoveryVerificationId;
+}
+
 describe('account recovery API', () => {
   let app: Awaited<ReturnType<typeof createAccountRecoveryTestApp>>['app'];
   let pool: Awaited<ReturnType<typeof createAccountRecoveryTestApp>>['pool'];
@@ -66,7 +78,7 @@ describe('account recovery API', () => {
     }
   });
 
-  it('anti-enumerates unknown, pending, and suspended accounts with the same 202', async () => {
+  it('anti-enumerates unknown, pending, and suspended accounts with the same 202 shape', async () => {
     const active = await registerActiveAccountForRecovery(
       app,
       emailDelivery,
@@ -82,21 +94,31 @@ describe('account recovery API', () => {
       })
       .where(eq(accounts.id, active.accountId));
 
+    const beforeDelivery = recoveryDelivery.records.length;
     const unknown = await requestRecovery(app, 'unknown.recovery@example.com');
     const suspended = await requestRecovery(app, 'recovery.enum@example.com');
     const pendingShell = await requestRecovery(app, 'pending.only@example.com');
 
     for (const response of [unknown, suspended, pendingShell]) {
-      expect(response.statusCode).toBe(202);
-      expect(response.json()).toEqual({
-        data: { status: 'RECOVERY_REQUEST_ACCEPTED' },
+      const recoveryVerificationId = acceptedRecoveryId(response);
+      expect(JSON.stringify(response.json())).not.toContain('eligible');
+      expect(JSON.stringify(response.json())).not.toContain('accountId');
+      // Dummy ids must not unlock verify-email.
+      const verify = await verifyRecoveryEmailRequest(app, {
+        recoveryVerificationId,
+        code: FIXED_RECOVERY_CODE,
       });
-      expect(JSON.stringify(response.json())).not.toContain('challenge');
-      expect(JSON.stringify(response.json())).not.toContain('recoveryVerificationId');
+      expect(verify.statusCode).toBe(400);
+      expect(verify.json()).toMatchObject({
+        error: { code: 'INVALID_OR_EXPIRED_CHALLENGE' },
+      });
     }
+
+    const newRecords = recoveryDelivery.records.slice(beforeDelivery);
+    expect(newRecords.every((record) => record.outcomeCategory === 'suppressed')).toBe(true);
   });
 
-  it('issues a 6-digit hash-only recover_account challenge with 10m TTL for active accounts', async () => {
+  it('issues a client-usable recoveryVerificationId and 6-digit hash-only challenge', async () => {
     const active = await registerActiveAccountForRecovery(
       app,
       emailDelivery,
@@ -104,10 +126,10 @@ describe('account recovery API', () => {
     );
 
     const response = await requestRecovery(app, active.email);
-    expect(response.statusCode).toBe(202);
-    expect(response.json()).toEqual({ data: { status: 'RECOVERY_REQUEST_ACCEPTED' } });
+    const recoveryVerificationId = acceptedRecoveryId(response);
 
     const challenge = await latestRecoveryChallenge(app, active.accountId);
+    expect(challenge.id).toBe(recoveryVerificationId);
     expect(challenge.purpose).toBe('recover_account');
     expect(challenge.attemptCount).toBe(0);
     expect(challenge.revokedAt).toBeNull();
@@ -127,21 +149,22 @@ describe('account recovery API', () => {
 
     const delivered = recoveryDelivery.records.at(-1);
     expect(delivered?.purpose).toBe('recover_account');
+    expect(delivered?.outcomeCategory).toBe('recovery_code');
     expect(delivered?.code).toBe(FIXED_RECOVERY_CODE);
     expect(/^\d{6}$/.test(delivered?.code ?? '')).toBe(true);
   });
 
-  it('verifies email successfully and returns a recovery grant without creating a session', async () => {
+  it('verifies email from response recoveryVerificationId without creating a session', async () => {
     const active = await registerActiveAccountForRecovery(
       app,
       emailDelivery,
       'recovery.verify@example.com',
     );
-    await requestRecovery(app, active.email);
-    const challenge = await latestRecoveryChallenge(app, active.accountId);
+    const request = await requestRecovery(app, active.email);
+    const recoveryVerificationId = acceptedRecoveryId(request);
 
     const response = await verifyRecoveryEmailRequest(app, {
-      recoveryVerificationId: challenge.id,
+      recoveryVerificationId,
       code: FIXED_RECOVERY_CODE,
     });
     expect(response.statusCode).toBe(200);
@@ -179,11 +202,11 @@ describe('account recovery API', () => {
       emailDelivery,
       'recovery.wrong@example.com',
     );
-    await requestRecovery(app, active.email);
-    const challenge = await latestRecoveryChallenge(app, active.accountId);
+    const request = await requestRecovery(app, active.email);
+    const recoveryVerificationId = acceptedRecoveryId(request);
 
     const response = await verifyRecoveryEmailRequest(app, {
-      recoveryVerificationId: challenge.id,
+      recoveryVerificationId,
       code: '000000',
     });
     expect(response.statusCode).toBe(400);
@@ -198,7 +221,7 @@ describe('account recovery API', () => {
       await app.database.db
         .select()
         .from(emailChallenges)
-        .where(eq(emailChallenges.id, challenge.id))
+        .where(eq(emailChallenges.id, recoveryVerificationId))
         .limit(1)
     )[0];
     expect(updated?.attemptCount).toBe(1);
@@ -210,10 +233,10 @@ describe('account recovery API', () => {
       emailDelivery,
       'recovery.options@example.com',
     );
-    await requestRecovery(app, active.email);
-    const challenge = await latestRecoveryChallenge(app, active.accountId);
+    const request = await requestRecovery(app, active.email);
+    const recoveryVerificationId = acceptedRecoveryId(request);
     const verify = await verifyRecoveryEmailRequest(app, {
-      recoveryVerificationId: challenge.id,
+      recoveryVerificationId,
       code: FIXED_RECOVERY_CODE,
     });
     const grant = verify.json<{ data: { recoveryGrant: string } }>().data.recoveryGrant;
@@ -265,10 +288,10 @@ describe('account recovery API', () => {
 
     expect(await countActivePasskeys(app, active.accountId)).toBe(1);
 
-    await requestRecovery(app, active.email);
-    const challenge = await latestRecoveryChallenge(app, active.accountId);
+    const request = await requestRecovery(app, active.email);
+    const recoveryVerificationId = acceptedRecoveryId(request);
     const verify = await verifyRecoveryEmailRequest(app, {
-      recoveryVerificationId: challenge.id,
+      recoveryVerificationId,
       code: FIXED_RECOVERY_CODE,
     });
     const grant = verify.json<{ data: { recoveryGrant: string } }>().data.recoveryGrant;
@@ -336,12 +359,51 @@ describe('account recovery API', () => {
     });
   });
 
-  it('returns generic 202 when recovery request rate limits are exceeded', async () => {
+  it('keeps 202 shape when recovery delivery fails for an eligible account', async () => {
+    const failingDelivery = {
+      mode: 'test' as const,
+      records: [] as unknown[],
+      deliverRecoveryCode(input: {
+        email: string;
+        locale: string;
+        code: string;
+        expiresAt: string;
+        purpose: 'recover_account';
+        outcomeCategory: 'recovery_code' | 'suppressed' | 'unavailable';
+        requestId?: string | null;
+      }) {
+        this.records.push(input);
+        return Promise.reject(new Error(`provider boom ${input.code}`));
+      },
+    };
+    const boot = await createAccountRecoveryTestApp({
+      generateCode: () => FIXED_RECOVERY_CODE,
+      now: () => nowIso,
+      recoveryDeliveryAdapter: failingDelivery,
+    });
+    try {
+      const active = await registerActiveAccountForRecovery(
+        boot.app,
+        boot.emailDelivery,
+        'recovery.delivery.fail@example.com',
+      );
+      const response = await requestRecovery(boot.app, active.email);
+      const recoveryVerificationId = acceptedRecoveryId(response);
+      expect(JSON.stringify(response.json())).not.toContain(FIXED_RECOVERY_CODE);
+      expect(JSON.stringify(response.json())).not.toContain('unavailable');
+      expect(JSON.stringify(response.json())).not.toContain('provider boom');
+      expect(recoveryVerificationId).toMatch(UUID_RE);
+    } finally {
+      await boot.app.close();
+      await boot.pool.end();
+    }
+  });
+
+  it('returns generic 202 with recoveryVerificationId when request rate limits are exceeded', async () => {
     const email = 'recovery.throttle@example.com';
     for (let i = 0; i < 4; i += 1) {
       const response = await requestRecovery(app, email, { remoteAddress: '203.0.113.50' });
-      expect(response.statusCode).toBe(202);
-      expect(response.json()).toEqual({ data: { status: 'RECOVERY_REQUEST_ACCEPTED' } });
+      acceptedRecoveryId(response);
     }
 
     const challenges = await app.database.db
@@ -359,10 +421,10 @@ describe('account recovery API', () => {
       emailDelivery,
       'recovery.concurrent@example.com',
     );
-    await requestRecovery(app, active.email);
-    const challenge = await latestRecoveryChallenge(app, active.accountId);
+    const request = await requestRecovery(app, active.email);
+    const recoveryVerificationId = acceptedRecoveryId(request);
     const verify = await verifyRecoveryEmailRequest(app, {
-      recoveryVerificationId: challenge.id,
+      recoveryVerificationId,
       code: FIXED_RECOVERY_CODE,
     });
     const grant = verify.json<{ data: { recoveryGrant: string } }>().data.recoveryGrant;
