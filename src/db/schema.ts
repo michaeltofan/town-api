@@ -351,6 +351,59 @@ export const signalDiscussionSessions = town.table(
   ],
 );
 
+/**
+ * Pending or attached media objects for discussion contributions.
+ * Bytes live in private object storage; this row is the durable metadata ledger.
+ */
+export const signalDiscussionMediaUploads = town.table(
+  'signal_discussion_media_uploads',
+  {
+    id: uuid('id').primaryKey(),
+    signalId: uuid('signal_id').notNull(),
+    accountId: uuid('account_id').notNull(),
+    actorId: uuid('actor_id').notNull(),
+    objectKey: text('object_key').notNull(),
+    contentType: text('content_type').notNull(),
+    kind: text('kind').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    status: text('status').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.signalId],
+      foreignColumns: [signals.id],
+      name: 'signal_discussion_media_uploads_signal_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'signal_discussion_media_uploads_account_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.actorId],
+      foreignColumns: [actors.id],
+      name: 'signal_discussion_media_uploads_actor_id_fkey',
+    }).onDelete('restrict'),
+    unique('signal_discussion_media_uploads_object_key_unique').on(table.objectKey),
+    check('signal_discussion_media_uploads_kind_valid', sql`${table.kind} in ('image', 'video')`),
+    check(
+      'signal_discussion_media_uploads_status_valid',
+      sql`${table.status} in ('pending', 'attached', 'abandoned')`,
+    ),
+    check(
+      'signal_discussion_media_uploads_content_type_valid',
+      sql`${table.contentType} in ('image/jpeg', 'image/png', 'image/webp', 'video/mp4')`,
+    ),
+    check('signal_discussion_media_uploads_byte_size_positive', sql`${table.byteSize} > 0`),
+    index('signal_discussion_media_uploads_account_created_at_idx').on(
+      table.accountId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const signalDiscussionContributions = town.table(
   'signal_discussion_contributions',
   {
@@ -360,6 +413,7 @@ export const signalDiscussionContributions = town.table(
     actorId: uuid('actor_id').notNull(),
     text: text('text').notNull(),
     intent: text('intent').notNull(),
+    mediaUploadId: uuid('media_upload_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -378,6 +432,12 @@ export const signalDiscussionContributions = town.table(
       foreignColumns: [actors.id],
       name: 'signal_discussion_contributions_actor_id_fkey',
     }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.mediaUploadId],
+      foreignColumns: [signalDiscussionMediaUploads.id],
+      name: 'signal_discussion_contributions_media_upload_id_fkey',
+    }).onDelete('restrict'),
+    unique('signal_discussion_contributions_media_upload_id_unique').on(table.mediaUploadId),
     check(
       'signal_discussion_contributions_intent_valid',
       sql`${table.intent} in ('observation', 'proposal', 'next_step')`,
@@ -1267,6 +1327,7 @@ export type ActorRow = typeof actors.$inferSelect;
 export type SignalConfirmationRow = typeof signalConfirmations.$inferSelect;
 export type SignalSubmissionRow = typeof signalSubmissions.$inferSelect;
 export type SignalDiscussionSessionRow = typeof signalDiscussionSessions.$inferSelect;
+export type SignalDiscussionMediaUploadRow = typeof signalDiscussionMediaUploads.$inferSelect;
 export type SignalDiscussionContributionRow = typeof signalDiscussionContributions.$inferSelect;
 export type AccountRow = typeof accounts.$inferSelect;
 export type AccountEmailRow = typeof accountEmails.$inferSelect;

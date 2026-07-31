@@ -218,6 +218,13 @@
       "when": 1785868800000,
       "tag": "0030_create_signal_discussion_session",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1785955200000,
+      "tag": "0031_discussion_contribution_media",
+      "breakpoints": true
     }
   ]
 }

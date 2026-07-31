@@ -153,14 +153,14 @@ describe('password sign-in migration 0027', () => {
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
     expect(Number(afterCount.rows[0]?.count ?? 0)).toBe(EXPECTED_MIGRATION_COUNT);
-    expect(EXPECTED_MIGRATION_COUNT).toBe(31);
+    expect(EXPECTED_MIGRATION_COUNT).toBe(32);
 
     const ordered = await pool.query<{ id: number; created_at: string }>(
       `SELECT id, created_at::text AS created_at
        FROM drizzle.__drizzle_migrations
        ORDER BY id ASC`,
     );
-    expect(ordered.rows).toHaveLength(31);
+    expect(ordered.rows).toHaveLength(32);
     for (let index = 0; index < ordered.rows.length; index += 1) {
       expect(ordered.rows[index]?.id).toBe(index + 1);
     }

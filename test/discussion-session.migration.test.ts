@@ -22,12 +22,14 @@ describe('signal discussion session migration', () => {
        WHERE table_schema = 'town'
          AND table_name IN (
            'signal_discussion_sessions',
-           'signal_discussion_contributions'
+           'signal_discussion_contributions',
+           'signal_discussion_media_uploads'
          )
        ORDER BY table_name`,
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'signal_discussion_contributions',
+      'signal_discussion_media_uploads',
       'signal_discussion_sessions',
     ]);
 
@@ -49,6 +51,11 @@ describe('signal discussion session migration', () => {
         'signal_discussion_contributions_signal_id_fkey',
         'signal_discussion_contributions_actor_id_fkey',
         'signal_discussion_contributions_intent_valid',
+        'signal_discussion_contributions_media_upload_id_fkey',
+        'signal_discussion_contributions_media_upload_id_unique',
+        'signal_discussion_media_uploads_pkey',
+        'signal_discussion_media_uploads_object_key_unique',
+        'signal_discussion_media_uploads_content_type_valid',
       ]),
     );
 

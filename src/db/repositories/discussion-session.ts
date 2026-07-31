@@ -3,15 +3,23 @@ import type { Database } from '../client.js';
 import {
   actors,
   signalDiscussionContributions,
+  signalDiscussionMediaUploads,
   signalDiscussionSessions,
   type ActorRow,
   type SignalDiscussionContributionRow,
   type SignalDiscussionSessionRow,
 } from '../schema.js';
+import type { DiscussionMediaKind } from '../../membership/discussion-media-policy.js';
 
 type Db = Database['db'];
 
 export type DiscussionContributionIntent = 'observation' | 'proposal' | 'next_step';
+
+export type DiscussionContributionMediaView = {
+  kind: DiscussionMediaKind;
+  contentType: string;
+  byteSize: number;
+};
 
 export type DiscussionContributionView = {
   id: string;
@@ -19,6 +27,7 @@ export type DiscussionContributionView = {
   text: string;
   intent: DiscussionContributionIntent;
   createdAt: string;
+  media: DiscussionContributionMediaView | null;
 };
 
 export async function findDiscussionSessionBySignalId(
@@ -71,9 +80,17 @@ export async function listDiscussionContributionsForSession(
       intent: signalDiscussionContributions.intent,
       createdAt: signalDiscussionContributions.createdAt,
       authorDisplayName: actors.displayLabel,
+      mediaKind: signalDiscussionMediaUploads.kind,
+      mediaContentType: signalDiscussionMediaUploads.contentType,
+      mediaByteSize: signalDiscussionMediaUploads.byteSize,
+      mediaStatus: signalDiscussionMediaUploads.status,
     })
     .from(signalDiscussionContributions)
     .innerJoin(actors, eq(actors.id, signalDiscussionContributions.actorId))
+    .leftJoin(
+      signalDiscussionMediaUploads,
+      eq(signalDiscussionMediaUploads.id, signalDiscussionContributions.mediaUploadId),
+    )
     .where(eq(signalDiscussionContributions.sessionId, sessionId))
     .orderBy(asc(signalDiscussionContributions.createdAt));
 
@@ -83,6 +100,17 @@ export async function listDiscussionContributionsForSession(
     text: row.text,
     intent: row.intent as DiscussionContributionIntent,
     createdAt: row.createdAt,
+    media:
+      row.mediaStatus === 'attached' &&
+      row.mediaKind &&
+      row.mediaContentType &&
+      typeof row.mediaByteSize === 'number'
+        ? {
+            kind: row.mediaKind as DiscussionMediaKind,
+            contentType: row.mediaContentType,
+            byteSize: row.mediaByteSize,
+          }
+        : null,
   }));
 }
 
@@ -95,6 +123,7 @@ export async function insertDiscussionContribution(
     actorId: string;
     text: string;
     intent: DiscussionContributionIntent;
+    mediaUploadId?: string | null;
     createdAt: string;
   },
 ): Promise<SignalDiscussionContributionRow> {
@@ -107,6 +136,7 @@ export async function insertDiscussionContribution(
       actorId: input.actorId,
       text: input.text,
       intent: input.intent,
+      mediaUploadId: input.mediaUploadId ?? null,
       createdAt: input.createdAt,
     })
     .returning();
@@ -122,6 +152,33 @@ export async function insertDiscussionContribution(
     .where(eq(signalDiscussionSessions.id, input.sessionId));
 
   return row;
+}
+
+export async function findDiscussionContributionForSignal(
+  db: Db,
+  signalId: string,
+  contributionId: string,
+): Promise<{
+  contributionId: string;
+  mediaUploadId: string | null;
+} | null> {
+  const rows = await db
+    .select({
+      contributionId: signalDiscussionContributions.id,
+      mediaUploadId: signalDiscussionContributions.mediaUploadId,
+      signalId: signalDiscussionContributions.signalId,
+    })
+    .from(signalDiscussionContributions)
+    .where(eq(signalDiscussionContributions.id, contributionId))
+    .limit(1);
+  const row = rows[0];
+  if (row?.signalId !== signalId) {
+    return null;
+  }
+  return {
+    contributionId: row.contributionId,
+    mediaUploadId: row.mediaUploadId,
+  };
 }
 
 export type { ActorRow };
