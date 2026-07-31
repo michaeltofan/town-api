@@ -99,8 +99,8 @@ export const RecoveryRequestSchema = Type.Object(
 
 export const RecoveryVerifyEmailSchema = Type.Object(
   {
-    challengeId: Type.String({ format: 'uuid' }),
-    code: Type.String({ minLength: 1, maxLength: 128 }),
+    recoveryVerificationId: Type.String({ format: 'uuid' }),
+    code: Type.String({ pattern: '^[0-9]{6}$' }),
   },
   { additionalProperties: false, $id: 'RecoveryVerifyEmail' },
 );
@@ -177,28 +177,31 @@ export const FUTURE_IDENTITY_OPERATIONS = [
     summary: 'Request restricted account recovery',
     request: 'RecoveryRequest',
     notes:
-      'Future operation. Recovery grants are restricted authorization, not sessions. Not implemented in this foundation slice.',
+      'Implemented under ACCOUNT_RECOVERY_ENABLED. Always returns recoveryVerificationId; RecoveryGrant is restricted authorization, not a session. Resend delivery required in production.',
   },
   {
     method: 'POST',
     path: '/v1/account/recovery/verify-email',
     summary: 'Verify recovery email challenge',
     request: 'RecoveryVerifyEmail',
-    notes: 'Future operation. Not implemented in this foundation slice.',
+    notes:
+      'Implemented under ACCOUNT_RECOVERY_ENABLED. Requires recoveryVerificationId + six-digit code; issues RecoveryGrant without creating a session.',
   },
   {
     method: 'POST',
     path: '/v1/account/recovery/passkeys/registration/options',
     summary: 'Begin recovery passkey registration',
     request: 'PasskeyRegistrationOptionsRequest',
-    notes: 'Future operation. Not implemented in this foundation slice.',
+    notes:
+      'Implemented under ACCOUNT_RECOVERY_ENABLED. Requires Authorization: RecoveryGrant; reuses WebAuthn user handle and excludes active passkeys.',
   },
   {
     method: 'POST',
     path: '/v1/account/recovery/passkeys/registration/verify',
     summary: 'Verify recovery passkey registration',
     request: 'PasskeyRegistrationVerifyRequest',
-    notes: 'Future operation. Not implemented in this foundation slice.',
+    notes:
+      'Implemented under ACCOUNT_RECOVERY_ENABLED. Adds a passkey, keeps existing passkeys, revokes all sessions, does not create a session.',
   },
   {
     method: 'GET',

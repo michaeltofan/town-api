@@ -129,7 +129,7 @@ const EnvSchema = Type.Object(
       Type.String({ minLength: ACCOUNT_RECOVERY_TOKEN_HASH_KEY_MIN_LENGTH }),
     ),
     ACCOUNT_RECOVERY_DELIVERY_MODE: Type.Optional(
-      Type.Union([Type.Literal('test'), Type.Literal('development')]),
+      Type.Union([Type.Literal('test'), Type.Literal('development'), Type.Literal('resend')]),
     ),
     /**
      * Initial password-setup ceremony gate. Default false / fail-closed.
@@ -940,11 +940,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
 
   if (accountRecoveryEnabled) {
-    if (nodeEnv === 'production') {
-      throw new Error(
-        'Invalid environment configuration: ACCOUNT_RECOVERY_ENABLED cannot be true in production while only test/development delivery adapters exist',
-      );
-    }
     if (!isNonEmptyString(source.ACCOUNT_RECOVERY_HASH_KEY)) {
       throw new Error(
         'Invalid environment configuration: ACCOUNT_RECOVERY_HASH_KEY is required when ACCOUNT_RECOVERY_ENABLED is true',
@@ -968,10 +963,48 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       );
     }
     const deliveryMode = source.ACCOUNT_RECOVERY_DELIVERY_MODE;
-    if (deliveryMode !== 'test' && deliveryMode !== 'development') {
+    if (deliveryMode !== 'test' && deliveryMode !== 'development' && deliveryMode !== 'resend') {
       throw new Error(
-        'Invalid environment configuration: ACCOUNT_RECOVERY_DELIVERY_MODE must be test or development when ACCOUNT_RECOVERY_ENABLED is true',
+        'Invalid environment configuration: ACCOUNT_RECOVERY_DELIVERY_MODE must be test, development, or resend when ACCOUNT_RECOVERY_ENABLED is true',
       );
+    }
+    if (nodeEnv === 'production' && deliveryMode !== 'resend') {
+      throw new Error(
+        'Invalid environment configuration: ACCOUNT_RECOVERY_ENABLED in production requires ACCOUNT_RECOVERY_DELIVERY_MODE=resend',
+      );
+    }
+    if (deliveryMode === 'resend') {
+      // Reuse the shared Resend credentials used by email verification (same provider account).
+      if (
+        !isNonEmptyString(source.EMAIL_VERIFICATION_RESEND_API_KEY) ||
+        source.EMAIL_VERIFICATION_RESEND_API_KEY.length < 20
+      ) {
+        throw new Error(
+          'Invalid environment configuration: EMAIL_VERIFICATION_RESEND_API_KEY is required (min length 20) when ACCOUNT_RECOVERY_DELIVERY_MODE is resend',
+        );
+      }
+      if (
+        !isNonEmptyString(source.EMAIL_VERIFICATION_FROM_ADDRESS) ||
+        !isEmailAddressShape(source.EMAIL_VERIFICATION_FROM_ADDRESS)
+      ) {
+        throw new Error(
+          'Invalid environment configuration: EMAIL_VERIFICATION_FROM_ADDRESS must be a valid email address when ACCOUNT_RECOVERY_DELIVERY_MODE is resend',
+        );
+      }
+      if (
+        source.EMAIL_VERIFICATION_REPLY_TO !== undefined &&
+        source.EMAIL_VERIFICATION_REPLY_TO !== '' &&
+        !isEmailAddressShape(source.EMAIL_VERIFICATION_REPLY_TO)
+      ) {
+        throw new Error(
+          'Invalid environment configuration: EMAIL_VERIFICATION_REPLY_TO must be a valid email address when set',
+        );
+      }
+      candidate.EMAIL_VERIFICATION_RESEND_API_KEY = source.EMAIL_VERIFICATION_RESEND_API_KEY;
+      candidate.EMAIL_VERIFICATION_FROM_ADDRESS = source.EMAIL_VERIFICATION_FROM_ADDRESS;
+      if (isNonEmptyString(source.EMAIL_VERIFICATION_REPLY_TO)) {
+        candidate.EMAIL_VERIFICATION_REPLY_TO = source.EMAIL_VERIFICATION_REPLY_TO;
+      }
     }
     if (!isNonEmptyString(source.CEREMONY_RATE_LIMIT_HASH_KEY)) {
       throw new Error(

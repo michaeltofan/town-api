@@ -6,6 +6,9 @@ const RECOVERY_HASH_KEY = 'town-ci-account-recovery-hash-key-32byt';
 const RECOVERY_TOKEN_HASH_KEY = 'town-ci-account-recovery-token-key-32b';
 const RATE_LIMIT_HASH_KEY = 'town-ci-ceremony-rate-limit-hash-key-32b';
 const CHALLENGE_HASH_KEY = 'town-ci-webauthn-challenge-hash-key-32by';
+const RESEND_API_KEY = 're_test_account_recovery_key_12345';
+const RESEND_FROM = 'noreply@towncivic.org';
+const STAGING_COMMIT_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 function recoveryEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): NodeJS.ProcessEnv {
   return {
@@ -23,6 +26,29 @@ function recoveryEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): NodeJS.Process
   };
 }
 
+function productionRecoveryResendEnv(
+  overrides: Partial<NodeJS.ProcessEnv> = {},
+): NodeJS.ProcessEnv {
+  // NODE_ENV=production still enforces production WebAuthn RP/origin policy
+  // (same gate as passkey registration/authentication), even when APP_ENV=staging.
+  return recoveryEnv({
+    NODE_ENV: 'production',
+    APP_ENV: 'staging',
+    APP_COMMIT_SHA: STAGING_COMMIT_SHA,
+    DATABASE_URL: 'postgres://town-stg:stg-secret@db.internal:5432/town',
+    ACCOUNT_RECOVERY_DELIVERY_MODE: 'resend',
+    ACCOUNT_RECOVERY_HASH_KEY: 'production-account-recovery-hash-key-okxx',
+    ACCOUNT_RECOVERY_TOKEN_HASH_KEY: 'production-account-recovery-token-key-ok',
+    CEREMONY_RATE_LIMIT_HASH_KEY: 'production-ceremony-rate-limit-hash-key-ok',
+    WEBAUTHN_CHALLENGE_HASH_KEY: 'production-webauthn-challenge-hash-key-okx',
+    EMAIL_VERIFICATION_RESEND_API_KEY: RESEND_API_KEY,
+    EMAIL_VERIFICATION_FROM_ADDRESS: RESEND_FROM,
+    WEBAUTHN_RP_ID: 'towncivic.org',
+    WEBAUTHN_ALLOWED_ORIGINS: 'https://towncivic.org',
+    ...overrides,
+  });
+}
+
 describe('Account recovery environment config', () => {
   it('defaults the feature disabled', () => {
     const env = loadEnv({ DATABASE_URL });
@@ -38,7 +64,7 @@ describe('Account recovery environment config', () => {
       ['ACCOUNT_RECOVERY_TOKEN_HASH_KEY', /ACCOUNT_RECOVERY_TOKEN_HASH_KEY is required/],
       [
         'ACCOUNT_RECOVERY_DELIVERY_MODE',
-        /ACCOUNT_RECOVERY_DELIVERY_MODE must be test or development/,
+        /ACCOUNT_RECOVERY_DELIVERY_MODE must be test, development, or resend/,
       ],
       ['CEREMONY_RATE_LIMIT_HASH_KEY', /CEREMONY_RATE_LIMIT_HASH_KEY is required/],
       ['WEBAUTHN_RP_ID', /WEBAUTHN_RP_ID is required/],
@@ -58,12 +84,55 @@ describe('Account recovery environment config', () => {
       loadEnv(
         recoveryEnv({
           NODE_ENV: 'production',
+          APP_COMMIT_SHA: STAGING_COMMIT_SHA,
+          DATABASE_URL: 'postgres://town:secret@db.example.com:5432/town',
           ACCOUNT_RECOVERY_DELIVERY_MODE: 'test',
           WEBAUTHN_RP_ID: 'towncivic.org',
           WEBAUTHN_ALLOWED_ORIGINS: 'https://towncivic.org',
         }),
       ),
-    ).toThrow(/cannot be true in production/);
+    ).toThrow(/requires ACCOUNT_RECOVERY_DELIVERY_MODE=resend/);
+
+    expect(() =>
+      loadEnv(
+        recoveryEnv({
+          NODE_ENV: 'production',
+          APP_COMMIT_SHA: STAGING_COMMIT_SHA,
+          DATABASE_URL: 'postgres://town:secret@db.example.com:5432/town',
+          ACCOUNT_RECOVERY_DELIVERY_MODE: 'development',
+          WEBAUTHN_RP_ID: 'towncivic.org',
+          WEBAUTHN_ALLOWED_ORIGINS: 'https://towncivic.org',
+        }),
+      ),
+    ).toThrow(/requires ACCOUNT_RECOVERY_DELIVERY_MODE=resend/);
+  });
+
+  it('rejects production resend with incomplete Resend credentials', () => {
+    expect(() =>
+      loadEnv(
+        productionRecoveryResendEnv({
+          EMAIL_VERIFICATION_RESEND_API_KEY: undefined,
+        }),
+      ),
+    ).toThrow(/EMAIL_VERIFICATION_RESEND_API_KEY is required/);
+
+    expect(() =>
+      loadEnv(
+        productionRecoveryResendEnv({
+          EMAIL_VERIFICATION_FROM_ADDRESS: undefined,
+        }),
+      ),
+    ).toThrow(/EMAIL_VERIFICATION_FROM_ADDRESS must be a valid email address/);
+  });
+
+  it('accepts production/staging with valid resend recovery delivery', () => {
+    const env = loadEnv(productionRecoveryResendEnv());
+    expect(env.ACCOUNT_RECOVERY_ENABLED).toBe(true);
+    expect(env.ACCOUNT_RECOVERY_DELIVERY_MODE).toBe('resend');
+    expect(env.NODE_ENV).toBe('production');
+    expect(env.APP_ENV).toBe('staging');
+    expect(env.EMAIL_VERIFICATION_RESEND_API_KEY).toBe(RESEND_API_KEY);
+    expect(env.EMAIL_VERIFICATION_FROM_ADDRESS).toBe(RESEND_FROM);
   });
 
   it('accepts a fully configured test environment', () => {
@@ -71,5 +140,17 @@ describe('Account recovery environment config', () => {
     expect(env.ACCOUNT_RECOVERY_ENABLED).toBe(true);
     expect(env.ACCOUNT_RECOVERY_DELIVERY_MODE).toBe('test');
     expect(env.WEBAUTHN_RP_ID).toBe('localhost');
+  });
+
+  it('keeps disabled recovery free of Resend requirements', () => {
+    const env = loadEnv({
+      DATABASE_URL: 'postgres://town-stg:stg-secret@db.internal:5432/town',
+      NODE_ENV: 'production',
+      APP_ENV: 'staging',
+      APP_COMMIT_SHA: STAGING_COMMIT_SHA,
+      ACCOUNT_RECOVERY_ENABLED: 'false',
+    });
+    expect(env.ACCOUNT_RECOVERY_ENABLED).toBe(false);
+    expect(env.EMAIL_VERIFICATION_RESEND_API_KEY).toBeUndefined();
   });
 });

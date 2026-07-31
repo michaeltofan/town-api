@@ -5,6 +5,8 @@ export type AccountRecoveryDeliveryInput = {
   expiresAt: string;
   purpose: 'recover_account';
   outcomeCategory: 'recovery_code' | 'suppressed' | 'unavailable';
+  /** Optional correlation id for structured delivery failure logs (never logged with the code). */
+  requestId?: string | null;
 };
 
 export type AccountRecoveryDeliveryResult = {
@@ -15,7 +17,7 @@ export type AccountRecoveryDeliveryResult = {
 };
 
 export type AccountRecoveryDeliveryAdapter = {
-  readonly mode: 'test' | 'development';
+  readonly mode: 'test' | 'development' | 'resend';
   deliverRecoveryCode(input: AccountRecoveryDeliveryInput): Promise<AccountRecoveryDeliveryResult>;
 };
 
@@ -60,6 +62,7 @@ export function createDevelopmentRecoveryDeliveryAdapter(): AccountRecoveryDeliv
         expiresAt: input.expiresAt,
         purpose: input.purpose,
         outcomeCategory: input.outcomeCategory,
+        ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
         recordedAt: input.expiresAt,
       });
       return Promise.resolve({

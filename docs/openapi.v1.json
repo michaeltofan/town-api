@@ -4599,7 +4599,7 @@
     },
     "/v1/account/recovery": {
       "post": {
-        "description": "Requests account recovery for an active account with a verified primary email. Always returns a generic accepted response and never discloses account existence or challenge identifiers. Does not create a session. Disabled by default via ACCOUNT_RECOVERY_ENABLED.",
+        "description": "Requests account recovery for an active account with a verified primary email. Always returns a generic accepted response with a recoveryVerificationId and never discloses account existence or eligibility. Does not create a session. Disabled by default via ACCOUNT_RECOVERY_ENABLED.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4636,6 +4636,10 @@
                     "data": {
                       "additionalProperties": false,
                       "properties": {
+                        "recoveryVerificationId": {
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                          "type": "string"
+                        },
                         "status": {
                           "enum": [
                             "RECOVERY_REQUEST_ACCEPTED"
@@ -4644,7 +4648,8 @@
                         }
                       },
                       "required": [
-                        "status"
+                        "status",
+                        "recoveryVerificationId"
                       ],
                       "type": "object"
                     }

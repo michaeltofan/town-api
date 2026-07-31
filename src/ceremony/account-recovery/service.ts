@@ -87,6 +87,8 @@ export type AccountRecoveryDeps = {
 
 export type RequestAccountRecoveryResult = {
   status: 'RECOVERY_REQUEST_ACCEPTED';
+  /** Real challenge id when eligible; dummy UUID otherwise (anti-enumeration). */
+  recoveryVerificationId: string;
 };
 
 export type VerifyRecoveryEmailSuccess = {
@@ -217,10 +219,11 @@ export async function requestAccountRecovery(
     ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
   });
 
-  const accepted: RequestAccountRecoveryResult = { status: 'RECOVERY_REQUEST_ACCEPTED' };
-
   if (throttled) {
-    return accepted;
+    return {
+      status: 'RECOVERY_REQUEST_ACCEPTED',
+      recoveryVerificationId: generateId(),
+    };
   }
 
   const existingEmail = await findActiveEmailByNormalized(db, emailNormalized);
@@ -259,6 +262,7 @@ export async function requestAccountRecovery(
         expiresAt: addMinutes(now, ACCOUNT_RECOVERY_CODE_TTL_MINUTES),
         purpose: 'recover_account',
         outcomeCategory: 'suppressed',
+        requestId: input.requestId ?? null,
       });
     } catch {
       // Delivery failures must not change the public accepted response.
@@ -276,7 +280,10 @@ export async function requestAccountRecovery(
         },
       });
     }
-    return accepted;
+    return {
+      status: 'RECOVERY_REQUEST_ACCEPTED',
+      recoveryVerificationId: dummyId,
+    };
   }
 
   await revokeActiveEmailChallengesForSetup(db, {
@@ -316,6 +323,7 @@ export async function requestAccountRecovery(
       expiresAt,
       purpose: 'recover_account',
       outcomeCategory: 'recovery_code',
+      requestId: input.requestId ?? null,
     });
     if (!delivery.delivered) {
       deliveryOutcome = 'unavailable';
@@ -336,7 +344,10 @@ export async function requestAccountRecovery(
     },
   });
 
-  return accepted;
+  return {
+    status: 'RECOVERY_REQUEST_ACCEPTED',
+    recoveryVerificationId: challengeId,
+  };
 }
 
 export async function verifyRecoveryEmail(

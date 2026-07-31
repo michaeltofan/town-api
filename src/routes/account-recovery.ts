@@ -7,6 +7,7 @@ import {
   createInMemoryTestRecoveryDeliveryAdapter,
   type AccountRecoveryDeliveryAdapter,
 } from '../ceremony/account-recovery/delivery.js';
+import { createRecoveryResendDeliveryAdapter } from '../ceremony/account-recovery/resend-delivery.js';
 import {
   AccountRecoveryPasskeyOptionsBodySchema,
   AccountRecoveryPasskeyVerifyBodySchema,
@@ -35,9 +36,29 @@ export type AccountRecoveryRoutesOptions = {
   generateId?: () => string;
 };
 
-function createDeliveryAdapter(env: Env): AccountRecoveryDeliveryAdapter {
+function createDeliveryAdapter(
+  env: Env,
+  log: { warn: (obj: object, msg?: string) => void },
+): AccountRecoveryDeliveryAdapter {
   if (env.ACCOUNT_RECOVERY_DELIVERY_MODE === 'development') {
     return createDevelopmentRecoveryDeliveryAdapter();
+  }
+  if (env.ACCOUNT_RECOVERY_DELIVERY_MODE === 'resend') {
+    const apiKey = env.EMAIL_VERIFICATION_RESEND_API_KEY;
+    const from = env.EMAIL_VERIFICATION_FROM_ADDRESS;
+    if (!apiKey || !from) {
+      throw new Error('Resend recovery delivery requires API key and from address');
+    }
+    return createRecoveryResendDeliveryAdapter({
+      apiKey,
+      from,
+      ...(env.EMAIL_VERIFICATION_REPLY_TO !== undefined
+        ? { replyTo: env.EMAIL_VERIFICATION_REPLY_TO }
+        : {}),
+      log: (event) => {
+        log.warn(event, 'recovery email delivery failed');
+      },
+    });
   }
   return createInMemoryTestRecoveryDeliveryAdapter();
 }
@@ -68,7 +89,7 @@ export const accountRecoveryRoutes: FastifyPluginCallbackTypebox<AccountRecovery
   done,
 ) => {
   const { env } = options;
-  const delivery = options.deliveryAdapter ?? createDeliveryAdapter(env);
+  const delivery = options.deliveryAdapter ?? createDeliveryAdapter(env, app.log);
 
   const buildDeps = (): AccountRecoveryDeps => ({
     env,
@@ -88,7 +109,7 @@ export const accountRecoveryRoutes: FastifyPluginCallbackTypebox<AccountRecovery
         tags: ['Account'],
         summary: 'Request account recovery',
         description:
-          'Requests account recovery for an active account with a verified primary email. Always returns a generic accepted response and never discloses account existence or challenge identifiers. Does not create a session. Disabled by default via ACCOUNT_RECOVERY_ENABLED.',
+          'Requests account recovery for an active account with a verified primary email. Always returns a generic accepted response with a recoveryVerificationId and never discloses account existence or eligibility. Does not create a session. Disabled by default via ACCOUNT_RECOVERY_ENABLED.',
         body: AccountRecoveryRequestBodySchema,
         response: AccountRecoveryRouteResponses.request,
       },
@@ -108,6 +129,7 @@ export const accountRecoveryRoutes: FastifyPluginCallbackTypebox<AccountRecovery
       return reply.status(202).send({
         data: {
           status: result.status,
+          recoveryVerificationId: result.recoveryVerificationId,
         },
       });
     },

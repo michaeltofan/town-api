@@ -524,7 +524,12 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       },
       antiEnumeration: true,
       publicErrorCodes: ['INVALID_OR_EXPIRED_CHALLENGE', 'RECOVERY_NOT_AUTHORIZED'],
-      deliveryModes: ['test', 'development'],
+      deliveryModes: ['test', 'development', 'resend'],
+      requestResponse: {
+        status: 'RECOVERY_REQUEST_ACCEPTED',
+        alwaysIncludesRecoveryVerificationId: true,
+        dummyIdForIneligibleOrThrottled: true,
+      },
       rateLimits: {
         requestEmail24h: 3,
         requestIp24h: 10,
@@ -622,7 +627,6 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
     },
     explicitExclusions: [
       'recovery login / session issuance from recovery',
-      'production recovery email delivery',
       'password recovery / reset / change',
       'phone sign-in',
       'JWTs',
