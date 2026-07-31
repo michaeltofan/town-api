@@ -45,7 +45,6 @@ import {
   matchesDiscussionMediaMagic,
   MAX_DISCUSSION_MEDIA_BYTES,
   maxBytesForDiscussionMediaKind,
-  type DiscussionMediaContentType,
 } from '../membership/discussion-media-policy.js';
 import {
   createDefaultLocalEligibilityResolver,
@@ -390,12 +389,17 @@ export const discussionSessionRoutes: FastifyPluginCallbackTypebox<
         .split(';')[0]
         ?.trim()
         .toLowerCase();
-      if (!contentTypeHeader || !isAllowedDiscussionMediaContentType(contentTypeHeader)) {
+      if (!contentTypeHeader) {
         throw validationError(
           'Content-Type must be image/jpeg, image/png, image/webp, or video/mp4.',
         );
       }
-      const contentType = contentTypeHeader as DiscussionMediaContentType;
+      if (!isAllowedDiscussionMediaContentType(contentTypeHeader)) {
+        throw validationError(
+          'Content-Type must be image/jpeg, image/png, image/webp, or video/mp4.',
+        );
+      }
+      const contentType = contentTypeHeader;
       const kind = discussionMediaKindForContentType(contentType);
       if (!kind) {
         throw validationError('Unsupported media Content-Type.');
@@ -412,7 +416,9 @@ export const discussionSessionRoutes: FastifyPluginCallbackTypebox<
       }
       const maxBytes = maxBytesForDiscussionMediaKind(kind);
       if (bytes.byteLength > maxBytes) {
-        throw validationError(`Media exceeds maximum size of ${maxBytes} bytes for ${kind}.`);
+        throw validationError(
+          `Media exceeds maximum size of ${String(maxBytes)} bytes for ${kind}.`,
+        );
       }
 
       const mediaUploadId = generateId();
@@ -607,7 +613,7 @@ export const discussionSessionRoutes: FastifyPluginCallbackTypebox<
         app.database.db,
         contribution.mediaUploadId,
       );
-      if (!upload || upload.status !== 'attached') {
+      if (upload?.status !== 'attached') {
         throw contributionMediaNotFoundError();
       }
 

@@ -188,21 +188,25 @@ export function createInMemoryObjectStorageAdapter(): TownObjectStorageAdapter &
   const objects = new Map<string, { body: Buffer; contentType: string }>();
   return {
     objects,
-    async putObject(input) {
+    putObject(input) {
       const body = Buffer.isBuffer(input.body)
         ? input.body
         : typeof input.body === 'string'
           ? Buffer.from(input.body)
           : Buffer.from(input.body);
       objects.set(input.key, { body, contentType: input.contentType });
-      return { ok: true };
+      return Promise.resolve({ ok: true as const });
     },
-    async getObject(input) {
+    getObject(input) {
       const found = objects.get(input.key);
       if (!found) {
-        return { ok: false, reason: 'not_found' };
+        return Promise.resolve({ ok: false as const, reason: 'not_found' as const });
       }
-      return { ok: true, body: found.body, contentType: found.contentType };
+      return Promise.resolve({
+        ok: true as const,
+        body: found.body,
+        contentType: found.contentType,
+      });
     },
   };
 }

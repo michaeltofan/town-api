@@ -64,11 +64,9 @@ export function matchesDiscussionMediaMagic(
       body.subarray(8, 12).toString('ascii') === 'WEBP'
     );
   }
-  if (contentType === 'video/mp4') {
-    if (body.length < 12) return false;
-    return body.subarray(4, 8).toString('ascii') === 'ftyp';
-  }
-  return false;
+  // Remaining allowed content type: video/mp4
+  if (body.length < 12) return false;
+  return body.subarray(4, 8).toString('ascii') === 'ftyp';
 }
 
 export function buildDiscussionMediaObjectKey(input: {

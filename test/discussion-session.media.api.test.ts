@@ -123,8 +123,13 @@ describe('signal discussion-session media upload', () => {
       .from(signalDiscussionMediaUploads)
       .where(eq(signalDiscussionMediaUploads.id, uploadBody.data.mediaUploadId));
     expect(pendingRows).toHaveLength(1);
-    expect(pendingRows[0]?.status).toBe('pending');
-    expect(storage.objects.has(pendingRows[0]!.objectKey)).toBe(true);
+    const pending = pendingRows[0];
+    expect(pending?.status).toBe('pending');
+    expect(pending?.objectKey).toBeTruthy();
+    if (!pending) {
+      throw new Error('expected pending media upload row');
+    }
+    expect(storage.objects.has(pending.objectKey)).toBe(true);
 
     const created = await ctx.app.inject({
       method: 'POST',
@@ -151,13 +156,17 @@ describe('signal discussion-session media upload', () => {
       };
     }>();
     const contribution = createdBody.data.contributions[0];
-    expect(contribution?.media).toMatchObject({
+    expect(contribution).toBeTruthy();
+    if (!contribution?.media) {
+      throw new Error('expected contribution media');
+    }
+    expect(contribution.media).toMatchObject({
       kind: 'image',
       contentType: 'image/jpeg',
       byteSize: JPEG_BYTES.byteLength,
     });
-    expect(contribution?.media?.url).toBe(
-      `/v1/signals/${signalId}/discussion-session/contributions/${contribution!.id}/media`,
+    expect(contribution.media.url).toBe(
+      `/v1/signals/${signalId}/discussion-session/contributions/${contribution.id}/media`,
     );
     expect(JSON.stringify(createdBody)).not.toMatch(/actorId|accountId|objectKey/);
 
@@ -169,7 +178,7 @@ describe('signal discussion-session media upload', () => {
 
     const media = await ctx.app.inject({
       method: 'GET',
-      url: contribution!.media!.url,
+      url: contribution.media.url,
       headers,
     });
     expect(media.statusCode).toBe(200);

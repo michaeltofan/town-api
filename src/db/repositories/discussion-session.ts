@@ -172,7 +172,7 @@ export async function findDiscussionContributionForSignal(
     .where(eq(signalDiscussionContributions.id, contributionId))
     .limit(1);
   const row = rows[0];
-  if (!row || row.signalId !== signalId) {
+  if (row?.signalId !== signalId) {
     return null;
   }
   return {
