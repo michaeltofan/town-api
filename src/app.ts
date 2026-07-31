@@ -20,6 +20,7 @@ import { emailVerificationRoutes } from './routes/email-verifications.js';
 import { healthRoutes } from './routes/health.js';
 import { passkeyAuthenticationRoutes } from './routes/passkey-authentication.js';
 import { membershipRoutes } from './routes/membership.js';
+import { memberActivityRoutes } from './routes/member-activity.js';
 import { passkeyManagementRoutes } from './routes/passkey-management.js';
 import { passkeyRegistrationRoutes } from './routes/passkey-registration.js';
 import { passwordSetupRoutes } from './routes/password-setup.js';
@@ -397,6 +398,10 @@ export async function buildApp(options: BuildAppOptions) {
     ...(options.membership?.localEligibilityResolver !== undefined
       ? { localEligibilityResolver: options.membership.localEligibilityResolver }
       : {}),
+  });
+  await app.register(memberActivityRoutes, {
+    env: options.env,
+    ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
   });
   await app.register(communityCommitmentRoutes, {
     env: options.env,
