@@ -9528,6 +9528,603 @@
         ]
       }
     },
+    "/v1/signals/{signalId}/discussion-session": {
+      "get": {
+        "description": "Returns the discussion session and ordered civic contributions for a published signal. Requires an active web or mobile session with participant civic access (access.canParticipate). Contributions are framed as movement toward a local solution (observation, proposal, or next step) — not chat, comments, or social replies. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes actor or account identifiers.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contributions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "authorDisplayName": {
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "intent": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "observation"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "proposal"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "next_step"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ],
+                                "title": "DiscussionContributionIntent"
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "authorDisplayName",
+                              "text",
+                              "intent",
+                              "createdAt"
+                            ],
+                            "title": "DiscussionContribution",
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "session": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "signalId": {
+                              "format": "uuid",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "signalId",
+                            "createdAt"
+                          ],
+                          "title": "DiscussionSession",
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "session",
+                        "contributions"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Read the civic discussion session for a published signal",
+        "tags": [
+          "Discussion"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/discussion-session/contributions": {
+      "post": {
+        "description": "Creates a civic contribution (observation, proposal, or next step) on the discussion session for a published signal. Requires an active web or mobile session with participant civic access (access.canParticipate). Not a chat or comment thread. Returns the session and the full ordered contribution list. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes actor or account identifiers.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "intent": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "observation"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "proposal"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "next_step"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "text": {
+                    "maxLength": 480,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text",
+                  "intent"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contributions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "authorDisplayName": {
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "intent": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "observation"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "proposal"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "next_step"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "authorDisplayName",
+                              "text",
+                              "intent",
+                              "createdAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "session": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "signalId": {
+                              "format": "uuid",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "signalId",
+                            "createdAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "session",
+                        "contributions"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Publish a civic contribution to a signal discussion session",
+        "tags": [
+          "Discussion"
+        ]
+      }
+    },
     "/v1/signals/{signalId}/hide": {
       "post": {
         "description": "Owner-only. Takes a fixed reason category. Hidden signals disappear from list, detail, and confirmation published lookups. Idempotent: re-hiding preserves the original who/when/why and returns changed=false.",
@@ -10012,6 +10609,10 @@
     {
       "description": "GET is the temporary controlled read-only mechanism using X-TOWN-Control-Key for a single seeded test actor. PUT is the session-authenticated civic participant confirmation route requiring an active Session, an active membership entitlement, a linked civic actor for the signal community, and fail-closed local participation eligibility. Not social counting; no public confirmation totals or actor identifiers are exposed.",
       "name": "Confirmations"
+    },
+    {
+      "description": "Session-authenticated civic discussion sessions on published signals. Paying participants with access.canParticipate can read a signal discussion session and publish structured contributions (observation, proposal, next_step) toward a local solution. Not chat, comments, reactions, or social threading. Never exposes actor or account identifiers.",
+      "name": "Discussion"
     },
     {
       "description": "Account setup email verification, flag-gated initial password setup (POST /v1/account/password), flag-gated session-authenticated password change (POST /v1/account/password/change), first-passkey WebAuthn registration, bounded account recovery, session-authenticated passkey management, session-authenticated membership entitlement inventory read at GET /v1/account/membership, and flag-gated set-once local eligibility bind at PUT /v1/account/eligibility. Initial password setup and first-passkey registration require purpose-bound SetupGrant tokens. Password change and passkey management require an active Session only. Recovery grants are restricted authorization, not sessions. Membership inventory never exposes Stripe customer or subscription identifiers. PASSWORD_AUTH_ENABLED, PASSWORD_CHANGE_ENABLED, and LOCAL_ELIGIBILITY_ENABLED default to false.",

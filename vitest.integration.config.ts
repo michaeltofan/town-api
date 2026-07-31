@@ -55,6 +55,8 @@ export default defineConfig({
       'test/membership.reconcile.integration.test.ts',
       'test/membership.api.test.ts',
       'test/membership.confirmation.api.test.ts',
+      'test/discussion-session.api.test.ts',
+      'test/discussion-session.migration.test.ts',
       'test/membership.audit.integration.test.ts',
       'test/account-moderation.api.test.ts',
       'test/local-eligibility.api.test.ts',

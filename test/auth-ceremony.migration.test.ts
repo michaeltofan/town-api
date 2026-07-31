@@ -20,6 +20,8 @@ const EXPECTED_TABLES = [
   'recovery_grants',
   'setup_grants',
   'signal_confirmations',
+  'signal_discussion_contributions',
+  'signal_discussion_sessions',
   'signal_submissions',
   'signals',
   'stripe_checkout_attempts',

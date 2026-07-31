@@ -31,6 +31,11 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
             'GET is the temporary controlled read-only mechanism using X-TOWN-Control-Key for a single seeded test actor. PUT is the session-authenticated civic participant confirmation route requiring an active Session, an active membership entitlement, a linked civic actor for the signal community, and fail-closed local participation eligibility. Not social counting; no public confirmation totals or actor identifiers are exposed.',
         },
         {
+          name: 'Discussion',
+          description:
+            'Session-authenticated civic discussion sessions on published signals. Paying participants with access.canParticipate can read a signal discussion session and publish structured contributions (observation, proposal, next_step) toward a local solution. Not chat, comments, reactions, or social threading. Never exposes actor or account identifiers.',
+        },
+        {
           name: 'Account',
           description:
             'Account setup email verification, flag-gated initial password setup (POST /v1/account/password), flag-gated session-authenticated password change (POST /v1/account/password/change), first-passkey WebAuthn registration, bounded account recovery, session-authenticated passkey management, session-authenticated membership entitlement inventory read at GET /v1/account/membership, and flag-gated set-once local eligibility bind at PUT /v1/account/eligibility. Initial password setup and first-passkey registration require purpose-bound SetupGrant tokens. Password change and passkey management require an active Session only. Recovery grants are restricted authorization, not sessions. Membership inventory never exposes Stripe customer or subscription identifiers. PASSWORD_AUTH_ENABLED, PASSWORD_CHANGE_ENABLED, and LOCAL_ELIGIBILITY_ENABLED default to false.',
