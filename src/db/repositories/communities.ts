@@ -25,10 +25,7 @@ export async function findActiveCommunityBySlug(
   return rows[0] ?? null;
 }
 
-export async function findActiveCommunityById(
-  db: Db,
-  id: string,
-): Promise<CommunityRow | null> {
+export async function findActiveCommunityById(db: Db, id: string): Promise<CommunityRow | null> {
   const rows = await db
     .select()
     .from(communities)

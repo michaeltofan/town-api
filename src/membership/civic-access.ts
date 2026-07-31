@@ -7,7 +7,7 @@ import type {
   MembershipStatus,
 } from '../db/schema.js';
 import { hasValidCommunityCommitment } from './community-commitment.js';
-import type { CivicAccessEvaluation, ParticipationDenialReason } from './types.js';
+import type { CivicAccessEvaluation } from './types.js';
 
 export function isMembershipTemporallyValid(
   entitlement: MembershipEntitlementRow | null,
@@ -49,10 +49,12 @@ export function evaluateCivicAccess(input: {
   session: null | { accountId: string };
   account: null | Pick<AccountRow, 'id' | 'status' | 'isOwner'>;
   entitlement: null | MembershipEntitlementRow;
-  actor: null | (Pick<ActorRow, 'id' | 'accountId' | 'communityId' | 'kind' | 'status'> & {
-    communityCommitmentAcceptedAt?: string | null;
-    communityCommitmentVersion?: string | null;
-  });
+  actor:
+    | null
+    | (Pick<ActorRow, 'id' | 'accountId' | 'communityId' | 'kind' | 'status'> & {
+        communityCommitmentAcceptedAt?: string | null;
+        communityCommitmentVersion?: string | null;
+      });
   communityId?: string;
   localEligibility: LocalParticipationEligibility;
   now: string;

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type {
-  AccountRow,
-  ActorRow,
-  MembershipEntitlementRow,
-} from '../src/db/schema.js';
+import type { AccountRow, ActorRow, MembershipEntitlementRow } from '../src/db/schema.js';
 import { evaluateCivicAccess } from '../src/membership/civic-access.js';
 import { COMMUNITY_COMMITMENT_VERSION } from '../src/membership/community-commitment.js';
 

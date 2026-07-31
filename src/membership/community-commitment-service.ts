@@ -128,10 +128,7 @@ export async function recordCommunityCommitmentInTransaction(
   const entitlement = await findEntitlementByAccountId(db, input.accountId);
   if (isPaidAccessBlockingEdit(entitlement, input.now)) {
     // Identical re-submit of the same committed community remains idempotent.
-    if (
-      hasValidCommunityCommitment(actor) &&
-      actor.communityId === input.community.id
-    ) {
+    if (hasValidCommunityCommitment(actor) && actor.communityId === input.community.id) {
       return getCommunityCommitmentView(db, {
         accountId: input.accountId,
         now: input.now,
@@ -141,10 +138,7 @@ export async function recordCommunityCommitmentInTransaction(
   }
 
   // Idempotent identical submission: keep original acceptance timestamp.
-  if (
-    hasValidCommunityCommitment(actor) &&
-    actor.communityId === input.community.id
-  ) {
+  if (hasValidCommunityCommitment(actor) && actor.communityId === input.community.id) {
     return getCommunityCommitmentView(db, {
       accountId: input.accountId,
       now: input.now,
@@ -168,6 +162,11 @@ export async function recordCommunityCommitmentInTransaction(
     throw communityCommitmentPersistFailedError();
   }
 
+  const acceptedAtRaw = row.communityCommitmentAcceptedAt;
+  if (acceptedAtRaw == null) {
+    throw communityCommitmentPersistFailedError();
+  }
+
   return {
     status: 'recorded',
     community: {
@@ -177,7 +176,7 @@ export async function recordCommunityCommitmentInTransaction(
       countryCode: input.community.countryCode,
     },
     accepted: true,
-    acceptedAt: toIsoTimestamp(row.communityCommitmentAcceptedAt!),
+    acceptedAt: toIsoTimestamp(acceptedAtRaw),
     commitmentVersion: row.communityCommitmentVersion,
     editable: true,
   };
