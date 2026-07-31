@@ -8694,6 +8694,10 @@
                               "category": {
                                 "type": "string"
                               },
+                              "confirmationCount": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
                               "headline": {
                                 "type": "string"
                               },
@@ -8753,7 +8757,8 @@
                               "summary",
                               "observedLabel",
                               "imageKey",
-                              "imageFocus"
+                              "imageFocus",
+                              "confirmationCount"
                             ],
                             "title": "SignalListItem",
                             "type": "object"
@@ -8874,6 +8879,10 @@
                           "title": "SignalDetailCommunity",
                           "type": "object"
                         },
+                        "confirmationCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
                         "description": {
                           "type": "string"
                         },
@@ -8987,7 +8996,8 @@
                         "authorDisplayName",
                         "imageKey",
                         "imageFocus",
-                        "publishedAt"
+                        "publishedAt",
+                        "confirmationCount"
                       ],
                       "type": "object"
                     }
@@ -9082,7 +9092,7 @@
     },
     "/v1/signals/{signalId}/confirmation": {
       "get": {
-        "description": "Temporary controlled test mechanism using X-TOWN-Control-Key. This is not public authentication. Returns actor-specific confirmation state for the configured controlled test actor. No public counts or actor identifiers are exposed.",
+        "description": "Session-authenticated participants receive their own confirmation state plus the aggregate confirmationCount for the signal. When X-TOWN-Control-Key is supplied instead, returns the historical controlled-test-actor state (temporary testing mechanism, not public authentication). Never exposes actor identifiers or confirmer lists — only a boolean personal state and an integer aggregate total.",
         "parameters": [
           {
             "in": "path",
@@ -9104,6 +9114,10 @@
                     "data": {
                       "additionalProperties": false,
                       "properties": {
+                        "confirmationCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
                         "confirmed": {
                           "type": "boolean"
                         },
@@ -9126,7 +9140,8 @@
                       "required": [
                         "signalId",
                         "confirmed",
-                        "confirmedAt"
+                        "confirmedAt",
+                        "confirmationCount"
                       ],
                       "title": "ConfirmationState",
                       "type": "object"
@@ -9288,16 +9303,22 @@
         },
         "security": [
           {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          },
+          {
             "TownControlKey": []
           }
         ],
-        "summary": "Get controlled confirmation state for a published signal",
+        "summary": "Read confirmation state for a published signal",
         "tags": [
           "Confirmations"
         ]
       },
       "put": {
-        "description": "Requires an active web or mobile session. The account must have participant civic access derived from an active membership entitlement, a linked civic actor for the signal community, and fail-closed local eligibility. SetupGrant, RecoveryGrant, Bearer, and the temporary X-TOWN-Control-Key are rejected. Idempotent: repeats return the same confirmedAt. Body must be empty. Never exposes actor identifiers, counts, or Stripe provider identifiers. Denials emit CIVIC_PARTICIPATION_NOT_AUTHORIZED without leaking the specific reason.",
+        "description": "Requires an active web or mobile session. The account must have participant civic access derived from an active membership entitlement, a linked civic actor for the signal community, and fail-closed local eligibility. SetupGrant, RecoveryGrant, Bearer, and the temporary X-TOWN-Control-Key are rejected. Idempotent: repeats return the same confirmedAt. Body must be empty. Returns the caller confirmation state plus aggregate confirmationCount. Never exposes actor identifiers or confirmer lists. Denials emit CIVIC_PARTICIPATION_NOT_AUTHORIZED without leaking the specific reason.",
         "parameters": [
           {
             "in": "path",
@@ -9333,6 +9354,10 @@
                     "data": {
                       "additionalProperties": false,
                       "properties": {
+                        "confirmationCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
                         "confirmed": {
                           "type": "boolean"
                         },
@@ -9355,7 +9380,8 @@
                       "required": [
                         "signalId",
                         "confirmed",
-                        "confirmedAt"
+                        "confirmedAt",
+                        "confirmationCount"
                       ],
                       "type": "object"
                     }
@@ -10607,7 +10633,7 @@
       "name": "Signals"
     },
     {
-      "description": "GET is the temporary controlled read-only mechanism using X-TOWN-Control-Key for a single seeded test actor. PUT is the session-authenticated civic participant confirmation route requiring an active Session, an active membership entitlement, a linked civic actor for the signal community, and fail-closed local participation eligibility. Not social counting; no public confirmation totals or actor identifiers are exposed.",
+      "description": "GET returns participant own-confirmation state when session-authenticated, or the temporary controlled-test-actor state when X-TOWN-Control-Key is supplied. PUT is the session-authenticated civic participant confirmation route requiring an active Session, participant civic access, a linked civic actor for the signal community, and fail-closed local participation eligibility. Responses include an aggregate confirmationCount integer only — never actor identifiers, confirmer lists, or social reaction mechanics.",
       "name": "Confirmations"
     },
     {

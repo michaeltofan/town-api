@@ -5,6 +5,8 @@ export const ConfirmationStateSchema = Type.Object(
     signalId: Type.String({ format: 'uuid' }),
     confirmed: Type.Boolean(),
     confirmedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+    /** Aggregate count of confirmations for this signal. Integer only — no actor lists. */
+    confirmationCount: Type.Integer({ minimum: 0 }),
   },
   { additionalProperties: false, $id: 'ConfirmationState' },
 );

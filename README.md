@@ -132,7 +132,7 @@ Idempotency strategy:
 
 Persistence after restart is proven by an integration test that closes app instance A (and its pool), opens instance B against the same PostgreSQL database, and asserts identical confirmation state.
 
-No public confirmation counts or social mechanics are exposed.
+Responses expose an aggregate `confirmationCount` integer for the signal. Actor identifiers, confirmer lists, reactions, and other social mechanics are not exposed.
 
 ## Signal discussion sessions
 
@@ -936,7 +936,7 @@ Current repository exclusions (not a claim that Stripe is unimplemented):
 - recovery login sessions / production recovery email
 - public password or social login
 - GPS / residency / production local verification evidence plumbing
-- confirmation removal / confirmation totals / comments / moderation
+- confirmation removal / confirmer identity lists / comments / moderation
 - notifications / admin tooling
 - Redis / queues / workers / GraphQL
 - Flutter client development, Google Play / Apple In-App Purchase as the

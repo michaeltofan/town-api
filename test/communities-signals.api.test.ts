@@ -122,6 +122,7 @@ describe('communities and signals API', () => {
         x: milanoSignal1.imageFocusX,
         y: milanoSignal1.imageFocusY,
       },
+      confirmationCount: 0,
     });
 
     const munichResponse = await app.inject({
@@ -198,6 +199,7 @@ describe('communities and signals API', () => {
         y: milanoSignal1.imageFocusY,
       },
       publishedAt: milanoSignal1.publishedAt,
+      confirmationCount: 0,
     });
 
     const german = await app.inject({

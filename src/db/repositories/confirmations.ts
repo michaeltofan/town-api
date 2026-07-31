@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { actorNotEligibleForCommunityError, signalNotFoundError } from '../../errors/app-error.js';
 import {
@@ -197,4 +197,46 @@ export async function getActorConfirmationState(
     confirmed: true,
     confirmedAt: confirmation.confirmedAt,
   };
+}
+
+/**
+ * Aggregate confirmation total for a published signal.
+ * Integer only — never returns actor identifiers or confirmer lists.
+ */
+export async function countConfirmationsForSignal(db: Db, signalId: string): Promise<number> {
+  const rows = await db
+    .select({ value: count() })
+    .from(signalConfirmations)
+    .where(eq(signalConfirmations.signalId, signalId));
+  return rows[0]?.value ?? 0;
+}
+
+/**
+ * Batch aggregate confirmation totals keyed by signal id.
+ */
+export async function countConfirmationsForSignals(
+  db: Db,
+  signalIds: readonly string[],
+): Promise<Map<string, number>> {
+  const totals = new Map<string, number>();
+  for (const signalId of signalIds) {
+    totals.set(signalId, 0);
+  }
+  if (signalIds.length === 0) {
+    return totals;
+  }
+
+  const rows = await db
+    .select({
+      signalId: signalConfirmations.signalId,
+      value: count(),
+    })
+    .from(signalConfirmations)
+    .where(inArray(signalConfirmations.signalId, [...signalIds]))
+    .groupBy(signalConfirmations.signalId);
+
+  for (const row of rows) {
+    totals.set(row.signalId, row.value);
+  }
+  return totals;
 }

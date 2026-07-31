@@ -28,7 +28,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Confirmations',
           description:
-            'GET is the temporary controlled read-only mechanism using X-TOWN-Control-Key for a single seeded test actor. PUT is the session-authenticated civic participant confirmation route requiring an active Session, an active membership entitlement, a linked civic actor for the signal community, and fail-closed local participation eligibility. Not social counting; no public confirmation totals or actor identifiers are exposed.',
+            'GET returns participant own-confirmation state when session-authenticated, or the temporary controlled-test-actor state when X-TOWN-Control-Key is supplied. PUT is the session-authenticated civic participant confirmation route requiring an active Session, participant civic access, a linked civic actor for the signal community, and fail-closed local participation eligibility. Responses include an aggregate confirmationCount integer only — never actor identifiers, confirmer lists, or social reaction mechanics.',
         },
         {
           name: 'Discussion',

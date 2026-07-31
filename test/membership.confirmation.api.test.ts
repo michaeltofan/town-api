@@ -152,10 +152,16 @@ describe('PUT /v1/signals/:signalId/confirmation (participant)', () => {
       });
       expect(response.statusCode).toBe(200);
       const body = response.json<{
-        data: { signalId: string; confirmed: boolean; confirmedAt: string };
+        data: {
+          signalId: string;
+          confirmed: boolean;
+          confirmedAt: string;
+          confirmationCount: number;
+        };
       }>();
       expect(body.data.confirmed).toBe(true);
       expect(body.data.signalId).toBe(FOUNDATION_SIGNAL_IDS.milanoSignal2);
+      expect(body.data.confirmationCount).toBe(1);
 
       // A confirmation row was created for the linked civic actor — not the controlled actor.
       const rows = await ctx.app.database.db
@@ -165,6 +171,14 @@ describe('PUT /v1/signals/:signalId/confirmation (participant)', () => {
       expect(rows).toHaveLength(1);
       expect(rows[0]?.actorId).toBe(registration.actorId);
       expect(rows[0]?.actorId).not.toBe(CONTROLLED_TEST_ACTOR_ID);
+
+      const readBack = await ctx.app.inject({
+        method: 'GET',
+        url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal2}/confirmation`,
+        headers: { authorization: `Session ${login.sessionToken}` },
+      });
+      expect(readBack.statusCode).toBe(200);
+      expect(readBack.json()).toEqual(body);
     });
 
     it('is idempotent — PUT twice returns the same confirmedAt and creates only one row', async () => {
