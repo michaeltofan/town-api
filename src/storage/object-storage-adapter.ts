@@ -57,15 +57,23 @@ function errorCodeOf(error: unknown): string | undefined {
   ) {
     return error.code;
   }
+  return undefined;
+}
+
+function errorNameOf(error: unknown): string {
+  if (error instanceof Error && error.name.length > 0) {
+    return error.name;
+  }
   if (
     typeof error === 'object' &&
     error !== null &&
     'name' in error &&
-    typeof error.name === 'string'
+    typeof error.name === 'string' &&
+    error.name.length > 0
   ) {
     return error.name;
   }
-  return undefined;
+  return 'UnknownError';
 }
 
 async function bodyToBuffer(body: unknown): Promise<Buffer> {
@@ -126,7 +134,7 @@ export function createObjectStorageAdapter(
           event: 'object_storage_put_failed',
           reason: 'sdk_error',
           key: input.key,
-          errorName: error instanceof Error ? error.name : 'UnknownError',
+          errorName: errorNameOf(error),
           ...(errorCode !== undefined ? { errorCode } : {}),
         });
         return { ok: false, reason: 'sdk_error' };
@@ -152,16 +160,19 @@ export function createObjectStorageAdapter(
         };
       } catch (error) {
         const errorCode = errorCodeOf(error);
+        const errorName = errorNameOf(error);
         const notFound =
           errorCode === 'NoSuchKey' ||
           errorCode === 'NotFound' ||
           errorCode === '404' ||
+          errorName === 'NoSuchKey' ||
+          errorName === 'NotFound' ||
           (error instanceof Error && /not\s*found|nosuchkey/i.test(error.message));
         log?.({
           event: 'object_storage_get_failed',
           reason: notFound ? 'not_found' : 'sdk_error',
           key: input.key,
-          errorName: error instanceof Error ? error.name : 'UnknownError',
+          errorName,
           ...(errorCode !== undefined ? { errorCode } : {}),
         });
         return { ok: false, reason: notFound ? 'not_found' : 'sdk_error' };

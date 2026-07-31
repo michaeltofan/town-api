@@ -74,7 +74,8 @@ export async function findAttachableDiscussionMediaUpload(
   if (!row) {
     return null;
   }
-  if (row.expiresAt <= input.now) {
+  // Compare as instants — Postgres may return space-separated timestamps.
+  if (Date.parse(row.expiresAt) <= Date.parse(input.now)) {
     return null;
   }
   return row;
