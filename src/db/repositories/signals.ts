@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
+  actors,
   communities,
   signals,
   type CommunityRow,
@@ -162,4 +163,83 @@ export async function unhideSignal(
     throw new Error('Failed to unhide signal');
   }
   return { signal, changed: true };
+}
+
+export async function insertPublishedMemberSignal(
+  db: Db,
+  input: {
+    id: string;
+    communityId: string;
+    slug: string;
+    position: number;
+    locale: string;
+    category: string;
+    area: string;
+    headline: string;
+    summary: string;
+    description: string;
+    whyItMatters: string;
+    whoIsAffected: string;
+    latestUpdate: string;
+    statusLabel: string;
+    statusNote: string;
+    observedLabel: string;
+    observedOn: string;
+    authorDisplayName: string;
+    authorActorId: string;
+    authorAccountId: string;
+    mediaUploadId: string;
+    imageKey: string;
+    now: string;
+  },
+): Promise<SignalRow> {
+  const rows = await db
+    .insert(signals)
+    .values({
+      id: input.id,
+      communityId: input.communityId,
+      slug: input.slug,
+      position: input.position,
+      locale: input.locale,
+      category: input.category,
+      area: input.area,
+      headline: input.headline,
+      summary: input.summary,
+      description: input.description,
+      whyItMatters: input.whyItMatters,
+      whoIsAffected: input.whoIsAffected,
+      latestUpdate: input.latestUpdate,
+      statusLabel: input.statusLabel,
+      statusNote: input.statusNote,
+      observedLabel: input.observedLabel,
+      observedOn: input.observedOn,
+      observedPrecision: 'day',
+      authorDisplayName: input.authorDisplayName,
+      authorActorId: input.authorActorId,
+      authorAccountId: input.authorAccountId,
+      mediaUploadId: input.mediaUploadId,
+      imageKey: input.imageKey,
+      imageFocusX: 50,
+      imageFocusY: 50,
+      publicationStatus: 'published',
+      publishedAt: input.now,
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+    .returning();
+  const row = rows[0];
+  if (!row) {
+    throw new Error('Member signal insert failed');
+  }
+  return row;
+}
+
+export async function updateCivicActorDisplayLabel(
+  db: Db,
+  input: { actorId: string; displayLabel: string },
+): Promise<void> {
+  await db
+    .update(actors)
+    .set({ displayLabel: input.displayLabel })
+    .where(eq(actors.id, input.actorId));
 }

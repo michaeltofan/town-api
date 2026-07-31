@@ -34,6 +34,7 @@ const EXPECTED_TOWN_TABLES = [
   'signal_discussion_contributions',
   'signal_discussion_media_uploads',
   'signal_discussion_sessions',
+  'signal_media_uploads',
   'signal_submissions',
   'signals',
   'stripe_checkout_attempts',
