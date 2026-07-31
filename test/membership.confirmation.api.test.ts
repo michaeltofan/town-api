@@ -239,11 +239,12 @@ describe('PUT /v1/signals/:signalId/confirmation (participant)', () => {
       await ctx.pool.end();
     });
 
-    it('denies participant confirmation when local eligibility is unavailable', async () => {
+    it('denies participant confirmation when community commitment is missing', async () => {
       const registration = await activatePasskeyAccountAndLinkCommunity({
         app: ctx.app,
         delivery: ctx.delivery,
         email: 'ConfirmationFailClosed+setup@example.com',
+        linkCommunity: false,
       });
       await activateTestMembership(ctx.app, {
         accountId: registration.accountId,
@@ -264,6 +265,30 @@ describe('PUT /v1/signals/:signalId/confirmation (participant)', () => {
       expect(response.json()).toMatchObject({
         error: { code: 'CIVIC_PARTICIPATION_NOT_AUTHORIZED' },
       });
+    });
+
+    it('allows participant confirmation with commitment even when local eligibility is unavailable', async () => {
+      const registration = await activatePasskeyAccountAndLinkCommunity({
+        app: ctx.app,
+        delivery: ctx.delivery,
+        email: 'ConfirmationCommitmentAllows+setup@example.com',
+      });
+      await activateTestMembership(ctx.app, {
+        accountId: registration.accountId,
+        effectiveAt: '2026-07-17T12:00:00.000Z',
+        accessUntil: '2030-01-01T00:00:00.000Z',
+      });
+      const login = await loginMobileSession({
+        app: ctx.app,
+        material: registration.material,
+      });
+      const response = await ctx.app.inject({
+        method: 'PUT',
+        url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/confirmation`,
+        headers: { authorization: `Session ${login.sessionToken}` },
+        payload: {},
+      });
+      expect(response.statusCode).toBe(200);
     });
   });
 

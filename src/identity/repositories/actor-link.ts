@@ -89,6 +89,8 @@ export async function createCivicActor(
       communityId: input.communityId,
       accountId: null,
       localEligibilityVerifiedAt: null,
+      communityCommitmentAcceptedAt: null,
+      communityCommitmentVersion: null,
       createdAt: input.createdAt,
       updatedAt: input.updatedAt,
     })

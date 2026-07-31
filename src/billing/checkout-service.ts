@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
+import { findActiveCivicActorByAccountId } from '../db/repositories/confirmations.js';
 import { appendIdentitySecurityEvent } from '../identity/repositories/security-events.js';
+import { hasValidCommunityCommitment } from '../membership/community-commitment.js';
 import { lockEntitlementByAccountId } from '../membership/repositories/entitlements.js';
 import { ensureStripeCustomerLink } from './customer-service.js';
 import { assertAnnualPrice } from './price-policy.js';
@@ -13,6 +15,7 @@ type Db = Database['db'];
 export type CheckoutServiceError =
   | { code: 'MEMBERSHIP_ALREADY_ACTIVE' }
   | { code: 'BILLING_MANAGE_EXISTING_SUBSCRIPTION' }
+  | { code: 'COMMUNITY_COMMITMENT_REQUIRED' }
   | { code: 'BILLING_CHECKOUT_FAILED'; reason: string }
   | { code: 'BILLING_NOT_AVAILABLE'; reason: string };
 
@@ -108,6 +111,11 @@ export async function createCheckoutSessionForAccount(
         code: 'BILLING_CHECKOUT_FAILED',
         reason: 'account_not_active',
       });
+    }
+
+    const actor = await findActiveCivicActorByAccountId(dbTx, input.accountId);
+    if (!hasValidCommunityCommitment(actor)) {
+      throw new CheckoutServiceRejection({ code: 'COMMUNITY_COMMITMENT_REQUIRED' });
     }
 
     const entitlement = await lockEntitlementByAccountId(dbTx, input.accountId);

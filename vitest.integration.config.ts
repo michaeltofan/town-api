@@ -58,6 +58,7 @@ export default defineConfig({
       'test/membership.audit.integration.test.ts',
       'test/account-moderation.api.test.ts',
       'test/local-eligibility.api.test.ts',
+      'test/community-commitment.api.test.ts',
       'test/signal-submission.api.test.ts',
       'test/signal-moderation.api.test.ts',
       'test/billing.migration.test.ts',

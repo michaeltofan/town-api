@@ -60,6 +60,26 @@ describe('POST /v1/billing/checkout-session', () => {
     expect(response.statusCode).toBe(400);
   });
 
+  it('rejects Checkout when the account has no valid community commitment', async () => {
+    const registration = await activatePasskeyAccountAndLinkCommunity({
+      app: ctx.app,
+      delivery: ctx.delivery,
+      email: 'BillingCheckoutNoCommitment+setup@example.com',
+      linkCommunity: false,
+    });
+    const login = await loginMobileSession({ app: ctx.app, material: registration.material });
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Session ${login.sessionToken}` },
+      payload: {},
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: { code: 'COMMUNITY_COMMITMENT_REQUIRED' },
+    });
+  });
+
   it('returns a Stripe-issued checkout URL for a fresh account and creates a customer link', async () => {
     const registration = await activatePasskeyAccountAndLinkCommunity({
       app: ctx.app,

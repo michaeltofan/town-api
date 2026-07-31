@@ -19,6 +19,8 @@ export const LOCAL_ELIGIBILITY_BIND_ACCOUNT_LIMIT_15M = 60;
  * altering the ceremony_rate_limits CHECK constraint in migration 0012.
  */
 const LOCAL_ELIGIBILITY_SUBJECT_PREFIX = 'local_eligibility:';
+const COMMUNITY_COMMITMENT_SUBJECT_PREFIX = 'community_commitment:';
+export const COMMUNITY_COMMITMENT_WRITE_ACCOUNT_LIMIT_15M = 60;
 
 function floorWindowStart(nowMs: number, windowMs: number): Date {
   return new Date(Math.floor(nowMs / windowMs) * windowMs);
@@ -148,6 +150,71 @@ export async function recordLocalEligibilityBindAttempt(
       metadata: {
         scope: 'membership_inventory_account',
         purpose: 'local_eligibility_bind',
+      },
+    });
+  }
+  return before + 1;
+}
+
+async function countCommunityCommitmentWindow(
+  db: Db,
+  input: {
+    rateLimitHashKey: string;
+    accountId: string;
+    now: string;
+  },
+): Promise<{ count: number; bucketId: string }> {
+  const nowMs = new Date(input.now).getTime();
+  const windowStartedAt = floorWindowStart(nowMs, WINDOW_15M_MS).toISOString();
+  const windowExpiresAt = new Date(
+    new Date(windowStartedAt).getTime() + WINDOW_15M_MS,
+  ).toISOString();
+  const subjectHash = hashRateLimitSubject({
+    hashKey: input.rateLimitHashKey,
+    scope: 'membership_inventory_account',
+    subject: `${COMMUNITY_COMMITMENT_SUBJECT_PREFIX}${input.accountId}`,
+  });
+  const bucket = await getOrCreateCeremonyRateLimitBucket(db, {
+    id: randomUUID(),
+    scope: 'membership_inventory_account',
+    subjectHash,
+    windowStartedAt,
+    windowExpiresAt,
+    createdAt: input.now,
+  });
+  return { count: bucket.attemptCount, bucketId: bucket.id };
+}
+
+export async function isCommunityCommitmentWriteThrottled(
+  db: Db,
+  input: { rateLimitHashKey: string; accountId: string; now: string },
+): Promise<boolean> {
+  const bucket = await countCommunityCommitmentWindow(db, input);
+  return bucket.count >= COMMUNITY_COMMITMENT_WRITE_ACCOUNT_LIMIT_15M;
+}
+
+export async function recordCommunityCommitmentWriteAttempt(
+  db: Db,
+  input: {
+    rateLimitHashKey: string;
+    accountId: string;
+    now: string;
+    throttled: boolean;
+    requestId?: string | null;
+  },
+): Promise<number> {
+  const { bucketId, count: before } = await countCommunityCommitmentWindow(db, input);
+  const updated = await incrementCeremonyRateLimit(db, { id: bucketId, now: input.now });
+  if (input.throttled || updated.attemptCount >= COMMUNITY_COMMITMENT_WRITE_ACCOUNT_LIMIT_15M) {
+    await appendIdentitySecurityEvent(db, {
+      id: randomUUID(),
+      accountId: input.accountId,
+      eventType: 'rate_limit_triggered',
+      occurredAt: input.now,
+      requestId: input.requestId ?? null,
+      metadata: {
+        scope: 'membership_inventory_account',
+        purpose: 'community_commitment_write',
       },
     });
   }

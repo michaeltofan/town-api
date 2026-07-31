@@ -121,6 +121,7 @@ export function generateBillingContractDocument(): unknown {
           BILLING_NOT_AVAILABLE: 503,
           MEMBERSHIP_ALREADY_ACTIVE: 409,
           BILLING_MANAGE_EXISTING_SUBSCRIPTION: 409,
+          COMMUNITY_COMMITMENT_REQUIRED: 409,
           BILLING_CHECKOUT_FAILED: 502,
           SESSION_NOT_AUTHORIZED: 401,
           RATE_LIMITED: 429,

@@ -1,0 +1,246 @@
+import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
+import type { Env } from '../config/env.js';
+import { requirePasskeyManagementConfig } from '../ceremony/passkey-management/config.js';
+import { assertWebCookieCsrf } from '../ceremony/passkey-authentication/csrf.js';
+import {
+  parseSessionAuthorizationHeader,
+  parseWebSessionCookie,
+  type SessionTransportExtraction,
+} from '../ceremony/passkey-authentication/session-transport.js';
+import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
+import { findActiveCommunityBySlug } from '../db/repositories/communities.js';
+import { AppError, communityNotFoundError } from '../errors/app-error.js';
+import {
+  CommunityCommitmentPutBodySchema,
+  CommunityCommitmentRouteResponses,
+} from '../membership/community-commitment-schemas.js';
+import {
+  getCommunityCommitmentView,
+  recordCommunityCommitmentInTransaction,
+} from '../membership/community-commitment-service.js';
+import {
+  isCommunityCommitmentWriteThrottled,
+  isMembershipInventoryThrottled,
+  recordCommunityCommitmentWriteAttempt,
+  recordMembershipInventoryAttempt,
+} from '../membership/rate-limits.js';
+
+export type CommunityCommitmentRoutesOptions = {
+  env: Env;
+  now?: () => string;
+};
+
+function sessionNotAuthorizedError(): AppError {
+  return new AppError(401, 'SESSION_NOT_AUTHORIZED', 'Session is not authorized.');
+}
+
+function rateLimitedError(): AppError {
+  return new AppError(429, 'RATE_LIMITED', 'Rate limit exceeded.');
+}
+
+function singleHeader(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function extractSessionTransport(input: {
+  authorization: string | string[] | undefined;
+  cookieName: string;
+  cookies: Record<string, string | undefined> | undefined;
+}): SessionTransportExtraction {
+  const web = parseWebSessionCookie({
+    cookieName: input.cookieName,
+    cookies: input.cookies,
+  });
+  if (web.ok) {
+    return web;
+  }
+  return parseSessionAuthorizationHeader(input.authorization);
+}
+
+function rejectNonSessionSchemes(authorization: string | string[] | undefined): void {
+  const raw = Array.isArray(authorization) ? authorization[0] : authorization;
+  if (raw === undefined || raw.length === 0) {
+    return;
+  }
+  const space = raw.indexOf(' ');
+  if (space <= 0) {
+    return;
+  }
+  const scheme = raw.slice(0, space);
+  if (scheme === 'SetupGrant' || scheme === 'RecoveryGrant' || scheme === 'Bearer') {
+    throw sessionNotAuthorizedError();
+  }
+}
+
+function assertWebCsrf(input: {
+  originHeader: string | undefined;
+  secFetchSite: string | undefined;
+  allowedOrigins: readonly string[];
+}): void {
+  const csrf = assertWebCookieCsrf(input);
+  if (!csrf.ok) {
+    throw sessionNotAuthorizedError();
+  }
+}
+
+export const communityCommitmentRoutes: FastifyPluginCallbackTypebox<
+  CommunityCommitmentRoutesOptions
+> = (app, options, done) => {
+  const { env } = options;
+  const now = () => (options.now ?? (() => new Date().toISOString()))();
+
+  async function requireSession(request: {
+    headers: {
+      authorization?: string | string[] | undefined;
+      origin?: string | string[] | undefined;
+      'sec-fetch-site'?: string | string[] | undefined;
+    };
+    cookies?: Record<string, string | undefined>;
+    mutative?: boolean;
+  }): Promise<NonNullable<Awaited<ReturnType<typeof resolveActiveSession>>>> {
+    rejectNonSessionSchemes(request.headers.authorization);
+    const config = requirePasskeyManagementConfig(env);
+    const extracted = extractSessionTransport({
+      authorization: request.headers.authorization,
+      cookieName: config.webSessionCookieName,
+      cookies: request.cookies,
+    });
+    if (!extracted.ok) {
+      throw sessionNotAuthorizedError();
+    }
+    if (extracted.clientType === 'web' && request.mutative !== false) {
+      assertWebCsrf({
+        originHeader: singleHeader(request.headers.origin),
+        secFetchSite: singleHeader(request.headers['sec-fetch-site']),
+        allowedOrigins: config.allowedOrigins,
+      });
+    }
+    const session = await resolveActiveSession(
+      app.database.db,
+      { env, now },
+      {
+        clientType: extracted.clientType,
+        token: extracted.token,
+      },
+    );
+    if (!session) {
+      throw sessionNotAuthorizedError();
+    }
+    return session;
+  }
+
+  app.get(
+    '/v1/account/community-commitment',
+    {
+      schema: {
+        tags: ['Account'],
+        summary: 'Read the authenticated account community commitment',
+        description:
+          'Returns whether the authenticated natural person has recorded an explicit community choice and personal responsibility declaration. Community association without acceptance is reported as none. Never claims technical location or residence verification.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: CommunityCommitmentRouteResponses.read,
+      },
+    },
+    async (request, reply) => {
+      if (!env.PASSKEY_AUTHENTICATION_ENABLED) {
+        reply.callNotFound();
+        return;
+      }
+      const session = await requireSession({
+        headers: request.headers,
+        cookies: request.cookies,
+        mutative: false,
+      });
+
+      const config = requirePasskeyManagementConfig(env);
+      const nowIso = now();
+      const throttled = await isMembershipInventoryThrottled(app.database.db, {
+        rateLimitHashKey: config.rateLimitHashKey,
+        accountId: session.accountId,
+        now: nowIso,
+      });
+      await recordMembershipInventoryAttempt(app.database.db, {
+        rateLimitHashKey: config.rateLimitHashKey,
+        accountId: session.accountId,
+        now: nowIso,
+        throttled,
+        requestId: request.id,
+      });
+      if (throttled) {
+        throw rateLimitedError();
+      }
+
+      const view = await getCommunityCommitmentView(app.database.db, {
+        accountId: session.accountId,
+        now: nowIso,
+      });
+      return await reply.status(200).send({ data: view });
+    },
+  );
+
+  app.put(
+    '/v1/account/community-commitment',
+    {
+      schema: {
+        tags: ['Account'],
+        summary: 'Record an explicit community commitment for the authenticated account',
+        description:
+          'Records a personal community choice and responsibility declaration for the authenticated natural person. Requires accepted:true. Derives country/city from the canonical community. Does not write local_eligibility_verified_at and does not claim technical location verification. Locked when paid membership access is active/cancelling.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        body: CommunityCommitmentPutBodySchema,
+        response: CommunityCommitmentRouteResponses.write,
+      },
+    },
+    async (request, reply) => {
+      if (!env.PASSKEY_AUTHENTICATION_ENABLED) {
+        reply.callNotFound();
+        return;
+      }
+      const session = await requireSession({
+        headers: request.headers,
+        cookies: request.cookies,
+        mutative: true,
+      });
+
+      // accepted:true is enforced by CommunityCommitmentPutBodySchema
+      // (Type.Literal(true)); Fastify rejects missing/false/invalid before
+      // this handler. body.accepted is therefore always true here.
+      const body = request.body;
+
+      const community = await findActiveCommunityBySlug(app.database.db, body.community);
+      if (!community) {
+        throw communityNotFoundError();
+      }
+
+      const config = requirePasskeyManagementConfig(env);
+      const nowIso = now();
+      const throttled = await isCommunityCommitmentWriteThrottled(app.database.db, {
+        rateLimitHashKey: config.rateLimitHashKey,
+        accountId: session.accountId,
+        now: nowIso,
+      });
+      await recordCommunityCommitmentWriteAttempt(app.database.db, {
+        rateLimitHashKey: config.rateLimitHashKey,
+        accountId: session.accountId,
+        now: nowIso,
+        throttled,
+        requestId: request.id,
+      });
+      if (throttled) {
+        throw rateLimitedError();
+      }
+
+      const view = await app.database.db.transaction(async (tx) => {
+        return recordCommunityCommitmentInTransaction(tx, {
+          accountId: session.accountId,
+          community,
+          now: nowIso,
+        });
+      });
+
+      return await reply.status(200).send({ data: view });
+    },
+  );
+
+  done();
+};

@@ -218,6 +218,17 @@ export const actors = town.table(
       withTimezone: true,
       mode: 'string',
     }),
+    /**
+     * Explicit personal community self-declaration timestamp.
+     * Not technical location/residence verification — never populate
+     * local_eligibility_verified_at to represent this declaration.
+     */
+    communityCommitmentAcceptedAt: timestamp('community_commitment_accepted_at', {
+      withTimezone: true,
+      mode: 'string',
+    }),
+    /** Server-controlled commitment copy/version identifier. */
+    communityCommitmentVersion: text('community_commitment_version'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
@@ -244,6 +255,17 @@ export const actors = town.table(
     check(
       'actors_controlled_test_requires_community',
       sql`${table.kind} <> 'controlled_test' or ${table.communityId} is not null`,
+    ),
+    check(
+      'actors_community_commitment_pair',
+      sql`(
+        (${table.communityCommitmentAcceptedAt} is null and ${table.communityCommitmentVersion} is null)
+        or (
+          ${table.communityCommitmentAcceptedAt} is not null
+          and ${table.communityCommitmentVersion} is not null
+          and ${table.communityId} is not null
+        )
+      )`,
     ),
   ],
 );
