@@ -16,6 +16,7 @@ import {
   evaluateCivicAccess,
   resolveEffectiveMembershipStatus,
 } from '../src/membership/civic-access.js';
+import { COMMUNITY_COMMITMENT_VERSION } from '../src/membership/community-commitment.js';
 import {
   buildFinalizePaidPendingBindingSourceEventId,
   maybeFinalizePaidPendingBindingAfterCommunityBind,
@@ -467,6 +468,10 @@ describe('membership finalize_paid_pending_binding (S5)', () => {
         communityId: COMMUNITY_ID,
         kind: 'civic',
         status: 'active',
+        // Commitment alone cannot unlock paid_pending_binding; membership
+        // status still denies before the commitment gate.
+        communityCommitmentAcceptedAt: NOW,
+        communityCommitmentVersion: COMMUNITY_COMMITMENT_VERSION,
       },
       communityId: COMMUNITY_ID,
       localEligibility: 'eligible',
@@ -487,7 +492,29 @@ describe('membership finalize_paid_pending_binding (S5)', () => {
     );
     expect(finalized.result).toBe('applied');
 
+    // Membership V1 participation requires active/cancelling paid access AND a
+    // valid recorded community commitment for the requested community.
     const afterAccess = evaluateCivicAccess({
+      session: { accountId: accountCivic },
+      account: { id: accountCivic, status: 'active', isOwner: false },
+      entitlement: finalized.entitlement ?? null,
+      actor: {
+        id: actorCivic,
+        accountId: accountCivic,
+        communityId: COMMUNITY_ID,
+        kind: 'civic',
+        status: 'active',
+        communityCommitmentAcceptedAt: NOW,
+        communityCommitmentVersion: COMMUNITY_COMMITMENT_VERSION,
+      },
+      communityId: COMMUNITY_ID,
+      localEligibility: 'eligible',
+      now: NOW,
+    });
+    expect(afterAccess.canParticipate).toBe(true);
+    expect(afterAccess.level).toBe('participant');
+
+    const afterWithoutCommitment = evaluateCivicAccess({
       session: { accountId: accountCivic },
       account: { id: accountCivic, status: 'active', isOwner: false },
       entitlement: finalized.entitlement ?? null,
@@ -502,8 +529,8 @@ describe('membership finalize_paid_pending_binding (S5)', () => {
       localEligibility: 'eligible',
       now: NOW,
     });
-    expect(afterAccess.canParticipate).toBe(true);
-    expect(afterAccess.level).toBe('participant');
+    expect(afterWithoutCommitment.canParticipate).toBe(false);
+    expect(afterWithoutCommitment.denialReason).toBe('community_commitment_missing');
   });
 
   it('activate still rejects paid_pending_binding (S1–S4 invariant)', async () => {
