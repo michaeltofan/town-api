@@ -147,6 +147,13 @@ export const signals = town.table(
     observedOn: date('observed_on', { mode: 'string' }),
     observedPrecision: text('observed_precision').notNull(),
     authorDisplayName: text('author_display_name').notNull(),
+    /**
+     * Member-authored signals set both author ids. Foundation editorial rows leave both null.
+     * FK to actors/media is enforced in SQL (actors table is declared later in this module).
+     */
+    authorActorId: uuid('author_actor_id'),
+    authorAccountId: uuid('author_account_id'),
+    mediaUploadId: uuid('media_upload_id'),
     imageKey: text('image_key').notNull(),
     imageFocusX: smallint('image_focus_x').notNull(),
     imageFocusY: smallint('image_focus_y').notNull(),
@@ -173,8 +180,14 @@ export const signals = town.table(
       foreignColumns: [accounts.id],
       name: 'signals_hidden_by_account_id_fkey',
     }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.authorAccountId],
+      foreignColumns: [accounts.id],
+      name: 'signals_author_account_id_fkey',
+    }).onDelete('restrict'),
     unique('signals_community_slug_unique').on(table.communityId, table.slug),
     unique('signals_community_position_unique').on(table.communityId, table.position),
+    unique('signals_media_upload_id_unique').on(table.mediaUploadId),
     check('signals_position_positive', sql`${table.position} > 0`),
     check('signals_publication_status_published', sql`${table.publicationStatus} = 'published'`),
     check('signals_observed_precision_valid', sql`${table.observedPrecision} in ('day', 'week')`),
@@ -187,6 +200,13 @@ export const signals = town.table(
       sql`(
         (${table.hiddenAt} is null and ${table.hiddenReason} is null and ${table.hiddenByAccountId} is null)
         or (${table.hiddenAt} is not null and ${table.hiddenReason} is not null and ${table.hiddenByAccountId} is not null)
+      )`,
+    ),
+    check(
+      'signals_member_author_pair',
+      sql`(
+        (${table.authorActorId} is null and ${table.authorAccountId} is null)
+        or (${table.authorActorId} is not null and ${table.authorAccountId} is not null)
       )`,
     ),
     check(
@@ -348,6 +368,57 @@ export const signalDiscussionSessions = town.table(
       name: 'signal_discussion_sessions_signal_id_fkey',
     }).onDelete('restrict'),
     unique('signal_discussion_sessions_signal_id_unique').on(table.signalId),
+  ],
+);
+
+/**
+ * Pending or attached photos for member-authored civic signals.
+ * Bytes live in private object storage; this row is the durable metadata ledger.
+ * Keyed by community (signal does not exist yet at upload time).
+ */
+export const signalMediaUploads = town.table(
+  'signal_media_uploads',
+  {
+    id: uuid('id').primaryKey(),
+    communityId: uuid('community_id').notNull(),
+    accountId: uuid('account_id').notNull(),
+    actorId: uuid('actor_id').notNull(),
+    objectKey: text('object_key').notNull(),
+    contentType: text('content_type').notNull(),
+    kind: text('kind').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    status: text('status').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.communityId],
+      foreignColumns: [communities.id],
+      name: 'signal_media_uploads_community_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'signal_media_uploads_account_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.actorId],
+      foreignColumns: [actors.id],
+      name: 'signal_media_uploads_actor_id_fkey',
+    }).onDelete('restrict'),
+    unique('signal_media_uploads_object_key_unique').on(table.objectKey),
+    check('signal_media_uploads_kind_valid', sql`${table.kind} in ('image')`),
+    check(
+      'signal_media_uploads_status_valid',
+      sql`${table.status} in ('pending', 'attached', 'abandoned')`,
+    ),
+    check(
+      'signal_media_uploads_content_type_valid',
+      sql`${table.contentType} in ('image/jpeg', 'image/png', 'image/webp')`,
+    ),
+    check('signal_media_uploads_byte_size_positive', sql`${table.byteSize} > 0`),
+    index('signal_media_uploads_account_created_at_idx').on(table.accountId, table.createdAt),
   ],
 );
 
@@ -1327,6 +1398,7 @@ export type ActorRow = typeof actors.$inferSelect;
 export type SignalConfirmationRow = typeof signalConfirmations.$inferSelect;
 export type SignalSubmissionRow = typeof signalSubmissions.$inferSelect;
 export type SignalDiscussionSessionRow = typeof signalDiscussionSessions.$inferSelect;
+export type SignalMediaUploadRow = typeof signalMediaUploads.$inferSelect;
 export type SignalDiscussionMediaUploadRow = typeof signalDiscussionMediaUploads.$inferSelect;
 export type SignalDiscussionContributionRow = typeof signalDiscussionContributions.$inferSelect;
 export type AccountRow = typeof accounts.$inferSelect;

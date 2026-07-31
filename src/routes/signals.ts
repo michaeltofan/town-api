@@ -15,6 +15,16 @@ import {
 import { DomainErrorResponseSchema } from '../schemas/error.js';
 import type { SignalRow } from '../db/schema.js';
 import { toIsoTimestamp } from '../lib/timestamps.js';
+import { memberSignalMediaProxyPath } from '../membership/member-signal-policy.js';
+
+function toImageMedia(row: SignalRow) {
+  if (!row.mediaUploadId) {
+    return null;
+  }
+  return {
+    url: memberSignalMediaProxyPath(row.id),
+  };
+}
 
 function toSignalListItem(row: SignalRow, confirmationCount: number) {
   return {
@@ -32,6 +42,7 @@ function toSignalListItem(row: SignalRow, confirmationCount: number) {
       x: row.imageFocusX,
       y: row.imageFocusY,
     },
+    imageMedia: toImageMedia(row),
     confirmationCount,
   };
 }
@@ -133,6 +144,7 @@ export const signalsRoutes: FastifyPluginCallbackTypebox = (app, _opts, done) =>
             x: signal.imageFocusX,
             y: signal.imageFocusY,
           },
+          imageMedia: toImageMedia(signal),
           publishedAt: toIsoTimestamp(signal.publishedAt),
           confirmationCount: confirmationTotals.get(signal.id) ?? 0,
         },

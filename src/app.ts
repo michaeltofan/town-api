@@ -34,6 +34,7 @@ import { googlePlayRtdnRoutes } from './routes/google-play-rtdn.js';
 import { localEligibilityRoutes } from './routes/local-eligibility.js';
 import { communityCommitmentRoutes } from './routes/community-commitment.js';
 import { signalSubmissionRoutes } from './routes/signal-submissions.js';
+import { memberSignalRoutes } from './routes/member-signals.js';
 import type { LocalParticipationEligibilityResolver } from './membership/local-eligibility.js';
 import type { TownStripeAdapter } from './billing/stripe-adapter.js';
 import type { TownGooglePlayAndroidPublisherAdapter } from './membership/google-play/android-publisher-adapter.js';
@@ -414,6 +415,17 @@ export async function buildApp(options: BuildAppOptions) {
     ...(options.membership?.localEligibilityResolver !== undefined
       ? { localEligibilityResolver: options.membership.localEligibilityResolver }
       : {}),
+  });
+  await app.register(memberSignalRoutes, {
+    env: options.env,
+    ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
+    ...(options.membership?.generateId !== undefined
+      ? { generateId: options.membership.generateId }
+      : {}),
+    ...(options.membership?.localEligibilityResolver !== undefined
+      ? { localEligibilityResolver: options.membership.localEligibilityResolver }
+      : {}),
+    objectStorageAdapter,
   });
   await app.register(billingRoutes, {
     env: options.env,

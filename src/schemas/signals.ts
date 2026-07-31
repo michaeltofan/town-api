@@ -18,6 +18,13 @@ export const SignalListCommunitySchema = Type.Object(
   { additionalProperties: false, $id: 'SignalListCommunity' },
 );
 
+export const SignalImageMediaSchema = Type.Object(
+  {
+    url: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false, $id: 'SignalImageMedia' },
+);
+
 export const SignalListItemSchema = Type.Object(
   {
     id: Type.String({ format: 'uuid' }),
@@ -31,6 +38,8 @@ export const SignalListItemSchema = Type.Object(
     observedLabel: Type.String(),
     imageKey: Type.String(),
     imageFocus: ImageFocusSchema,
+    /** Present for member-authored photos; null for foundation static assets. */
+    imageMedia: Type.Union([SignalImageMediaSchema, Type.Null()]),
     /** Aggregate civic confirmation total. Integer only — no actor identifiers. */
     confirmationCount: Type.Integer({ minimum: 0 }),
   },
@@ -83,6 +92,8 @@ export const SignalDetailResponseSchema = Type.Object(
         authorDisplayName: Type.String(),
         imageKey: Type.String(),
         imageFocus: ImageFocusSchema,
+        /** Present for member-authored photos; null for foundation static assets. */
+        imageMedia: Type.Union([SignalImageMediaSchema, Type.Null()]),
         publishedAt: Type.String({ format: 'date-time' }),
         /** Aggregate civic confirmation total. Integer only — no actor identifiers. */
         confirmationCount: Type.Integer({ minimum: 0 }),

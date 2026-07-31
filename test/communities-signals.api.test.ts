@@ -122,6 +122,7 @@ describe('communities and signals API', () => {
         x: milanoSignal1.imageFocusX,
         y: milanoSignal1.imageFocusY,
       },
+      imageMedia: null,
       confirmationCount: 0,
     });
 
@@ -198,6 +199,7 @@ describe('communities and signals API', () => {
         x: milanoSignal1.imageFocusX,
         y: milanoSignal1.imageFocusY,
       },
+      imageMedia: null,
       publishedAt: milanoSignal1.publishedAt,
       confirmationCount: 0,
     });

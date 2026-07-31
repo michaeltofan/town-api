@@ -58,6 +58,7 @@ export default defineConfig({
       'test/discussion-session.api.test.ts',
       'test/discussion-session.media.api.test.ts',
       'test/discussion-session.migration.test.ts',
+      'test/member-signal.api.test.ts',
       'test/membership.audit.integration.test.ts',
       'test/account-moderation.api.test.ts',
       'test/local-eligibility.api.test.ts',

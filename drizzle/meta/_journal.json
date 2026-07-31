@@ -225,6 +225,13 @@
       "when": 1785955200000,
       "tag": "0031_discussion_contribution_media",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786041600000,
+      "tag": "0032_member_signal_publish",
+      "breakpoints": true
     }
   ]
 }
