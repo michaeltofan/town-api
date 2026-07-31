@@ -31,6 +31,8 @@ export const SignalListItemSchema = Type.Object(
     observedLabel: Type.String(),
     imageKey: Type.String(),
     imageFocus: ImageFocusSchema,
+    /** Aggregate civic confirmation total. Integer only — no actor identifiers. */
+    confirmationCount: Type.Integer({ minimum: 0 }),
   },
   { additionalProperties: false, $id: 'SignalListItem' },
 );
@@ -82,6 +84,8 @@ export const SignalDetailResponseSchema = Type.Object(
         imageKey: Type.String(),
         imageFocus: ImageFocusSchema,
         publishedAt: Type.String({ format: 'date-time' }),
+        /** Aggregate civic confirmation total. Integer only — no actor identifiers. */
+        confirmationCount: Type.Integer({ minimum: 0 }),
       },
       { additionalProperties: false },
     ),

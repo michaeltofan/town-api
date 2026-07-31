@@ -1,5 +1,6 @@
 import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
 import { findActiveCommunityBySlug } from '../db/repositories/communities.js';
+import { countConfirmationsForSignals } from '../db/repositories/confirmations.js';
 import {
   findPublishedSignalById,
   listPublishedSignalsForCommunity,
@@ -15,7 +16,7 @@ import { DomainErrorResponseSchema } from '../schemas/error.js';
 import type { SignalRow } from '../db/schema.js';
 import { toIsoTimestamp } from '../lib/timestamps.js';
 
-function toSignalListItem(row: SignalRow) {
+function toSignalListItem(row: SignalRow, confirmationCount: number) {
   return {
     id: row.id,
     slug: row.slug,
@@ -31,6 +32,7 @@ function toSignalListItem(row: SignalRow) {
       x: row.imageFocusX,
       y: row.imageFocusY,
     },
+    confirmationCount,
   };
 }
 
@@ -59,6 +61,10 @@ export const signalsRoutes: FastifyPluginCallbackTypebox = (app, _opts, done) =>
       }
 
       const rows = await listPublishedSignalsForCommunity(app.database.db, community.id);
+      const confirmationTotals = await countConfirmationsForSignals(
+        app.database.db,
+        rows.map((row) => row.id),
+      );
 
       return {
         data: {
@@ -68,7 +74,7 @@ export const signalsRoutes: FastifyPluginCallbackTypebox = (app, _opts, done) =>
             displayName: community.displayName,
             defaultLocale: community.defaultLocale,
           },
-          signals: rows.map(toSignalListItem),
+          signals: rows.map((row) => toSignalListItem(row, confirmationTotals.get(row.id) ?? 0)),
         },
       };
     },
@@ -96,6 +102,7 @@ export const signalsRoutes: FastifyPluginCallbackTypebox = (app, _opts, done) =>
       }
 
       const { signal, community } = result;
+      const confirmationTotals = await countConfirmationsForSignals(app.database.db, [signal.id]);
 
       return {
         data: {
@@ -127,6 +134,7 @@ export const signalsRoutes: FastifyPluginCallbackTypebox = (app, _opts, done) =>
             y: signal.imageFocusY,
           },
           publishedAt: toIsoTimestamp(signal.publishedAt),
+          confirmationCount: confirmationTotals.get(signal.id) ?? 0,
         },
       };
     },

@@ -37,6 +37,7 @@ describe('signal confirmation controlled GET (historical isolation)', () => {
         signalId,
         confirmed: false,
         confirmedAt: null,
+        confirmationCount: 0,
       },
     });
     expect(JSON.stringify(response.json())).not.toContain(controlKey);

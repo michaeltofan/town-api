@@ -10,15 +10,17 @@ import {
 } from '../ceremony/passkey-authentication/session-transport.js';
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
 import {
+  countConfirmationsForSignal,
   ensureParticipantSignalConfirmation,
   findActiveCivicActorByAccountId,
+  findConfirmationByActorAndSignal,
   getActorConfirmationState,
 } from '../db/repositories/confirmations.js';
 import { findPublishedSignalById } from '../db/repositories/signals.js';
 import { findAccountById } from '../identity/repositories/accounts.js';
 import { appendIdentitySecurityEvent } from '../identity/repositories/security-events.js';
 import { toIsoTimestamp } from '../lib/timestamps.js';
-import { assertControlledAccess } from '../plugins/controlled-access.js';
+import { assertControlledAccess, CONTROLLED_ACCESS_HEADER } from '../plugins/controlled-access.js';
 import {
   AppError,
   civicParticipationNotAuthorizedError,
@@ -99,6 +101,14 @@ function assertWebCsrf(input: {
   }
 }
 
+function hasControlKeyHeader(headers: {
+  authorization?: string | string[] | undefined;
+  [key: string]: string | string[] | undefined;
+}): boolean {
+  const supplied = singleHeader(headers[CONTROLLED_ACCESS_HEADER]);
+  return typeof supplied === 'string' && supplied.length > 0;
+}
+
 export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutesOptions> = (
   app,
   options,
@@ -113,53 +123,6 @@ export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutes
       localEligibilityEnabled: env.LOCAL_ELIGIBILITY_ENABLED,
     });
 
-  app.get(
-    '/v1/signals/:signalId/confirmation',
-    {
-      schema: {
-        tags: ['Confirmations'],
-        summary: 'Get controlled confirmation state for a published signal',
-        description:
-          'Temporary controlled test mechanism using X-TOWN-Control-Key. This is not public authentication. Returns actor-specific confirmation state for the configured controlled test actor. No public counts or actor identifiers are exposed.',
-        security: [{ TownControlKey: [] }],
-        params: SignalIdParamsSchema,
-        response: {
-          200: ConfirmationResponseSchema,
-          400: DomainErrorResponseSchema,
-          401: DomainErrorResponseSchema,
-          403: DomainErrorResponseSchema,
-          404: DomainErrorResponseSchema,
-        },
-      },
-      preHandler: async (request, reply) => {
-        assertControlledAccess(request, reply, env);
-        if (reply.sent) {
-          return reply;
-        }
-      },
-    },
-    async (request, reply) => {
-      if (reply.sent) {
-        return;
-      }
-
-      const actorId = requireConfiguredActorId(env);
-      const state = await getActorConfirmationState(
-        app.database.db,
-        actorId,
-        request.params.signalId,
-      );
-
-      return {
-        data: {
-          signalId: state.signalId,
-          confirmed: state.confirmed,
-          confirmedAt: state.confirmedAt === null ? null : toIsoTimestamp(state.confirmedAt),
-        },
-      };
-    },
-  );
-
   async function requireSession(request: {
     headers: {
       authorization?: string | string[] | undefined;
@@ -167,6 +130,7 @@ export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutes
       'sec-fetch-site'?: string | string[] | undefined;
     };
     cookies?: Record<string, string | undefined>;
+    mutative?: boolean;
   }): Promise<NonNullable<Awaited<ReturnType<typeof resolveActiveSession>>>> {
     rejectNonSessionSchemes(request.headers.authorization);
     const config = requirePasskeyManagementConfig(env);
@@ -178,7 +142,7 @@ export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutes
     if (!extracted.ok) {
       throw sessionNotAuthorizedError();
     }
-    if (extracted.clientType === 'web') {
+    if (extracted.clientType === 'web' && request.mutative !== false) {
       assertWebCsrf({
         originHeader: singleHeader(request.headers.origin),
         secFetchSite: singleHeader(request.headers['sec-fetch-site']),
@@ -199,6 +163,155 @@ export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutes
     return session;
   }
 
+  async function requireParticipantForSignal(input: {
+    sessionAccountId: string;
+    signalId: string;
+    requestId: string;
+  }): Promise<{
+    signalId: string;
+    actor: NonNullable<Awaited<ReturnType<typeof findActiveCivicActorByAccountId>>>;
+  }> {
+    const published = await findPublishedSignalById(app.database.db, input.signalId);
+    if (!published) {
+      throw signalNotFoundError();
+    }
+
+    const communityId = published.signal.communityId;
+    const [account, entitlement, actor] = await Promise.all([
+      findAccountById(app.database.db, input.sessionAccountId),
+      findEntitlementByAccountId(app.database.db, input.sessionAccountId),
+      findActiveCivicActorByAccountId(app.database.db, input.sessionAccountId),
+    ]);
+
+    const nowIso = now();
+    const localEligibility = actor?.communityId
+      ? await Promise.resolve(
+          resolver({
+            accountId: input.sessionAccountId,
+            actorId: actor.id,
+            communityId: actor.communityId,
+            actor,
+          }),
+        )
+      : 'not_verified';
+
+    const access = evaluateCivicAccess({
+      session: { accountId: input.sessionAccountId },
+      account: account
+        ? { id: account.id, status: account.status, isOwner: account.isOwner }
+        : null,
+      entitlement,
+      actor,
+      communityId,
+      localEligibility,
+      now: nowIso,
+    });
+
+    if (access.level !== 'participant' || !access.canParticipate) {
+      const denialReason: ParticipationDenialReason = access.denialReason ?? 'inactive_account';
+      await appendIdentitySecurityEvent(app.database.db, {
+        id: generateId(),
+        accountId: input.sessionAccountId,
+        eventType: 'civic_participation_denied',
+        occurredAt: nowIso,
+        requestId: input.requestId,
+        metadata: {
+          denialReason,
+        },
+      });
+      throw civicParticipationNotAuthorizedError();
+    }
+
+    if (!actor) {
+      throw civicParticipationNotAuthorizedError();
+    }
+
+    return { signalId: published.signal.id, actor };
+  }
+
+  app.get(
+    '/v1/signals/:signalId/confirmation',
+    {
+      schema: {
+        tags: ['Confirmations'],
+        summary: 'Read confirmation state for a published signal',
+        description:
+          'Session-authenticated participants receive their own confirmation state plus the aggregate confirmationCount for the signal. When X-TOWN-Control-Key is supplied instead, returns the historical controlled-test-actor state (temporary testing mechanism, not public authentication). Never exposes actor identifiers or confirmer lists — only a boolean personal state and an integer aggregate total.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }, { TownControlKey: [] }],
+        params: SignalIdParamsSchema,
+        response: {
+          200: ConfirmationResponseSchema,
+          400: DomainErrorResponseSchema,
+          401: DomainErrorResponseSchema,
+          403: DomainErrorResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      // Prefer the historical controlled-key path when the header is present.
+      if (hasControlKeyHeader(request.headers)) {
+        assertControlledAccess(request, reply, env);
+        if (reply.sent) {
+          return;
+        }
+
+        const actorId = requireConfiguredActorId(env);
+        const state = await getActorConfirmationState(
+          app.database.db,
+          actorId,
+          request.params.signalId,
+        );
+        const confirmationCount = await countConfirmationsForSignal(
+          app.database.db,
+          state.signalId,
+        );
+
+        return {
+          data: {
+            signalId: state.signalId,
+            confirmed: state.confirmed,
+            confirmedAt: state.confirmedAt === null ? null : toIsoTimestamp(state.confirmedAt),
+            confirmationCount,
+          },
+        };
+      }
+
+      if (!env.PASSKEY_AUTHENTICATION_ENABLED) {
+        // Preserve controlled-key-only behavior when sessions are disabled and
+        // no control key was supplied: same 401 CONTROLLED_ACCESS_REQUIRED.
+        assertControlledAccess(request, reply, env);
+        return;
+      }
+
+      const session = await requireSession({
+        headers: request.headers,
+        cookies: request.cookies,
+        mutative: false,
+      });
+
+      const { signalId, actor } = await requireParticipantForSignal({
+        sessionAccountId: session.accountId,
+        signalId: request.params.signalId,
+        requestId: request.id,
+      });
+
+      const [confirmation, confirmationCount] = await Promise.all([
+        findConfirmationByActorAndSignal(app.database.db, actor.id, signalId),
+        countConfirmationsForSignal(app.database.db, signalId),
+      ]);
+
+      return await reply.status(200).send({
+        data: {
+          signalId,
+          confirmed: confirmation !== null,
+          confirmedAt: confirmation === null ? null : toIsoTimestamp(confirmation.confirmedAt),
+          confirmationCount,
+        },
+      });
+    },
+  );
+
   app.put(
     '/v1/signals/:signalId/confirmation',
     {
@@ -206,7 +319,7 @@ export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutes
         tags: ['Confirmations'],
         summary: 'Confirm a published signal as an authenticated civic participant',
         description:
-          'Requires an active web or mobile session. The account must have participant civic access derived from an active membership entitlement, a linked civic actor for the signal community, and fail-closed local eligibility. SetupGrant, RecoveryGrant, Bearer, and the temporary X-TOWN-Control-Key are rejected. Idempotent: repeats return the same confirmedAt. Body must be empty. Never exposes actor identifiers, counts, or Stripe provider identifiers. Denials emit CIVIC_PARTICIPATION_NOT_AUTHORIZED without leaking the specific reason.',
+          'Requires an active web or mobile session. The account must have participant civic access derived from an active membership entitlement, a linked civic actor for the signal community, and fail-closed local eligibility. SetupGrant, RecoveryGrant, Bearer, and the temporary X-TOWN-Control-Key are rejected. Idempotent: repeats return the same confirmedAt. Body must be empty. Returns the caller confirmation state plus aggregate confirmationCount. Never exposes actor identifiers or confirmer lists. Denials emit CIVIC_PARTICIPATION_NOT_AUTHORIZED without leaking the specific reason.',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
         params: SignalIdParamsSchema,
         body: ConfirmationPutBodySchema,
@@ -228,72 +341,24 @@ export const confirmationRoutes: FastifyPluginCallbackTypebox<ConfirmationRoutes
       const session = await requireSession({
         headers: request.headers,
         cookies: request.cookies,
+        mutative: true,
       });
 
-      const signalId = request.params.signalId;
-      const published = await findPublishedSignalById(app.database.db, signalId);
-      if (!published) {
-        throw signalNotFoundError();
-      }
-
-      const communityId = published.signal.communityId;
-      const [account, entitlement, actor] = await Promise.all([
-        findAccountById(app.database.db, session.accountId),
-        findEntitlementByAccountId(app.database.db, session.accountId),
-        findActiveCivicActorByAccountId(app.database.db, session.accountId),
-      ]);
-
-      const nowIso = now();
-      const localEligibility = actor?.communityId
-        ? await Promise.resolve(
-            resolver({
-              accountId: session.accountId,
-              actorId: actor.id,
-              communityId: actor.communityId,
-              actor,
-            }),
-          )
-        : 'not_verified';
-
-      const access = evaluateCivicAccess({
-        session: { accountId: session.accountId },
-        account: account
-          ? { id: account.id, status: account.status, isOwner: account.isOwner }
-          : null,
-        entitlement,
-        actor,
-        communityId,
-        localEligibility,
-        now: nowIso,
+      const { signalId, actor } = await requireParticipantForSignal({
+        sessionAccountId: session.accountId,
+        signalId: request.params.signalId,
+        requestId: request.id,
       });
-
-      if (access.level !== 'participant' || !access.canParticipate) {
-        const denialReason: ParticipationDenialReason = access.denialReason ?? 'inactive_account';
-        await appendIdentitySecurityEvent(app.database.db, {
-          id: generateId(),
-          accountId: session.accountId,
-          eventType: 'civic_participation_denied',
-          occurredAt: nowIso,
-          requestId: request.id,
-          metadata: {
-            denialReason,
-          },
-        });
-        throw civicParticipationNotAuthorizedError();
-      }
-
-      if (!actor) {
-        // Defense in depth: evaluateCivicAccess should have denied.
-        throw civicParticipationNotAuthorizedError();
-      }
 
       const result = await ensureParticipantSignalConfirmation(app.database.db, actor.id, signalId);
+      const confirmationCount = await countConfirmationsForSignal(app.database.db, result.signalId);
 
       return await reply.status(200).send({
         data: {
           signalId: result.signalId,
           confirmed: true,
           confirmedAt: toIsoTimestamp(result.confirmation.confirmedAt),
+          confirmationCount,
         },
       });
     },
