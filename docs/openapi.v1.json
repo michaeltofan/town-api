@@ -1589,7 +1589,7 @@
     },
     "/v1/account/membership": {
       "get": {
-        "description": "Returns the effective membership status (inactive/active/cancelling/expired/paid_pending_binding), accessUntil, cancelAtPeriodEnd, and the civic access level derived from membership, actor linkage, and fail-closed local eligibility. paid_pending_binding never grants participant access. Requires an active web or mobile session. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes Stripe customer or subscription identifiers.",
+        "description": "Returns the effective membership status (inactive/active/cancelling/expired/paid_pending_binding), accessUntil, cancelAtPeriodEnd, the civic access level derived from membership, actor linkage, and fail-closed local eligibility, and isOwner for the authenticated account (self-only). paid_pending_binding never grants participant access. Requires an active web or mobile session. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes Stripe customer or subscription identifiers.",
         "responses": {
           "200": {
             "content": {
@@ -1670,6 +1670,9 @@
                           ],
                           "type": "object"
                         },
+                        "isOwner": {
+                          "type": "boolean"
+                        },
                         "membership": {
                           "additionalProperties": false,
                           "properties": {
@@ -1738,7 +1741,8 @@
                       },
                       "required": [
                         "membership",
-                        "access"
+                        "access",
+                        "isOwner"
                       ],
                       "type": "object"
                     }
@@ -8342,6 +8346,238 @@
         ]
       }
     },
+    "/v1/communities/{communitySlug}/moderation/signals": {
+      "get": {
+        "description": "Owner-only read surface for existing hide/unhide tools. Returns published signals for the community including hidden rows, with authorAccountId when the signal is member-authored. Non-owner and no-session callers receive generic NOT_FOUND.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "communitySlug",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "community": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "displayName": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "slug": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "slug",
+                            "displayName"
+                          ],
+                          "type": "object"
+                        },
+                        "signals": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "area": {
+                                "type": "string"
+                              },
+                              "authorAccountId": {
+                                "anyOf": [
+                                  {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "authorDisplayName": {
+                                "type": "string"
+                              },
+                              "category": {
+                                "type": "string"
+                              },
+                              "headline": {
+                                "type": "string"
+                              },
+                              "hidden": {
+                                "type": "boolean"
+                              },
+                              "hiddenAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "hiddenReason": {
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "enum": [
+                                          "immoral"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "abusive"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "spam"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "off_topic"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "illegal"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "other"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "publishedAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "slug": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "slug",
+                              "headline",
+                              "category",
+                              "area",
+                              "authorDisplayName",
+                              "authorAccountId",
+                              "hidden",
+                              "hiddenAt",
+                              "hiddenReason",
+                              "publishedAt"
+                            ],
+                            "title": "OwnerModerationSignalItem",
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "community",
+                        "signals"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "List published signals for owner moderation (includes hidden)",
+        "tags": [
+          "SignalModeration"
+        ]
+      }
+    },
     "/v1/communities/{communitySlug}/signal-submissions": {
       "post": {
         "description": "Session-authenticated member signal submission. Creates a pending_review row only. Gated by SIGNAL_SUBMISSION_ENABLED (default false). Requires participant civic access for the path community. Enforces a rolling 24-hour account submission cap of 5.",
@@ -9476,6 +9712,119 @@
         "summary": "Upload a photo for a new member civic signal",
         "tags": [
           "Signals"
+        ]
+      }
+    },
+    "/v1/moderation/accounts/suspended": {
+      "get": {
+        "description": "Owner-only read surface for the existing unban tool. Returns suspended accounts with primary email when present. Non-owner and no-session callers receive generic NOT_FOUND.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accounts": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "accountId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "email": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "suspendedAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "accountId",
+                              "email",
+                              "suspendedAt"
+                            ],
+                            "title": "SuspendedAccountModerationItem",
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "accounts"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "List suspended accounts for owner moderation",
+        "tags": [
+          "AccountModeration"
         ]
       }
     },

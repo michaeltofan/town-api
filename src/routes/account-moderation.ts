@@ -11,7 +11,12 @@ import {
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
 import { revokeAllAccountSessions } from '../ceremony/repositories/account-sessions.js';
 import type { AccountRow, AccountStatus } from '../db/schema.js';
-import { lockAccountById, transitionAccountState } from '../identity/repositories/accounts.js';
+import {
+  findAccountById,
+  listSuspendedAccountsForOwnerModeration,
+  lockAccountById,
+  transitionAccountState,
+} from '../identity/repositories/accounts.js';
 import { appendIdentitySecurityEvent } from '../identity/repositories/security-events.js';
 import { toIsoTimestamp } from '../lib/timestamps.js';
 import {
@@ -24,6 +29,7 @@ import {
   AccountIdParamsSchema,
   AccountModerationResponseSchema,
   AccountUnbanBodySchema,
+  SuspendedAccountsModerationResponseSchema,
 } from '../schemas/account-moderation.js';
 import { DomainErrorResponseSchema } from '../schemas/error.js';
 
@@ -372,6 +378,47 @@ export const accountModerationRoutes: FastifyPluginCallbackTypebox<
         throw accountNotFoundError();
       }
       return toModerationResponse(result);
+    },
+  );
+
+  app.get(
+    '/v1/moderation/accounts/suspended',
+    {
+      schema: {
+        tags: ['AccountModeration'],
+        summary: 'List suspended accounts for owner moderation',
+        description:
+          'Owner-only read surface for the existing unban tool. Returns suspended accounts with primary email when present. Non-owner and no-session callers receive generic NOT_FOUND.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: {
+          200: SuspendedAccountsModerationResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const ownerAccountId = await resolveOwnerAccountId(request);
+      if (!ownerAccountId) {
+        reply.callNotFound();
+        return;
+      }
+
+      const owner = await findAccountById(app.database.db, ownerAccountId);
+      if (!owner?.isOwner || owner.status !== 'active') {
+        reply.callNotFound();
+        return;
+      }
+
+      const rows = await listSuspendedAccountsForOwnerModeration(app.database.db);
+      return {
+        data: {
+          accounts: rows.map((row) => ({
+            accountId: row.accountId,
+            email: row.email,
+            suspendedAt: toIsoTimestamp(row.suspendedAt),
+          })),
+        },
+      };
     },
   );
 

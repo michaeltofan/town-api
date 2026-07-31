@@ -541,4 +541,39 @@ describe('owner account ban / unban', () => {
     });
     expect(confirm.statusCode).toBe(200);
   });
+
+  it('owner suspended inventory lists banned accounts; non-owner gets NOT_FOUND', async () => {
+    const owner = await registerOwner('OwnerSuspendedInventory+setup@example.com');
+    const member = await registerMember('BannedForInventory+setup@example.com');
+    const nonOwner = await registerMember('NonOwnerSuspendedInventory+setup@example.com');
+
+    const ban = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/accounts/${member.accountId}/ban`,
+      headers: { authorization: `Session ${owner.sessionToken}` },
+      payload: { reason: 'spam' },
+    });
+    expect(ban.statusCode).toBe(200);
+
+    const inventory = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/moderation/accounts/suspended',
+      headers: { authorization: `Session ${owner.sessionToken}` },
+    });
+    expect(inventory.statusCode).toBe(200);
+    const body = inventory.json<{
+      data: { accounts: { accountId: string; email: string | null; suspendedAt: string }[] };
+    }>();
+    const row = body.data.accounts.find((entry) => entry.accountId === member.accountId);
+    expect(row).toBeTruthy();
+    expect(row?.email?.toLowerCase()).toContain('bannedforinventory');
+    expect(row?.suspendedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    const denied = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/moderation/accounts/suspended',
+      headers: { authorization: `Session ${nonOwner.sessionToken}` },
+    });
+    expect(denied.statusCode).toBe(404);
+  });
 });

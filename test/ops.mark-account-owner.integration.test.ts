@@ -99,9 +99,10 @@ describe('mark account owner entrypoint wiring', () => {
     expect(EXPECTED_MIGRATION_COUNT).toBe(33);
   });
 
-  it('is_owner is consulted by civic-access and owner moderation, not membership routes or app', () => {
+  it('is_owner is consulted by civic-access and owner moderation; membership exposes self-only isOwner', () => {
     const civicAccess = readFileSync(path.join(root, 'src/membership/civic-access.ts'), 'utf8');
     const membershipRoutes = readFileSync(path.join(root, 'src/routes/membership.ts'), 'utf8');
+    const membershipRead = readFileSync(path.join(root, 'src/membership/read-service.ts'), 'utf8');
     const confirmationRoutes = readFileSync(path.join(root, 'src/routes/confirmations.ts'), 'utf8');
     const signalModerationRoutes = readFileSync(
       path.join(root, 'src/routes/signal-moderation.ts'),
@@ -115,7 +116,10 @@ describe('mark account owner entrypoint wiring', () => {
 
     // Owner participation slice: civic-access branches on isOwner for membership bypass.
     expect(civicAccess).toMatch(/isOwner/);
-    expect(membershipRoutes).not.toMatch(/is_owner|isOwner/);
+    // Membership self-read exposes isOwner for owner-tool UI gating; never from request body.
+    expect(membershipRead).toMatch(/isOwner: account\?\.isOwner === true/);
+    expect(membershipRoutes).toMatch(/isOwner/);
+    expect(membershipRoutes).not.toMatch(/body\.isOwner|request\.body.*isOwner/);
     // Confirmations route passes already-loaded isOwner through to evaluateCivicAccess.
     expect(confirmationRoutes).toMatch(/isOwner/);
     // Owner hide/unhide and ban/unban gate on the locked account row's isOwner.

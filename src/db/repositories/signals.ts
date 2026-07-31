@@ -243,3 +243,18 @@ export async function updateCivicActorDisplayLabel(
     .set({ displayLabel: input.displayLabel })
     .where(eq(actors.id, input.actorId));
 }
+
+/**
+ * Owner moderation inventory: published signals for a community, including hidden.
+ * Public list/detail remain hidden-excluding; this path is for owner tools only.
+ */
+export async function listPublishedSignalsForOwnerModeration(
+  db: Db,
+  communityId: string,
+): Promise<SignalRow[]> {
+  return db
+    .select()
+    .from(signals)
+    .where(and(eq(signals.communityId, communityId), eq(signals.publicationStatus, 'published')))
+    .orderBy(asc(signals.position));
+}
