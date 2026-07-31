@@ -20,6 +20,7 @@ import {
   registerActivePasskeyAccount,
 } from './passkey-authentication.js';
 import { requireDatabaseUrl, resetMigrateSeedFoundationAndActor } from './pg.js';
+import type { TownObjectStorageAdapter } from '../../src/storage/object-storage-adapter.js';
 
 export { createEligibleTestResolver, FOUNDATION_COMMUNITY_IDS };
 
@@ -37,6 +38,7 @@ export type MembershipTestAppOptions = {
   localEligibilityResolver?: LocalParticipationEligibilityResolver;
   envOverrides?: Partial<NodeJS.ProcessEnv>;
   poolMax?: number;
+  objectStorageAdapter?: TownObjectStorageAdapter | null;
 };
 
 export async function createMembershipTestApp(
@@ -92,6 +94,9 @@ export async function createMembershipTestApp(
         ? { localEligibilityResolver: options.localEligibilityResolver }
         : {}),
     },
+    ...(options.objectStorageAdapter !== undefined
+      ? { objectStorageAdapter: options.objectStorageAdapter }
+      : {}),
   });
   await app.ready();
 

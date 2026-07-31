@@ -39,6 +39,8 @@ import type { TownStripeAdapter } from './billing/stripe-adapter.js';
 import type { TownGooglePlayAndroidPublisherAdapter } from './membership/google-play/android-publisher-adapter.js';
 import type { PubSubPushVerifier } from './membership/google-play/rtdn/verify-pubsub-push.js';
 import type { GooglePlayRtdnInboxPersister } from './membership/google-play/rtdn/inbox.js';
+import { createObjectStorageAdapterFromEnv } from './storage/create-object-storage-from-env.js';
+import type { TownObjectStorageAdapter } from './storage/object-storage-adapter.js';
 
 export type BuildAppOptions = {
   env: Env;
@@ -48,6 +50,11 @@ export type BuildAppOptions = {
    * When omitted, a pool is created from validated environment settings.
    */
   database?: Database;
+  /**
+   * Optional private object-storage adapter (discussion contribution media).
+   * When omitted, created from env when OBJECT_STORAGE_ENABLED is true.
+   */
+  objectStorageAdapter?: TownObjectStorageAdapter | null;
   emailVerification?: {
     deliveryAdapter?: EmailVerificationDeliveryAdapter;
     now?: () => string;
@@ -258,6 +265,11 @@ export async function buildApp(options: BuildAppOptions) {
       ? { localEligibilityResolver: options.membership.localEligibilityResolver }
       : {}),
   });
+  const objectStorageAdapter =
+    options.objectStorageAdapter !== undefined
+      ? options.objectStorageAdapter
+      : createObjectStorageAdapterFromEnv(options.env);
+
   await app.register(discussionSessionRoutes, {
     env: options.env,
     ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
@@ -267,6 +279,7 @@ export async function buildApp(options: BuildAppOptions) {
     ...(options.membership?.localEligibilityResolver !== undefined
       ? { localEligibilityResolver: options.membership.localEligibilityResolver }
       : {}),
+    objectStorageAdapter,
   });
   await app.register(emailVerificationRoutes, {
     env: options.env,

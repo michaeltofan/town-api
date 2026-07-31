@@ -58,6 +58,22 @@ export function billingNotAvailableError(): AppError {
   return new AppError(503, 'BILLING_NOT_AVAILABLE', 'Billing is not available at this time.');
 }
 
+export function objectStorageNotAvailableError(): AppError {
+  return new AppError(
+    503,
+    'OBJECT_STORAGE_NOT_AVAILABLE',
+    'Object storage is not available at this time.',
+  );
+}
+
+export function mediaUploadFailedError(): AppError {
+  return new AppError(503, 'MEDIA_UPLOAD_FAILED', 'Media upload failed.');
+}
+
+export function contributionMediaNotFoundError(): AppError {
+  return new AppError(404, 'CONTRIBUTION_MEDIA_NOT_FOUND', 'Contribution media was not found.');
+}
+
 export function membershipAlreadyActiveError(): AppError {
   return new AppError(409, 'MEMBERSHIP_ALREADY_ACTIVE', 'Membership is already active.');
 }

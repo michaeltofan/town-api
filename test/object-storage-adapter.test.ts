@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import {
+  createInMemoryObjectStorageAdapter,
   createObjectStorageAdapter,
   type ObjectStorageClient,
   type ObjectStorageLogEvent,
@@ -78,5 +79,51 @@ describe('createObjectStorageAdapter', () => {
         errorName: 'Error',
       },
     ]);
+  });
+
+  it('sends GetObjectCommand and returns body bytes', async () => {
+    const calls: unknown[] = [];
+    const client: ObjectStorageClient = {
+      send: (command) => {
+        calls.push(command);
+        return Promise.resolve({
+          Body: Buffer.from('stored'),
+          ContentType: 'image/png',
+        });
+      },
+    };
+    const adapter = createObjectStorageAdapter({
+      endpoint: ENDPOINT,
+      bucket: BUCKET,
+      accessKeyId: ACCESS_KEY_ID,
+      secretAccessKey: SECRET_ACCESS_KEY,
+      client,
+    });
+
+    const result = await adapter.getObject({ key: 'signals/demo.png' });
+    expect(result).toEqual({
+      ok: true,
+      body: Buffer.from('stored'),
+      contentType: 'image/png',
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toBeInstanceOf(GetObjectCommand);
+  });
+});
+
+describe('createInMemoryObjectStorageAdapter', () => {
+  it('round-trips putObject and getObject', async () => {
+    const adapter = createInMemoryObjectStorageAdapter();
+    const body = Buffer.from([1, 2, 3]);
+    const put = await adapter.putObject({
+      key: 'k',
+      body,
+      contentType: 'image/jpeg',
+    });
+    expect(put).toEqual({ ok: true });
+    const got = await adapter.getObject({ key: 'k' });
+    expect(got).toEqual({ ok: true, body, contentType: 'image/jpeg' });
+    const missing = await adapter.getObject({ key: 'missing' });
+    expect(missing).toEqual({ ok: false, reason: 'not_found' });
   });
 });

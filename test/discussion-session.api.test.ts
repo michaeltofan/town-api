@@ -24,6 +24,12 @@ type DiscussionPayload = {
       text: string;
       intent: string;
       createdAt: string;
+      media: {
+        kind: string;
+        contentType: string;
+        byteSize: number;
+        url: string;
+      } | null;
     }[];
   };
 };
@@ -178,6 +184,7 @@ describe('signal discussion-session (participant)', () => {
       authorDisplayName: 'TOWN member',
       text: 'Observe the damaged pavement near the school gate each morning.',
       intent: 'observation',
+      media: null,
     });
     expect(createdBody.data.contributions[0]?.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,

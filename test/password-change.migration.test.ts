@@ -232,7 +232,7 @@ describe('password change migration 0028', () => {
       `SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations`,
     );
     expect(Number(afterCount.rows[0]?.count ?? 0)).toBe(EXPECTED_MIGRATION_COUNT);
-    expect(EXPECTED_MIGRATION_COUNT).toBe(31);
+    expect(EXPECTED_MIGRATION_COUNT).toBe(32);
 
     const ordered = await pool.query<{ id: number }>(
       `SELECT id FROM drizzle.__drizzle_migrations ORDER BY id ASC`,

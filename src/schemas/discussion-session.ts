@@ -9,10 +9,21 @@ export const DiscussionContributionIntentSchema = Type.Union(
   { $id: 'DiscussionContributionIntent' },
 );
 
+export const DiscussionContributionMediaSchema = Type.Object(
+  {
+    kind: Type.Union([Type.Literal('image'), Type.Literal('video')]),
+    contentType: Type.String(),
+    byteSize: Type.Integer({ minimum: 1 }),
+    url: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false, $id: 'DiscussionContributionMedia' },
+);
+
 export const DiscussionContributionBodySchema = Type.Object(
   {
     text: Type.String({ minLength: 1, maxLength: 480 }),
     intent: DiscussionContributionIntentSchema,
+    mediaUploadId: Type.Optional(Type.String({ format: 'uuid' })),
   },
   { additionalProperties: false, $id: 'DiscussionContributionBody' },
 );
@@ -24,6 +35,7 @@ export const DiscussionContributionSchema = Type.Object(
     text: Type.String(),
     intent: DiscussionContributionIntentSchema,
     createdAt: Type.String({ format: 'date-time' }),
+    media: Type.Union([DiscussionContributionMediaSchema, Type.Null()]),
   },
   { additionalProperties: false, $id: 'DiscussionContribution' },
 );
@@ -50,6 +62,30 @@ export const DiscussionSessionResponseSchema = Type.Object(
   { additionalProperties: false, $id: 'DiscussionSessionResponse' },
 );
 
+export const DiscussionMediaUploadCreatedSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        mediaUploadId: Type.String({ format: 'uuid' }),
+        kind: Type.Union([Type.Literal('image'), Type.Literal('video')]),
+        contentType: Type.String(),
+        byteSize: Type.Integer({ minimum: 1 }),
+        expiresAt: Type.String({ format: 'date-time' }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'DiscussionMediaUploadCreated' },
+);
+
+export const DiscussionContributionMediaParamsSchema = Type.Object(
+  {
+    signalId: Type.String({ format: 'uuid' }),
+    contributionId: Type.String({ format: 'uuid' }),
+  },
+  { additionalProperties: false, $id: 'DiscussionContributionMediaParams' },
+);
+
 export const DiscussionSessionRouteResponses = {
   read: {
     200: DiscussionSessionResponseSchema,
@@ -64,6 +100,22 @@ export const DiscussionSessionRouteResponses = {
     401: DomainErrorResponseSchema,
     403: DomainErrorResponseSchema,
     404: DomainErrorResponseSchema,
+    503: DomainErrorResponseSchema,
+  },
+  mediaUpload: {
+    201: DiscussionMediaUploadCreatedSchema,
+    400: DomainErrorResponseSchema,
+    401: DomainErrorResponseSchema,
+    403: DomainErrorResponseSchema,
+    404: DomainErrorResponseSchema,
+    503: DomainErrorResponseSchema,
+  },
+  mediaFetch: {
+    // Binary body — omit 200 schema so Fastify does not JSON-coerce the stream.
+    401: DomainErrorResponseSchema,
+    403: DomainErrorResponseSchema,
+    404: DomainErrorResponseSchema,
+    503: DomainErrorResponseSchema,
   },
 } as const;
 

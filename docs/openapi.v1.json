@@ -9556,7 +9556,7 @@
     },
     "/v1/signals/{signalId}/discussion-session": {
       "get": {
-        "description": "Returns the discussion session and ordered civic contributions for a published signal. Requires an active web or mobile session with participant civic access (access.canParticipate). Contributions are framed as movement toward a local solution (observation, proposal, or next step) — not chat, comments, or social replies. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes actor or account identifiers.",
+        "description": "Returns the discussion session and ordered civic contributions for a published signal. Requires an active web or mobile session with participant civic access (access.canParticipate). Contributions are framed as movement toward a local solution (observation, proposal, or next step) — not chat, comments, or social replies. Attached photo/video media is exposed via authenticated proxy URLs when present. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes actor or account identifiers.",
         "parameters": [
           {
             "in": "path",
@@ -9616,6 +9616,53 @@
                                 ],
                                 "title": "DiscussionContributionIntent"
                               },
+                              "media": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "byteSize": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "contentType": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "image"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "enum": [
+                                              "video"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        ]
+                                      },
+                                      "url": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "contentType",
+                                      "byteSize",
+                                      "url"
+                                    ],
+                                    "title": "DiscussionContributionMedia",
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "text": {
                                 "type": "string"
                               }
@@ -9625,7 +9672,8 @@
                               "authorDisplayName",
                               "text",
                               "intent",
-                              "createdAt"
+                              "createdAt",
+                              "media"
                             ],
                             "title": "DiscussionContribution",
                             "type": "object"
@@ -9834,7 +9882,7 @@
     },
     "/v1/signals/{signalId}/discussion-session/contributions": {
       "post": {
-        "description": "Creates a civic contribution (observation, proposal, or next step) on the discussion session for a published signal. Requires an active web or mobile session with participant civic access (access.canParticipate). Not a chat or comment thread. Returns the session and the full ordered contribution list. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes actor or account identifiers.",
+        "description": "Creates a civic contribution (observation, proposal, or next step) on the discussion session for a published signal. Requires an active web or mobile session with participant civic access (access.canParticipate). Optionally attaches a previously uploaded mediaUploadId owned by the same account for this signal. Not a chat or comment thread. Returns the session and the full ordered contribution list. SetupGrant, RecoveryGrant, and Bearer are rejected. Never exposes actor or account identifiers.",
         "parameters": [
           {
             "in": "path",
@@ -9873,6 +9921,10 @@
                         "type": "string"
                       }
                     ]
+                  },
+                  "mediaUploadId": {
+                    "format": "uuid",
+                    "type": "string"
                   },
                   "text": {
                     "maxLength": 480,
@@ -9937,6 +9989,52 @@
                                   }
                                 ]
                               },
+                              "media": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "byteSize": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "contentType": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "image"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "enum": [
+                                              "video"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        ]
+                                      },
+                                      "url": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "contentType",
+                                      "byteSize",
+                                      "url"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "text": {
                                 "type": "string"
                               }
@@ -9946,7 +10044,8 @@
                               "authorDisplayName",
                               "text",
                               "intent",
-                              "createdAt"
+                              "createdAt",
+                              "media"
                             ],
                             "type": "object"
                           },
@@ -10135,6 +10234,42 @@
               }
             },
             "description": "Default Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
           }
         },
         "security": [
@@ -10146,6 +10281,318 @@
           }
         ],
         "summary": "Publish a civic contribution to a signal discussion session",
+        "tags": [
+          "Discussion"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/discussion-session/contributions/{contributionId}/media": {
+      "get": {
+        "description": "Streams the securely stored photo or video for a contribution from private object storage through the API. Requires an active session with participant civic access. Not a public bucket URL. Success responses are raw media bytes (no JSON envelope).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contributionId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Fetch attached media for a discussion contribution",
+        "tags": [
+          "Discussion"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/discussion-session/media": {
+      "post": {
+        "description": "Uploads a photo or video into private object storage and returns a pending mediaUploadId. Attach that id when creating a contribution. Requires an active session with participant civic access. Body is raw binary bytes. Allowed Content-Type: image/jpeg, image/png, image/webp, video/mp4. SetupGrant, RecoveryGrant, and Bearer are rejected.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "byteSize": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "contentType": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "image"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "video"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "mediaUploadId": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "mediaUploadId",
+                        "kind",
+                        "contentType",
+                        "byteSize",
+                        "expiresAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Upload media for a discussion contribution",
         "tags": [
           "Discussion"
         ]
