@@ -1183,10 +1183,7 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
         return;
       }
 
-      const detail = await getPlatformSubmissionDetail(
-        app.database.db,
-        result.submission.id,
-      );
+      const detail = await getPlatformSubmissionDetail(app.database.db, result.submission.id);
       return {
         data: {
           id: result.submission.id,
@@ -1264,10 +1261,7 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
         return;
       }
 
-      const detail = await getPlatformSubmissionDetail(
-        app.database.db,
-        result.submission.id,
-      );
+      const detail = await getPlatformSubmissionDetail(app.database.db, result.submission.id);
       return {
         data: {
           id: result.submission.id,

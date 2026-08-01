@@ -1,11 +1,7 @@
 import { and, eq, like } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { createDatabase } from '../db/client.js';
-import {
-  actors,
-  signalDiscussionContributions,
-  signalSubmissions,
-} from '../db/schema.js';
+import { actors, signalDiscussionContributions, signalSubmissions } from '../db/schema.js';
 import { FOUNDATION_COMMUNITY_IDS, FOUNDATION_SIGNAL_IDS } from '../db/seeds/foundation-content.js';
 import { ensureDiscussionSessionForSignal } from '../db/repositories/discussion-session.js';
 
@@ -23,10 +19,8 @@ const ACCOUNT_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const PLATFORM_MODERATION_FIXTURE_MARKER = '[platform-moderation-fixture]';
-export const PLATFORM_MODERATION_FIXTURE_SUBMISSION_ID =
-  '00000000-0000-4000-8000-00000000f101';
-export const PLATFORM_MODERATION_FIXTURE_CONTRIBUTION_ID =
-  '00000000-0000-4000-8000-00000000f102';
+export const PLATFORM_MODERATION_FIXTURE_SUBMISSION_ID = '00000000-0000-4000-8000-00000000f101';
+export const PLATFORM_MODERATION_FIXTURE_CONTRIBUTION_ID = '00000000-0000-4000-8000-00000000f102';
 export const PLATFORM_MODERATION_FIXTURE_SESSION_ID = '00000000-0000-4000-8000-00000000f103';
 
 export type SeedModerationFixturesErrorCode =
@@ -85,10 +79,7 @@ function requireStagingEnv(env: NodeJS.ProcessEnv): string {
 
 function requireAccountId(accountId: string): string {
   if (!accountId || accountId.trim() === '') {
-    throw new SeedModerationFixturesError(
-      'ACCOUNT_ID_REQUIRED',
-      '--account-id <uuid> is required',
-    );
+    throw new SeedModerationFixturesError('ACCOUNT_ID_REQUIRED', '--account-id <uuid> is required');
   }
   if (!ACCOUNT_ID_PATTERN.test(accountId)) {
     throw new SeedModerationFixturesError('ACCOUNT_ID_INVALID', 'account-id must be a UUID');
@@ -137,7 +128,10 @@ export async function runSeedModerationFixtures(
       .select({ id: actors.id })
       .from(actors)
       .where(
-        and(eq(actors.accountId, accountId), eq(actors.communityId, FOUNDATION_COMMUNITY_IDS.milanoIt)),
+        and(
+          eq(actors.accountId, accountId),
+          eq(actors.communityId, FOUNDATION_COMMUNITY_IDS.milanoIt),
+        ),
       )
       .limit(1);
     const actorId = actorRows[0]?.id;
@@ -253,7 +247,9 @@ export async function runSeedModerationFixturesCli(
     );
   } catch (error: unknown) {
     const code =
-      error instanceof SeedModerationFixturesError ? error.code : 'PLATFORM_MODERATION_FIXTURE_FAILED';
+      error instanceof SeedModerationFixturesError
+        ? error.code
+        : 'PLATFORM_MODERATION_FIXTURE_FAILED';
     const message = error instanceof Error ? error.message : 'Platform moderation fixture failed';
     process.stderr.write(`${JSON.stringify({ ok: false, code, message })}\n`);
     process.exitCode = 1;

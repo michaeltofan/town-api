@@ -410,9 +410,7 @@ export const PlatformSubmissionAllowedActionSchema = Type.Union(
 export const PlatformSubmissionsQuerySchema = Type.Object(
   {
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 50 })),
-    status: Type.Optional(
-      Type.Union([Type.Literal('pending_review'), Type.Literal('rejected')]),
-    ),
+    status: Type.Optional(Type.Union([Type.Literal('pending_review'), Type.Literal('rejected')])),
     communitySlug: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
     q: Type.Optional(Type.String({ minLength: 1, maxLength: 320 })),
   },

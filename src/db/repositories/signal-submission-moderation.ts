@@ -1,10 +1,6 @@
 import { eq } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import {
-  signalSubmissions,
-  type SignalHideReason,
-  type SignalSubmissionRow,
-} from '../schema.js';
+import { signalSubmissions, type SignalHideReason, type SignalSubmissionRow } from '../schema.js';
 
 type Db = Database['db'];
 

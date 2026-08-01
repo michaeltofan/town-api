@@ -698,9 +698,7 @@ describe('platform operator area', () => {
     );
   });
 
-  it(
-    'moderates submissions with reject/restore, audit, inventory, and role gates',
-    async () => {
+  it('moderates submissions with reject/restore, audit, inventory, and role gates', async () => {
     const moderator = await registerMember('PlatformSubmissionMod+setup@example.com');
     await grantOperator(moderator.accountId, 'moderator');
     const roleAdmin = await registerMember('PlatformSubmissionRoleAdmin+setup@example.com');
@@ -797,7 +795,11 @@ describe('platform operator area', () => {
     });
     expect(rejectedInventory.statusCode).toBe(200);
     expect(rejectedInventory.json<PlatformSubmissionsResponse>().data.submissions).toEqual([
-      expect.objectContaining({ id: submissionId, status: 'rejected', allowedActions: ['restore'] }),
+      expect.objectContaining({
+        id: submissionId,
+        status: 'rejected',
+        allowedActions: ['restore'],
+      }),
     ]);
 
     const rejectAudits = await ctx.app.database.db
@@ -876,13 +878,9 @@ describe('platform operator area', () => {
       headers: { authorization: `Session ${moderator.sessionToken}` },
     });
     expect(membershipsStillReadable.statusCode).toBe(200);
-  },
-    180_000,
-  );
+  }, 180_000);
 
-  it(
-    'moderates discussion contributions with hide/unhide, visibility, and role gates',
-    async () => {
+  it('moderates discussion contributions with hide/unhide, visibility, and role gates', async () => {
     const moderator = await registerMember('PlatformDiscussionMod+setup@example.com');
     await grantOperator(moderator.accountId, 'moderator');
     const viewer = await registerMember('PlatformDiscussionViewer+setup@example.com');
@@ -997,8 +995,7 @@ describe('platform operator area', () => {
         (event) =>
           event.operatorAccountId === moderator.accountId &&
           event.targetSignalId === signalId &&
-          (event.metadata as { contributionId?: string } | null)?.contributionId ===
-            contributionId,
+          (event.metadata as { contributionId?: string } | null)?.contributionId === contributionId,
       ),
     ).toBe(true);
 
@@ -1040,11 +1037,8 @@ describe('platform operator area', () => {
     expect(
       unhideAudits.some(
         (event) =>
-          (event.metadata as { contributionId?: string } | null)?.contributionId ===
-          contributionId,
+          (event.metadata as { contributionId?: string } | null)?.contributionId === contributionId,
       ),
     ).toBe(true);
-  },
-    180_000,
-  );
+  }, 180_000);
 });
