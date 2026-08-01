@@ -11697,6 +11697,12 @@
                                       "stripe"
                                     ],
                                     "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "backup"
+                                    ],
+                                    "type": "string"
                                   }
                                 ]
                               },
@@ -11943,6 +11949,12 @@
                                 {
                                   "enum": [
                                     "stripe"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "backup"
                                   ],
                                   "type": "string"
                                 }
@@ -12321,6 +12333,619 @@
           }
         ],
         "summary": "Platform operator audit history",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/backup": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "config": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "automated": {
+                              "type": "boolean"
+                            },
+                            "pitrEnabled": {
+                              "type": "boolean"
+                            },
+                            "provider": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "none"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "railway_postgres_pitr"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "retentionDays": {
+                              "anyOf": [
+                                {
+                                  "maximum": 365,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "verifyMaxAgeDays": {
+                              "maximum": 365,
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "pitrEnabled",
+                            "retentionDays",
+                            "verifyMaxAgeDays",
+                            "automated"
+                          ],
+                          "type": "object"
+                        },
+                        "latestVerification": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "commitSha": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "environment": {
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "note": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "pitrEnabled": {
+                                  "type": "boolean"
+                                },
+                                "provider": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "none"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "railway_postgres_pitr"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "retentionDays": {
+                                  "anyOf": [
+                                    {
+                                      "maximum": 365,
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "verifiedAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "verifiedByAccountId": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "verifiedAt",
+                                "verifiedByAccountId",
+                                "provider",
+                                "pitrEnabled",
+                                "retentionDays",
+                                "note",
+                                "environment",
+                                "commitSha"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "recentVerifications": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "commitSha": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "note": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "pitrEnabled": {
+                                "type": "boolean"
+                              },
+                              "provider": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "none"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "railway_postgres_pitr"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "retentionDays": {
+                                "anyOf": [
+                                  {
+                                    "maximum": 365,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "verifiedAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "verifiedByAccountId": {
+                                "format": "uuid",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "verifiedAt",
+                              "verifiedByAccountId",
+                              "provider",
+                              "pitrEnabled",
+                              "retentionDays",
+                              "note",
+                              "environment",
+                              "commitSha"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "status": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 160,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "ok"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "degraded"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "fail"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "timeout"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "disabled"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "misconfigured"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "detail"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "config",
+                        "status",
+                        "latestVerification",
+                        "recentVerifications"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Automated Postgres PITR backup config and operator verifications",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/backup/verify": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "note": {
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 160,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "ok"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "degraded"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "fail"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "timeout"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "disabled"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "misconfigured"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "detail"
+                          ],
+                          "type": "object"
+                        },
+                        "verification": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "commitSha": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "environment": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "note": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "pitrEnabled": {
+                              "type": "boolean"
+                            },
+                            "provider": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "none"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "railway_postgres_pitr"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "retentionDays": {
+                              "anyOf": [
+                                {
+                                  "maximum": 365,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "verifiedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "verifiedByAccountId": {
+                              "format": "uuid",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "verifiedAt",
+                            "verifiedByAccountId",
+                            "provider",
+                            "pitrEnabled",
+                            "retentionDays",
+                            "note",
+                            "environment",
+                            "commitSha"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "verification",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Record operator verification that platform PITR backup is active",
         "tags": [
           "Platform"
         ]
@@ -15410,6 +16035,67 @@
                               ],
                               "type": "object"
                             },
+                            "backup": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "detail": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 160,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "ok"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "degraded"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "fail"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "timeout"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "disabled"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "misconfigured"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "detail"
+                              ],
+                              "type": "object"
+                            },
                             "database": {
                               "additionalProperties": false,
                               "properties": {
@@ -15598,7 +16284,8 @@
                             "api",
                             "database",
                             "email",
-                            "stripe"
+                            "stripe",
+                            "backup"
                           ],
                           "type": "object"
                         },
@@ -19591,7 +20278,7 @@
       "name": "Billing"
     },
     {
-      "description": "Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, uptime samples, in-console component alerts, account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.",
+      "description": "Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, uptime samples, in-console component alerts, automated Postgres PITR backup attestation, account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.",
       "name": "Platform"
     }
   ]

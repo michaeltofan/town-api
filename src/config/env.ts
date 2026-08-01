@@ -76,6 +76,18 @@ const EnvSchema = Type.Object(
     DB_POOL_MAX: Type.Integer({ minimum: 1, maximum: 50, default: 5 }),
     DB_CONNECTION_TIMEOUT_MS: Type.Integer({ minimum: 1, maximum: 60_000, default: 5_000 }),
     DB_IDLE_TIMEOUT_MS: Type.Integer({ minimum: 1, maximum: 300_000, default: 30_000 }),
+    /**
+     * Platform-managed Postgres backup attestation (Railway PITR).
+     * Does not run dump jobs; surfaces automated PITR config for operator verification.
+     */
+    DATABASE_BACKUP_PROVIDER: Type.Union(
+      [Type.Literal('none'), Type.Literal('railway_postgres_pitr')],
+      { default: 'none' },
+    ),
+    DATABASE_BACKUP_PITR_ENABLED: Type.Boolean({ default: false }),
+    DATABASE_BACKUP_RETENTION_DAYS: Type.Optional(Type.Integer({ minimum: 1, maximum: 365 })),
+    /** Max age of the latest operator verification before backup status is degraded. */
+    DATABASE_BACKUP_VERIFY_MAX_AGE_DAYS: Type.Integer({ minimum: 1, maximum: 365, default: 30 }),
     CONTROLLED_CONFIRMATION_ENABLED: Type.Boolean({ default: false }),
     CONTROLLED_CONFIRMATION_KEY: Type.Optional(Type.String({ minLength: 1 })),
     // UUID format is validated explicitly below; TypeBox FormatRegistry is not required here.
@@ -568,6 +580,30 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
         : parseInteger(source.DB_CONNECTION_TIMEOUT_MS),
     DB_IDLE_TIMEOUT_MS:
       source.DB_IDLE_TIMEOUT_MS === undefined ? 30_000 : parseInteger(source.DB_IDLE_TIMEOUT_MS),
+    DATABASE_BACKUP_PROVIDER: (() => {
+      const raw = source.DATABASE_BACKUP_PROVIDER;
+      if (raw === undefined || raw === '') return 'none';
+      const normalized = raw.trim().toLowerCase();
+      if (normalized === 'none' || normalized === 'railway_postgres_pitr') return normalized;
+      throw new Error(
+        'Invalid environment configuration: DATABASE_BACKUP_PROVIDER must be none or railway_postgres_pitr',
+      );
+    })(),
+    DATABASE_BACKUP_PITR_ENABLED: parseBooleanFlag(
+      source.DATABASE_BACKUP_PITR_ENABLED,
+      'DATABASE_BACKUP_PITR_ENABLED',
+    ),
+    ...(source.DATABASE_BACKUP_RETENTION_DAYS !== undefined &&
+    source.DATABASE_BACKUP_RETENTION_DAYS !== ''
+      ? {
+          DATABASE_BACKUP_RETENTION_DAYS: parseInteger(source.DATABASE_BACKUP_RETENTION_DAYS),
+        }
+      : {}),
+    DATABASE_BACKUP_VERIFY_MAX_AGE_DAYS:
+      source.DATABASE_BACKUP_VERIFY_MAX_AGE_DAYS === undefined ||
+      source.DATABASE_BACKUP_VERIFY_MAX_AGE_DAYS === ''
+        ? 30
+        : parseInteger(source.DATABASE_BACKUP_VERIFY_MAX_AGE_DAYS),
     CONTROLLED_CONFIRMATION_ENABLED: controlledEnabled,
     ALLOW_PRODUCTION_WEB_ORIGIN: allowProductionWebOrigin,
     EMAIL_VERIFICATION_ENABLED: emailVerificationEnabled,

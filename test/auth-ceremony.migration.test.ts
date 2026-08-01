@@ -19,6 +19,7 @@ const EXPECTED_TABLES = [
   'passkey_credentials',
   'platform_alerts',
   'platform_audit_events',
+  'platform_backup_verifications',
   'platform_operators',
   'platform_technical_errors',
   'platform_uptime_samples',

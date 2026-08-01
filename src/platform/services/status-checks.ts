@@ -2,11 +2,15 @@ import type { Env } from '../../config/env.js';
 import { STRIPE_API_VERSION, type StripeApiVersion } from '../../config/env.js';
 import { createOfficialStripeAdapter } from '../../billing/stripe-adapter.js';
 
+import type { PlatformBackupVerificationRow } from '../../db/schema.js';
+import { assessBackupComponent } from './backup.js';
+
 /**
  * Distinct operational component checks for GET /v1/platform/status.
  *
- * Scope: API process, database readiness, email provider, Stripe billing.
- * No backup or secret leakage in details. Alert/uptime persistence is handled
+ * Scope: API process, database readiness, email provider, Stripe billing,
+ * and platform-managed Postgres PITR backup attestation.
+ * No secret leakage in details. Alert/uptime persistence is handled
  * separately from these probe results.
  */
 
@@ -23,6 +27,7 @@ export type PlatformOperationalComponents = {
   readonly database: PlatformComponentCheck;
   readonly email: PlatformComponentCheck;
   readonly stripe: PlatformComponentCheck;
+  readonly backup: PlatformComponentCheck;
 };
 
 export type DatabaseComponentInput = {
@@ -177,6 +182,8 @@ export async function collectOperationalComponents(input: {
   shuttingDown: boolean;
   databaseConnection: 'ok' | 'fail' | 'timeout';
   migrations: 'ok' | 'fail' | 'unknown';
+  latestBackupVerification?: PlatformBackupVerificationRow | null;
+  nowIso?: string;
   fetchImpl?: StatusCheckFetch;
   probeStripePrice?: StripePriceProbe;
   timeoutMs?: number;
@@ -208,7 +215,12 @@ export async function collectOperationalComponents(input: {
     assessEmailComponent(input.env, emailOptions),
     assessStripeComponent(input.env, stripeOptions),
   ]);
-  return { api, database, email, stripe };
+  const backup = assessBackupComponent({
+    env: input.env,
+    latestVerification: input.latestBackupVerification ?? null,
+    nowIso: input.nowIso ?? new Date().toISOString(),
+  });
+  return { api, database, email, stripe, backup };
 }
 
 async function defaultFetch(

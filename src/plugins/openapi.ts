@@ -53,7 +53,7 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
         {
           name: 'Platform',
           description:
-            'Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, uptime samples, in-console component alerts, account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.',
+            'Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, uptime samples, in-console component alerts, automated Postgres PITR backup attestation, account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.',
         },
       ],
       components: {
