@@ -11920,6 +11920,48 @@
     },
     "/v1/platform/discussions": {
       "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hiddenOnly",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "communitySlug",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -11938,6 +11980,26 @@
                                 "format": "uuid",
                                 "type": "string"
                               },
+                              "allowedActions": {
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "hide"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "unhide"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ],
+                                  "title": "PlatformDiscussionAllowedAction"
+                                },
+                                "type": "array"
+                              },
                               "body": {
                                 "type": "string"
                               },
@@ -11951,6 +12013,30 @@
                               "createdAt": {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              "hidden": {
+                                "type": "boolean"
+                              },
+                              "hiddenAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "hiddenReason": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "intent": {
                                 "type": "string"
@@ -11976,7 +12062,11 @@
                               "intent",
                               "body",
                               "accountId",
-                              "createdAt"
+                              "hidden",
+                              "hiddenAt",
+                              "hiddenReason",
+                              "createdAt",
+                              "allowedActions"
                             ],
                             "type": "object"
                           },
@@ -12043,7 +12133,443 @@
             "mobileSessionAuth": []
           }
         ],
-        "summary": "Recent discussion contributions inventory",
+        "summary": "Discussion contributions moderation inventory",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/discussions/{contributionId}/hide": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contributionId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "immoral"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "abusive"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "spam"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "off_topic"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "illegal"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "other"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "allowedActions": {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "hide"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "enum": [
+                                  "unhide"
+                                ],
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "contributionId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "hidden": {
+                          "type": "boolean"
+                        },
+                        "hiddenAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "hiddenReason": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "signalId": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "contributionId",
+                        "signalId",
+                        "accountId",
+                        "hidden",
+                        "hiddenAt",
+                        "hiddenReason",
+                        "changed",
+                        "allowedActions"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Hide a discussion contribution",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/discussions/{contributionId}/unhide": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contributionId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "immoral"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "abusive"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "spam"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "off_topic"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "illegal"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "other"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "allowedActions": {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "hide"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "enum": [
+                                  "unhide"
+                                ],
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "contributionId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "hidden": {
+                          "type": "boolean"
+                        },
+                        "hiddenAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "hiddenReason": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "signalId": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "contributionId",
+                        "signalId",
+                        "accountId",
+                        "hidden",
+                        "hiddenAt",
+                        "hiddenReason",
+                        "changed",
+                        "allowedActions"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Unhide a discussion contribution",
         "tags": [
           "Platform"
         ]
@@ -14452,6 +14978,60 @@
     },
     "/v1/platform/submissions": {
       "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending_review"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "enum": [
+                    "rejected"
+                  ],
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "communitySlug",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -14470,6 +15050,29 @@
                                 "format": "uuid",
                                 "type": "string"
                               },
+                              "allowedActions": {
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "reject"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "restore"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ],
+                                  "title": "PlatformSubmissionAllowedAction"
+                                },
+                                "type": "array"
+                              },
+                              "body": {
+                                "type": "string"
+                              },
                               "communitySlug": {
                                 "type": "string"
                               },
@@ -14484,7 +15087,56 @@
                                 "format": "uuid",
                                 "type": "string"
                               },
+                              "reviewedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "reviewedByAccountId": {
+                                "anyOf": [
+                                  {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "reviewReason": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "status": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "pending_review"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "rejected"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "updatedAt": {
+                                "format": "date-time",
                                 "type": "string"
                               }
                             },
@@ -14493,8 +15145,14 @@
                               "accountId",
                               "communitySlug",
                               "headline",
+                              "body",
                               "status",
-                              "createdAt"
+                              "reviewReason",
+                              "reviewedAt",
+                              "reviewedByAccountId",
+                              "createdAt",
+                              "updatedAt",
+                              "allowedActions"
                             ],
                             "type": "object"
                           },
@@ -14561,7 +15219,675 @@
             "mobileSessionAuth": []
           }
         ],
-        "summary": "Pending signal submissions inventory",
+        "summary": "Signal submissions moderation inventory",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/submissions/{submissionId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submissionId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "allowedActions": {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "reject"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "enum": [
+                                  "restore"
+                                ],
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "communityId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "communitySlug": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "headline": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "reviewedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reviewedByAccountId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reviewReason": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "pending_review"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "rejected"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "updatedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "accountId",
+                        "communitySlug",
+                        "communityId",
+                        "headline",
+                        "body",
+                        "status",
+                        "reviewReason",
+                        "reviewedAt",
+                        "reviewedByAccountId",
+                        "createdAt",
+                        "updatedAt",
+                        "allowedActions"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Signal submission detail for moderation",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/submissions/{submissionId}/reject": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submissionId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "immoral"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "abusive"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "spam"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "off_topic"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "illegal"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "other"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "allowedActions": {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "reject"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "enum": [
+                                  "restore"
+                                ],
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "communitySlug": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "reviewedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reviewedByAccountId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reviewReason": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "pending_review"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "rejected"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "accountId",
+                        "communitySlug",
+                        "status",
+                        "reviewReason",
+                        "reviewedAt",
+                        "reviewedByAccountId",
+                        "changed",
+                        "allowedActions"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Reject a pending signal submission",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/submissions/{submissionId}/restore": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submissionId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "immoral"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "abusive"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "spam"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "off_topic"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "illegal"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "other"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "allowedActions": {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "reject"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "enum": [
+                                  "restore"
+                                ],
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "communitySlug": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "reviewedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reviewedByAccountId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reviewReason": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "pending_review"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "rejected"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "accountId",
+                        "communitySlug",
+                        "status",
+                        "reviewReason",
+                        "reviewedAt",
+                        "reviewedByAccountId",
+                        "changed",
+                        "allowedActions"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Restore a rejected signal submission to pending_review",
         "tags": [
           "Platform"
         ]

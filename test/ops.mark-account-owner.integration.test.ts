@@ -96,7 +96,7 @@ describe('mark account owner entrypoint wiring', () => {
   });
 
   it('migration count includes accounts is_owner migration', () => {
-    expect(EXPECTED_MIGRATION_COUNT).toBe(35);
+    expect(EXPECTED_MIGRATION_COUNT).toBe(36);
   });
 
   it('is_owner is consulted by civic-access and owner moderation; membership exposes self-only isOwner', () => {

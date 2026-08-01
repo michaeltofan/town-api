@@ -131,14 +131,14 @@ describe('staging inspection integration', () => {
     });
   });
 
-  it('T8 CHECK permitting a value other than pending_review exits as schema mismatch', async () => {
+  it('T8 CHECK permitting a value other than pending_review/rejected exits as schema mismatch', async () => {
     await pool.query(
       `ALTER TABLE town.signal_submissions DROP CONSTRAINT signal_submissions_status_valid`,
     );
     await pool.query(
       `ALTER TABLE town.signal_submissions
        ADD CONSTRAINT signal_submissions_status_valid
-       CHECK (status IN ('pending_review', 'approved'))`,
+       CHECK (status IN ('pending_review', 'rejected', 'approved'))`,
     );
     await expect(runStagingInspection({ env: stagingEnv })).rejects.toMatchObject({
       code: 'SCHEMA_MISMATCH',

@@ -141,7 +141,13 @@ export async function listContributionsForActorActivity(
     .from(signalDiscussionContributions)
     .innerJoin(signals, eq(signals.id, signalDiscussionContributions.signalId))
     .innerJoin(communities, eq(communities.id, signals.communityId))
-    .where(and(eq(signalDiscussionContributions.actorId, actorId), visiblePublished))
+    .where(
+      and(
+        eq(signalDiscussionContributions.actorId, actorId),
+        isNull(signalDiscussionContributions.hiddenAt),
+        visiblePublished,
+      ),
+    )
     .orderBy(desc(signalDiscussionContributions.createdAt))
     .limit(limit);
 

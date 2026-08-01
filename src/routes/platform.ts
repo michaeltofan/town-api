@@ -1,8 +1,18 @@
 import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
 import { randomUUID } from 'node:crypto';
 import type { Env } from '../config/env.js';
+import {
+  hideDiscussionContribution,
+  unhideDiscussionContribution,
+} from '../db/repositories/discussion-contribution-moderation.js';
+import {
+  rejectSignalSubmission,
+  restoreSignalSubmission,
+} from '../db/repositories/signal-submission-moderation.js';
 import { hideSignal, unhideSignal } from '../db/repositories/signals.js';
 import type { AccountRow, PlatformAuditAction } from '../db/schema.js';
+import { actors } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
 import { revokeAllAccountSessions } from '../ceremony/repositories/account-sessions.js';
 import {
   findAccountById,
@@ -23,6 +33,7 @@ import {
   getPlatformAccountEmails,
   getPlatformAccountPayments,
   getPlatformStatusCounts,
+  getPlatformSubmissionDetail,
   listPlatformAccounts,
   listPlatformCommunities,
   listPlatformDiscussions,
@@ -55,6 +66,10 @@ import {
   PlatformAuditQuerySchema,
   PlatformAuditResponseSchema,
   PlatformCommunitiesResponseSchema,
+  PlatformDiscussionActionResponseSchema,
+  PlatformDiscussionContributionIdParamsSchema,
+  PlatformDiscussionHideBodySchema,
+  PlatformDiscussionsQuerySchema,
   PlatformDiscussionsResponseSchema,
   PlatformMembershipActionResponseSchema,
   PlatformMembershipExtendBodySchema,
@@ -72,9 +87,24 @@ import {
   PlatformSignalsQuerySchema,
   PlatformSignalsResponseSchema,
   PlatformStatusResponseSchema,
+  PlatformSubmissionActionResponseSchema,
+  PlatformSubmissionDetailResponseSchema,
+  PlatformSubmissionIdParamsSchema,
+  PlatformSubmissionRejectBodySchema,
+  PlatformSubmissionsQuerySchema,
   PlatformSubmissionsResponseSchema,
 } from '../schemas/platform.js';
 import { accountNotFoundError } from '../errors/app-error.js';
+
+function submissionAllowedActions(status: string): ('reject' | 'restore')[] {
+  if (status === 'pending_review') return ['reject'];
+  if (status === 'rejected') return ['restore'];
+  return [];
+}
+
+function discussionAllowedActions(hidden: boolean): ('hide' | 'unhide')[] {
+  return hidden ? ['unhide'] : ['hide'];
+}
 
 export type PlatformRoutesOptions = {
   env: Env;
@@ -1007,8 +1037,9 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
     {
       schema: {
         tags: ['Platform'],
-        summary: 'Pending signal submissions inventory',
+        summary: 'Signal submissions moderation inventory',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        querystring: PlatformSubmissionsQuerySchema,
         response: {
           200: PlatformSubmissionsResponseSchema,
           404: DomainErrorResponseSchema,
@@ -1021,13 +1052,236 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
         reply.callNotFound();
         return;
       }
-      const submissions = await listPlatformSubmissions(app.database.db, { limit: 50 });
+      const submissions = await listPlatformSubmissions(app.database.db, {
+        limit: request.query.limit ?? 50,
+        ...(request.query.status ? { status: request.query.status } : {}),
+        ...(request.query.communitySlug ? { communitySlug: request.query.communitySlug } : {}),
+        ...(request.query.q ? { q: request.query.q } : {}),
+      });
       return {
         data: {
           submissions: submissions.map((row) => ({
-            ...row,
+            id: row.id,
+            accountId: row.accountId,
+            communitySlug: row.communitySlug,
+            headline: row.headline,
+            body: row.body,
+            status: row.status as 'pending_review' | 'rejected',
+            reviewReason: row.reviewReason,
+            reviewedAt: row.reviewedAt === null ? null : toIsoTimestamp(row.reviewedAt),
+            reviewedByAccountId: row.reviewedByAccountId,
             createdAt: toIsoTimestamp(row.createdAt),
+            updatedAt: toIsoTimestamp(row.updatedAt),
+            allowedActions: submissionAllowedActions(row.status),
           })),
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/submissions/:submissionId',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Signal submission detail for moderation',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformSubmissionIdParamsSchema,
+        response: {
+          200: PlatformSubmissionDetailResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_submissions');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const row = await getPlatformSubmissionDetail(app.database.db, request.params.submissionId);
+      if (!row) {
+        reply.callNotFound();
+        return;
+      }
+      return {
+        data: {
+          id: row.id,
+          accountId: row.accountId,
+          communitySlug: row.communitySlug,
+          communityId: row.communityId,
+          headline: row.headline,
+          body: row.body,
+          status: row.status as 'pending_review' | 'rejected',
+          reviewReason: row.reviewReason,
+          reviewedAt: row.reviewedAt === null ? null : toIsoTimestamp(row.reviewedAt),
+          reviewedByAccountId: row.reviewedByAccountId,
+          createdAt: toIsoTimestamp(row.createdAt),
+          updatedAt: toIsoTimestamp(row.updatedAt),
+          allowedActions: submissionAllowedActions(row.status),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/submissions/:submissionId/reject',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Reject a pending signal submission',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformSubmissionIdParamsSchema,
+        body: PlatformSubmissionRejectBodySchema,
+        response: {
+          200: PlatformSubmissionActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_signals');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const nowIso = now();
+      const result = await app.database.db.transaction(async (tx) => {
+        const rejected = await rejectSignalSubmission(tx, {
+          submissionId: request.params.submissionId,
+          reason: request.body.reason,
+          reviewedByAccountId: operator.accountId,
+          at: nowIso,
+        });
+        if (!rejected) {
+          return null;
+        }
+        if (rejected.changed) {
+          await appendPlatformAuditEvent(tx, {
+            id: generateId(),
+            operatorAccountId: operator.accountId,
+            action: 'submission_rejected',
+            occurredAt: nowIso,
+            requestId: request.id,
+            targetAccountId: rejected.submission.accountId,
+            metadata: {
+              contentType: 'signal_submission',
+              submissionId: rejected.submission.id,
+              communityId: rejected.submission.communityId,
+              reason: request.body.reason,
+              beforeStatus: 'pending_review',
+              afterStatus: 'rejected',
+            },
+          });
+        }
+        return rejected;
+      });
+
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+
+      const detail = await getPlatformSubmissionDetail(
+        app.database.db,
+        result.submission.id,
+      );
+      return {
+        data: {
+          id: result.submission.id,
+          accountId: result.submission.accountId,
+          communitySlug: detail?.communitySlug ?? '',
+          status: result.submission.status as 'pending_review' | 'rejected',
+          reviewReason: result.submission.reviewReason,
+          reviewedAt:
+            result.submission.reviewedAt === null
+              ? null
+              : toIsoTimestamp(result.submission.reviewedAt),
+          reviewedByAccountId: result.submission.reviewedByAccountId,
+          changed: result.changed,
+          allowedActions: submissionAllowedActions(result.submission.status),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/submissions/:submissionId/restore',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Restore a rejected signal submission to pending_review',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformSubmissionIdParamsSchema,
+        body: PlatformSubmissionRejectBodySchema,
+        response: {
+          200: PlatformSubmissionActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_signals');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const nowIso = now();
+      const result = await app.database.db.transaction(async (tx) => {
+        const before = await getPlatformSubmissionDetail(tx, request.params.submissionId);
+        const restored = await restoreSignalSubmission(tx, {
+          submissionId: request.params.submissionId,
+          at: nowIso,
+        });
+        if (!restored) {
+          return null;
+        }
+        if (restored.changed) {
+          await appendPlatformAuditEvent(tx, {
+            id: generateId(),
+            operatorAccountId: operator.accountId,
+            action: 'submission_restored',
+            occurredAt: nowIso,
+            requestId: request.id,
+            targetAccountId: restored.submission.accountId,
+            metadata: {
+              contentType: 'signal_submission',
+              submissionId: restored.submission.id,
+              communityId: restored.submission.communityId,
+              reason: request.body.reason,
+              beforeStatus: before?.status ?? 'rejected',
+              afterStatus: 'pending_review',
+            },
+          });
+        }
+        return restored;
+      });
+
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+
+      const detail = await getPlatformSubmissionDetail(
+        app.database.db,
+        result.submission.id,
+      );
+      return {
+        data: {
+          id: result.submission.id,
+          accountId: result.submission.accountId,
+          communitySlug: detail?.communitySlug ?? '',
+          status: result.submission.status as 'pending_review' | 'rejected',
+          reviewReason: result.submission.reviewReason,
+          reviewedAt:
+            result.submission.reviewedAt === null
+              ? null
+              : toIsoTimestamp(result.submission.reviewedAt),
+          reviewedByAccountId: result.submission.reviewedByAccountId,
+          changed: result.changed,
+          allowedActions: submissionAllowedActions(result.submission.status),
         },
       };
     },
@@ -1038,8 +1292,9 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
     {
       schema: {
         tags: ['Platform'],
-        summary: 'Recent discussion contributions inventory',
+        summary: 'Discussion contributions moderation inventory',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        querystring: PlatformDiscussionsQuerySchema,
         response: {
           200: PlatformDiscussionsResponseSchema,
           404: DomainErrorResponseSchema,
@@ -1052,7 +1307,12 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
         reply.callNotFound();
         return;
       }
-      const contributions = await listPlatformDiscussions(app.database.db, { limit: 50 });
+      const contributions = await listPlatformDiscussions(app.database.db, {
+        limit: request.query.limit ?? 50,
+        hiddenOnly: request.query.hiddenOnly ?? false,
+        ...(request.query.communitySlug ? { communitySlug: request.query.communitySlug } : {}),
+        ...(request.query.q ? { q: request.query.q } : {}),
+      });
       return {
         data: {
           contributions: contributions.flatMap((row) => {
@@ -1069,10 +1329,187 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
                 intent: row.intent,
                 body: row.body,
                 accountId: row.accountId,
+                hidden: row.hidden,
+                hiddenAt: row.hiddenAt === null ? null : toIsoTimestamp(row.hiddenAt),
+                hiddenReason: row.hiddenReason,
                 createdAt: toIsoTimestamp(row.createdAt),
+                allowedActions: discussionAllowedActions(row.hidden),
               },
             ];
           }),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/discussions/:contributionId/hide',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Hide a discussion contribution',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformDiscussionContributionIdParamsSchema,
+        body: PlatformDiscussionHideBodySchema,
+        response: {
+          200: PlatformDiscussionActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_signals');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const nowIso = now();
+      const result = await app.database.db.transaction(async (tx) => {
+        const hidden = await hideDiscussionContribution(tx, {
+          contributionId: request.params.contributionId,
+          reason: request.body.reason,
+          hiddenByAccountId: operator.accountId,
+          at: nowIso,
+        });
+        if (!hidden) {
+          return null;
+        }
+
+        const actorRows = await tx
+          .select({ accountId: actors.accountId })
+          .from(actors)
+          .where(eq(actors.id, hidden.contribution.actorId))
+          .limit(1);
+        const authorAccountId = actorRows[0]?.accountId ?? null;
+
+        if (hidden.changed) {
+          await appendPlatformAuditEvent(tx, {
+            id: generateId(),
+            operatorAccountId: operator.accountId,
+            action: 'discussion_contribution_hidden',
+            occurredAt: nowIso,
+            requestId: request.id,
+            targetAccountId: authorAccountId,
+            targetSignalId: hidden.contribution.signalId,
+            metadata: {
+              contentType: 'discussion_contribution',
+              contributionId: hidden.contribution.id,
+              sessionId: hidden.contribution.sessionId,
+              signalId: hidden.contribution.signalId,
+              reason: request.body.reason,
+              beforeHidden: false,
+              afterHidden: true,
+            },
+          });
+        }
+        return { hidden, authorAccountId };
+      });
+
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+
+      const isHidden = result.hidden.contribution.hiddenAt !== null;
+      return {
+        data: {
+          contributionId: result.hidden.contribution.id,
+          signalId: result.hidden.contribution.signalId,
+          accountId: result.authorAccountId,
+          hidden: isHidden,
+          hiddenAt:
+            result.hidden.contribution.hiddenAt === null
+              ? null
+              : toIsoTimestamp(result.hidden.contribution.hiddenAt),
+          hiddenReason: result.hidden.contribution.hiddenReason,
+          changed: result.hidden.changed,
+          allowedActions: discussionAllowedActions(isHidden),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/discussions/:contributionId/unhide',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Unhide a discussion contribution',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformDiscussionContributionIdParamsSchema,
+        body: PlatformDiscussionHideBodySchema,
+        response: {
+          200: PlatformDiscussionActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_signals');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const nowIso = now();
+      const result = await app.database.db.transaction(async (tx) => {
+        const visible = await unhideDiscussionContribution(tx, {
+          contributionId: request.params.contributionId,
+        });
+        if (!visible) {
+          return null;
+        }
+
+        const actorRows = await tx
+          .select({ accountId: actors.accountId })
+          .from(actors)
+          .where(eq(actors.id, visible.contribution.actorId))
+          .limit(1);
+        const authorAccountId = actorRows[0]?.accountId ?? null;
+
+        if (visible.changed) {
+          await appendPlatformAuditEvent(tx, {
+            id: generateId(),
+            operatorAccountId: operator.accountId,
+            action: 'discussion_contribution_unhidden',
+            occurredAt: nowIso,
+            requestId: request.id,
+            targetAccountId: authorAccountId,
+            targetSignalId: visible.contribution.signalId,
+            metadata: {
+              contentType: 'discussion_contribution',
+              contributionId: visible.contribution.id,
+              sessionId: visible.contribution.sessionId,
+              signalId: visible.contribution.signalId,
+              reason: request.body.reason,
+              beforeHidden: true,
+              afterHidden: false,
+            },
+          });
+        }
+        return { visible, authorAccountId };
+      });
+
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+
+      const isHidden = result.visible.contribution.hiddenAt !== null;
+      return {
+        data: {
+          contributionId: result.visible.contribution.id,
+          signalId: result.visible.contribution.signalId,
+          accountId: result.authorAccountId,
+          hidden: isHidden,
+          hiddenAt:
+            result.visible.contribution.hiddenAt === null
+              ? null
+              : toIsoTimestamp(result.visible.contribution.hiddenAt),
+          hiddenReason: result.visible.contribution.hiddenReason,
+          changed: result.visible.changed,
+          allowedActions: discussionAllowedActions(isHidden),
         },
       };
     },
@@ -1446,6 +1883,10 @@ const PLATFORM_AUDIT_ACTIONS = new Set<PlatformAuditAction>([
   'membership_granted',
   'membership_extended',
   'membership_cancellation_scheduled',
+  'submission_rejected',
+  'submission_restored',
+  'discussion_contribution_hidden',
+  'discussion_contribution_unhidden',
 ]);
 
 function isPlatformAuditAction(value: string): value is PlatformAuditAction {

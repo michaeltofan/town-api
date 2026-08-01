@@ -53,6 +53,9 @@ describe('signal discussion session migration', () => {
         'signal_discussion_contributions_intent_valid',
         'signal_discussion_contributions_media_upload_id_fkey',
         'signal_discussion_contributions_media_upload_id_unique',
+        'signal_discussion_contributions_hidden_by_account_id_fkey',
+        'signal_discussion_contributions_hidden_reason_valid',
+        'signal_discussion_contributions_hidden_state_consistent',
         'signal_discussion_media_uploads_pkey',
         'signal_discussion_media_uploads_object_key_unique',
         'signal_discussion_media_uploads_content_type_valid',
@@ -63,9 +66,16 @@ describe('signal discussion session migration', () => {
       `SELECT indexname
        FROM pg_indexes
        WHERE schemaname = 'town'
-         AND indexname = 'signal_discussion_contributions_session_created_at_idx'`,
+         AND indexname IN (
+           'signal_discussion_contributions_session_created_at_idx',
+           'signal_discussion_contributions_hidden_created_at_idx'
+         )
+       ORDER BY indexname`,
     );
-    expect(indexes.rows).toHaveLength(1);
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      'signal_discussion_contributions_hidden_created_at_idx',
+      'signal_discussion_contributions_session_created_at_idx',
+    ]);
 
     const intentCheck = await pool.query<{ definition: string }>(
       `SELECT pg_get_constraintdef(oid) AS definition
