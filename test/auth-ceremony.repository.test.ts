@@ -453,7 +453,7 @@ describe('authentication ceremony repositories', () => {
       });
       await expect(
         transitionAccountState(db(), { accountId: noPasskey, to: 'active', at: T3 }),
-      ).rejects.toMatchObject({ code: 'ACTIVE_REQUIRES_ACTIVE_PASSKEY' });
+      ).rejects.toMatchObject({ code: 'ACTIVE_REQUIRES_ACTIVE_CREDENTIAL' });
 
       const noActor = '30000000-0000-4000-8000-000000000017';
       await preparePendingPasskeyAccount(noActor);
@@ -505,7 +505,7 @@ describe('authentication ceremony repositories', () => {
           clientType: 'mobile',
           createdAt: T3,
         }),
-      ).rejects.toMatchObject({ code: 'SESSION_REQUIRES_ACTIVE_PASSKEY' });
+      ).rejects.toMatchObject({ code: 'SESSION_REQUIRES_ACTIVE_CREDENTIAL' });
 
       const noActorActive = '30000000-0000-4000-8000-00000000001a';
       const preparedActor = await prepareActiveAccount(noActorActive);

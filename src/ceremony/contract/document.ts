@@ -76,7 +76,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       ],
       activationRequires: [
         'verified primary email',
-        'at least one active passkey',
+        'at least one active passkey or password credential',
         'linked civic actor',
         'webauthn user handle',
       ],
@@ -120,7 +120,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       semantics: [
         'Opaque server-side sessions for authenticated web and mobile clients',
         'Do not imply membership, payment, local verification, civic entitlement, or Stripe state',
-        'Creation requires active account, verified primary email, at least one active passkey, and linked civic actor',
+        'Creation requires active account, verified primary email, at least one active passkey or password credential, and linked civic actor',
         'Setup grants and recovery grants cannot create sessions',
         'Ordinary activity may extend idle_expires_at but never absolute_expires_at or authenticated_at',
         'idle_expires_at must never exceed absolute_expires_at',
@@ -358,7 +358,7 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         'unrevoked canonical email',
         'verified primary email',
         'active password credential',
-        'session eligibility (active passkey + linked civic actor)',
+        'session eligibility (active passkey or password credential + linked civic actor)',
       ],
       antiEnumeration: true,
       publicErrorCode: 'AUTHENTICATION_FAILED',

@@ -2,6 +2,7 @@ import { and, asc, count, eq, gt, isNull, ne } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import {
   accountEmails,
+  accountPasswordCredentials,
   accountSessions,
   accounts,
   actors,
@@ -97,10 +98,19 @@ async function assertSessionEligibleAccount(db: Db, accountId: string): Promise<
     .select({ value: count() })
     .from(passkeyCredentials)
     .where(and(eq(passkeyCredentials.accountId, accountId), isNull(passkeyCredentials.revokedAt)));
-  if ((passkeys[0]?.value ?? 0) < 1) {
+  const passwords = await db
+    .select({ value: count() })
+    .from(accountPasswordCredentials)
+    .where(
+      and(
+        eq(accountPasswordCredentials.accountId, accountId),
+        isNull(accountPasswordCredentials.revokedAt),
+      ),
+    );
+  if ((passkeys[0]?.value ?? 0) < 1 && (passwords[0]?.value ?? 0) < 1) {
     throw new CeremonyInvariantError(
-      'SESSION_REQUIRES_ACTIVE_PASSKEY',
-      'Sessions require at least one active passkey',
+      'SESSION_REQUIRES_ACTIVE_CREDENTIAL',
+      'Sessions require at least one active passkey or password credential',
     );
   }
 
