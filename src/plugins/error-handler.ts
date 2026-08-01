@@ -2,6 +2,12 @@ import type { FastifyError, FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 import { AppError } from '../errors/app-error.js';
 import { ERROR_CODE } from '../schemas/error.js';
+import {
+  sanitizeTechnicalErrorMessage,
+  sanitizeTechnicalErrorName,
+  sanitizeTechnicalErrorRoute,
+  shouldRecordTechnicalError,
+} from '../platform/services/technical-error-sanitize.js';
 
 type PublicDomainError = {
   error: {
@@ -9,6 +15,21 @@ type PublicDomainError = {
     message: string;
     requestId: string;
   };
+};
+
+export type TechnicalErrorRecordInput = {
+  readonly occurredAt: string;
+  readonly requestId: string;
+  readonly method: string | null;
+  readonly route: string | null;
+  readonly statusCode: number;
+  readonly errorCode: string;
+  readonly errorName: string | null;
+  readonly message: string;
+};
+
+export type ErrorHandlerPluginOptions = {
+  readonly recordTechnicalError?: (input: TechnicalErrorRecordInput) => void | Promise<void>;
 };
 
 function toDomainErrorBody(code: string, message: string, requestId: string): PublicDomainError {
@@ -110,13 +131,57 @@ function mapFrameworkError(error: FastifyError): {
   };
 }
 
-const errorHandlerPlugin: FastifyPluginCallback = (app, _opts, done) => {
+function queueTechnicalErrorRecord(
+  record: ErrorHandlerPluginOptions['recordTechnicalError'],
+  input: TechnicalErrorRecordInput,
+): void {
+  if (!record) return;
+  try {
+    void Promise.resolve(record(input)).catch(() => {
+      // Recording must never interfere with the client error response.
+    });
+  } catch {
+    // ignore sync recorder failures
+  }
+}
+
+const errorHandlerPlugin: FastifyPluginCallback<ErrorHandlerPluginOptions> = (app, opts, done) => {
   app.setNotFoundHandler((request, reply) => {
     sendDomainError(reply, 404, ERROR_CODE.NOT_FOUND, 'Not Found.', request.id);
   });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
+    const routeContext: {
+      method?: string;
+      routerPath?: string;
+      url?: string;
+    } = {
+      method: request.method,
+      url: request.url,
+    };
+    if (typeof request.routeOptions.url === 'string') {
+      routeContext.routerPath = request.routeOptions.url;
+    }
+
     if (error instanceof AppError) {
+      if (
+        shouldRecordTechnicalError({
+          statusCode: error.statusCode,
+          ...routeContext,
+        })
+      ) {
+        const { method, route } = sanitizeTechnicalErrorRoute(routeContext);
+        queueTechnicalErrorRecord(opts.recordTechnicalError, {
+          occurredAt: new Date().toISOString(),
+          requestId: request.id,
+          method,
+          route,
+          statusCode: error.statusCode,
+          errorCode: error.code,
+          errorName: sanitizeTechnicalErrorName(error.name),
+          message: sanitizeTechnicalErrorMessage(error.message),
+        });
+      }
       sendDomainError(reply, error.statusCode, error.code, error.message, request.id);
       return;
     }
@@ -124,6 +189,25 @@ const errorHandlerPlugin: FastifyPluginCallback = (app, _opts, done) => {
     const mapped = mapFrameworkError(error);
     if (mapped.statusCode >= 500) {
       request.log.error({ err: error, requestId: request.id }, 'Unhandled error');
+      if (
+        shouldRecordTechnicalError({
+          statusCode: mapped.statusCode,
+          ...routeContext,
+        })
+      ) {
+        const { method, route } = sanitizeTechnicalErrorRoute(routeContext);
+        queueTechnicalErrorRecord(opts.recordTechnicalError, {
+          occurredAt: new Date().toISOString(),
+          requestId: request.id,
+          method,
+          route,
+          statusCode: mapped.statusCode,
+          errorCode: mapped.code,
+          errorName: sanitizeTechnicalErrorName(error.name),
+          // Persist the safe public message, not raw Error.message (may contain secrets).
+          message: mapped.message,
+        });
+      }
     }
     sendDomainError(reply, mapped.statusCode, mapped.code, mapped.message, request.id);
   });

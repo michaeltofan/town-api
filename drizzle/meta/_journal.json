@@ -253,6 +253,13 @@
       "when": 1786300800000,
       "tag": "0035_platform_submissions_discussions_moderation",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1786387200000,
+      "tag": "0036_platform_technical_errors",
+      "breakpoints": true
     }
   ]
 }
