@@ -90,9 +90,9 @@ function requireDatabaseUrl(env: NodeJS.ProcessEnv): string {
 }
 
 function assertStagingAllowed(env: NodeJS.ProcessEnv): void {
-  const appEnv = (env.APP_ENV || '').trim().toLowerCase();
+  const appEnv = (env.APP_ENV ?? '').trim().toLowerCase();
   if (appEnv === 'staging') return;
-  if ((env.BOOTSTRAP_ALLOW_NON_STAGING || '').trim().toLowerCase() === 'yes') return;
+  if ((env.BOOTSTRAP_ALLOW_NON_STAGING ?? '').trim().toLowerCase() === 'yes') return;
   throw new BootstrapPlatformOwnerError(
     'APP_ENV_NOT_STAGING',
     'Refusing bootstrap unless APP_ENV=staging (or BOOTSTRAP_ALLOW_NON_STAGING=yes)',
@@ -112,10 +112,7 @@ function requireEmail(raw: string): string {
 
 function requirePassword(raw: string): string {
   if (typeof raw !== 'string' || raw.length === 0) {
-    throw new BootstrapPlatformOwnerError(
-      'PASSWORD_REQUIRED',
-      'Password is required (--password)',
-    );
+    throw new BootstrapPlatformOwnerError('PASSWORD_REQUIRED', 'Password is required (--password)');
   }
   try {
     return normalizeAndValidateInitialPassword(raw);
@@ -146,7 +143,7 @@ export function parseBootstrapPlatformOwnerArgs(argv: readonly string[]): {
     if (typeof token !== 'string') continue;
 
     if (token === '--email') {
-      email = requireEmail(String(argv[i + 1] ?? ''));
+      email = requireEmail(argv[i + 1] ?? '');
       i += 1;
       continue;
     }
@@ -155,7 +152,7 @@ export function parseBootstrapPlatformOwnerArgs(argv: readonly string[]): {
       continue;
     }
     if (token === '--password') {
-      password = requirePassword(String(argv[i + 1] ?? ''));
+      password = requirePassword(argv[i + 1] ?? '');
       i += 1;
       continue;
     }
@@ -164,7 +161,7 @@ export function parseBootstrapPlatformOwnerArgs(argv: readonly string[]): {
       continue;
     }
     if (token === '--role') {
-      const value = String(argv[i + 1] ?? '');
+      const value = argv[i + 1] ?? '';
       if (!isPlatformOperatorRole(value)) {
         throw new BootstrapPlatformOwnerError(
           'ROLE_INVALID',
@@ -195,10 +192,7 @@ export function parseBootstrapPlatformOwnerArgs(argv: readonly string[]): {
     throw new BootstrapPlatformOwnerError('EMAIL_REQUIRED', 'Email is required (--email)');
   }
   if (!password) {
-    throw new BootstrapPlatformOwnerError(
-      'PASSWORD_REQUIRED',
-      'Password is required (--password)',
-    );
+    throw new BootstrapPlatformOwnerError('PASSWORD_REQUIRED', 'Password is required (--password)');
   }
 
   return { email, password, role, markOwner };
@@ -238,7 +232,7 @@ async function ensureLinkedCivicActor(
   if (existingActor[0]) return;
 
   const actorId = randomUUID();
-  const communityId = FOUNDATION_COMMUNITIES[0]?.id ?? null;
+  const communityId = FOUNDATION_COMMUNITIES[0].id;
   await createCivicActor(db, {
     id: actorId,
     displayLabel: 'TOWN Platform Owner',
@@ -319,10 +313,7 @@ export async function runBootstrapPlatformOwner(
           to: 'pending_passkey',
           at,
         });
-      } else if (
-        afterEmail?.status === 'pending_passkey' ||
-        afterEmail?.status === 'active'
-      ) {
+      } else if (afterEmail?.status === 'pending_passkey' || afterEmail?.status === 'active') {
         await ensurePasswordCredential(database.db, accountId, password, at);
       }
     } else {
@@ -417,35 +408,53 @@ export async function runBootstrapPlatformOwner(
   }
 }
 
-export async function runBootstrapPlatformOwnerCli(
+export function runBootstrapPlatformOwnerCli(
   argv: readonly string[] = process.argv.slice(2),
-): Promise<void> {
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  let args: {
+    email: string;
+    password: string;
+    role: PlatformOperatorRole;
+    markOwner: boolean;
+  };
   try {
-    const args = parseBootstrapPlatformOwnerArgs(argv);
-    const result = await runBootstrapPlatformOwner({
-      email: args.email,
-      password: args.password,
-      role: args.role,
-      markOwner: args.markOwner,
-    });
-    process.stdout.write(
-      [
-        'BOOTSTRAP_OK',
-        `accountId=${result.accountId}`,
-        `email=${result.email}`,
-        `created=${String(result.created)}`,
-        `passwordSet=${String(result.passwordSet)}`,
-        `isOwner=${String(result.isOwner)}`,
-        `operatorRole=${result.operatorRole}`,
-        `operatorOutcome=${result.operatorOutcome}`,
-        '',
-      ].join('\n'),
-    );
-  } catch (error) {
-    const code =
-      error instanceof BootstrapPlatformOwnerError ? error.code : 'BOOTSTRAP_FAILED';
-    const message = error instanceof Error ? error.message : 'Bootstrap failed';
+    args = parseBootstrapPlatformOwnerArgs(argv);
+  } catch (error: unknown) {
+    const code = error instanceof BootstrapPlatformOwnerError ? error.code : 'BOOTSTRAP_FAILED';
+    const message = error instanceof Error ? error.message : 'Invalid arguments';
     process.stderr.write(`${code}: ${message}\n`);
     process.exitCode = 1;
+    return;
   }
+
+  runBootstrapPlatformOwner({
+    env,
+    email: args.email,
+    password: args.password,
+    role: args.role,
+    markOwner: args.markOwner,
+  })
+    .then((result) => {
+      process.stdout.write(
+        [
+          'BOOTSTRAP_OK',
+          `accountId=${result.accountId}`,
+          `email=${result.email}`,
+          `created=${String(result.created)}`,
+          `passwordSet=${String(result.passwordSet)}`,
+          `isOwner=${String(result.isOwner)}`,
+          `operatorRole=${result.operatorRole}`,
+          `operatorOutcome=${result.operatorOutcome}`,
+          '',
+        ].join('\n'),
+      );
+      process.exitCode = 0;
+    })
+    .catch((error: unknown) => {
+      const code = error instanceof BootstrapPlatformOwnerError ? error.code : 'BOOTSTRAP_FAILED';
+      const message = error instanceof Error ? error.message : 'Bootstrap failed';
+      process.stderr.write(`${code}: ${message}\n`);
+      process.exitCode = 1;
+    });
 }

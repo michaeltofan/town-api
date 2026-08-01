@@ -888,32 +888,32 @@ npm run dev
 
 Useful scripts:
 
-| Script                                   | Purpose                                          |
-| ---------------------------------------- | ------------------------------------------------ |
-| `npm run db:generate`                    | generate reviewable SQL                          |
-| `npm run db:check`                       | validate migration history                       |
-| `npm run db:migrate`                     | apply committed migrations (local/`tsx`)         |
-| `npm run db:migrate:production`          | apply migrations via compiled Node entrypoint    |
-| `npm run db:migrate:test`                | clean-DB migration verification                  |
-| `npm run db:migrate:verify`              | non-mutating drizzle ledger verification         |
-| `npm run smoke:deployment`               | deployment smoke checks (see docs/operations)    |
-| `npm run db:seed:foundation`             | upsert canonical civic content                   |
-| `npm run db:seed:controlled-actor`       | upsert the single controlled test actor          |
-| `npm run identity:fixtures:load`         | load deterministic identity fixtures (test-only) |
-| `npm run identity:contract:generate`     | write identity architecture contract             |
-| `npm run identity:contract:check`        | verify committed identity contract               |
-| `npm run auth:fixtures:load`             | load deterministic ceremony fixtures (test-only) |
-| `npm run auth:contract:generate`         | write ceremony architecture contract             |
-| `npm run auth:contract:check`            | verify committed ceremony contract               |
-| `npm run membership:contract:generate`   | write membership foundation contract             |
-| `npm run membership:contract:check`      | verify committed membership contract             |
-| `npm run billing:contract:generate`      | write billing foundation contract                |
-| `npm run billing:contract:check`         | verify committed billing contract                |
-| `npm run account:mark-platform-operator` | CLI grant platform operator (setup-code gated)   |
+| Script                                     | Purpose                                          |
+| ------------------------------------------ | ------------------------------------------------ |
+| `npm run db:generate`                      | generate reviewable SQL                          |
+| `npm run db:check`                         | validate migration history                       |
+| `npm run db:migrate`                       | apply committed migrations (local/`tsx`)         |
+| `npm run db:migrate:production`            | apply migrations via compiled Node entrypoint    |
+| `npm run db:migrate:test`                  | clean-DB migration verification                  |
+| `npm run db:migrate:verify`                | non-mutating drizzle ledger verification         |
+| `npm run smoke:deployment`                 | deployment smoke checks (see docs/operations)    |
+| `npm run db:seed:foundation`               | upsert canonical civic content                   |
+| `npm run db:seed:controlled-actor`         | upsert the single controlled test actor          |
+| `npm run identity:fixtures:load`           | load deterministic identity fixtures (test-only) |
+| `npm run identity:contract:generate`       | write identity architecture contract             |
+| `npm run identity:contract:check`          | verify committed identity contract               |
+| `npm run auth:fixtures:load`               | load deterministic ceremony fixtures (test-only) |
+| `npm run auth:contract:generate`           | write ceremony architecture contract             |
+| `npm run auth:contract:check`              | verify committed ceremony contract               |
+| `npm run membership:contract:generate`     | write membership foundation contract             |
+| `npm run membership:contract:check`        | verify committed membership contract             |
+| `npm run billing:contract:generate`        | write billing foundation contract                |
+| `npm run billing:contract:check`           | verify committed billing contract                |
+| `npm run account:mark-platform-operator`   | CLI grant platform operator (setup-code gated)   |
 | `npm run account:bootstrap-platform-owner` | Staging bootstrap: email+password owner/operator |
-| `npm test`                               | unit tests (no PostgreSQL required)              |
-| `npm run test:integration`               | PostgreSQL 18 integration suite                  |
-| `npm run check`                          | non-destructive quality gate                     |
+| `npm test`                                 | unit tests (no PostgreSQL required)              |
+| `npm run test:integration`                 | PostgreSQL 18 integration suite                  |
+| `npm run check`                            | non-destructive quality gate                     |
 
 ## Platform operator area V1
 
