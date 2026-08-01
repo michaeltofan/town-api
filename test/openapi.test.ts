@@ -83,15 +83,23 @@ describe('OpenAPI contract', () => {
     expect(scheme?.description?.toLowerCase()).toContain('temporary');
     expect(scheme?.description?.toLowerCase()).toContain('not public authentication');
 
-    // Membership foundation: exactly one public membership route, no mutation routes.
-    const membershipPaths = Object.keys(document.paths).filter((p) => p.includes('membership'));
-    expect(membershipPaths).toEqual(['/v1/account/membership']);
+    // Membership foundation: self-read remains mutation-free; platform inventory is operator-only.
+    const membershipPaths = Object.keys(document.paths)
+      .filter((p) => p.includes('membership'))
+      .sort();
+    expect(membershipPaths).toEqual(['/v1/account/membership', '/v1/platform/memberships']);
     const membership = document.paths['/v1/account/membership'] as Record<string, unknown>;
     expect(membership.get).toBeDefined();
     expect(membership.post).toBeUndefined();
     expect(membership.put).toBeUndefined();
     expect(membership.patch).toBeUndefined();
     expect(membership.delete).toBeUndefined();
+    const platformMemberships = document.paths['/v1/platform/memberships'] as Record<
+      string,
+      unknown
+    >;
+    expect(platformMemberships.get).toBeDefined();
+    expect(platformMemberships.post).toBeUndefined();
 
     // Billing foundation: Stripe checkout/portal/webhook plus Google Play purchase and RTDN ingress.
     const billingPaths = Object.keys(document.paths)

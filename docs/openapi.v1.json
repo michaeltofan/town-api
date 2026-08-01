@@ -10254,6 +10254,3548 @@
         ]
       }
     },
+    "/v1/platform/accounts": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending_email"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "enum": [
+                    "pending_password"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "enum": [
+                    "pending_passkey"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "enum": [
+                    "active"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "enum": [
+                    "suspended"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "enum": [
+                    "closed"
+                  ],
+                  "type": "string"
+                }
+              ],
+              "title": "PlatformAccountStatus"
+            }
+          },
+          {
+            "in": "query",
+            "name": "email",
+            "required": false,
+            "schema": {
+              "maxLength": 320,
+              "minLength": 3,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accounts": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "accountId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "communitySlug": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "email": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "isOwner": {
+                                "type": "boolean"
+                              },
+                              "membershipStatus": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "status": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "pending_email"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "pending_password"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "pending_passkey"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "active"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "suspended"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "closed"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "suspendedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "accountId",
+                              "status",
+                              "isOwner",
+                              "email",
+                              "communitySlug",
+                              "membershipStatus",
+                              "suspendedAt",
+                              "createdAt"
+                            ],
+                            "title": "PlatformAccountItem",
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "accounts"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "List or search accounts",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/accounts/{accountId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "accountReadyAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "closedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "communitySlug": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "email": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "isOwner": {
+                          "type": "boolean"
+                        },
+                        "membershipStatus": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "pending_email"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "pending_password"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "pending_passkey"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "active"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "suspended"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "closed"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "suspendedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "updatedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "accountId",
+                        "status",
+                        "isOwner",
+                        "email",
+                        "communitySlug",
+                        "membershipStatus",
+                        "suspendedAt",
+                        "accountReadyAt",
+                        "closedAt",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Account detail for operators",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/accounts/{accountId}/emails": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "challenges": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "attemptCount": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "consumedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "emailNormalized": {
+                                "type": "string"
+                              },
+                              "expiresAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "purpose": {
+                                "type": "string"
+                              },
+                              "revokedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "emailNormalized",
+                              "purpose",
+                              "createdAt",
+                              "expiresAt",
+                              "consumedAt",
+                              "revokedAt",
+                              "attemptCount"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "emails": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "emailNormalized": {
+                                "type": "string"
+                              },
+                              "emailOriginal": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "isPrimary": {
+                                "type": "boolean"
+                              },
+                              "revokedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "verifiedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "emailOriginal",
+                              "emailNormalized",
+                              "isPrimary",
+                              "verifiedAt",
+                              "revokedAt",
+                              "createdAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "emails",
+                        "challenges"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Investigate account emails and challenges",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/accounts/{accountId}/payments": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "checkoutAttempts": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "completedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "expiresAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "hasStripeSession": {
+                                "type": "boolean"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "status",
+                              "hasStripeSession",
+                              "createdAt",
+                              "expiresAt",
+                              "completedAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "entitlement": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "accessUntil": {
+                                  "anyOf": [
+                                    {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "activatedAt": {
+                                  "anyOf": [
+                                    {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "cancelAtPeriodEnd": {
+                                  "type": "boolean"
+                                },
+                                "cancellationRequestedAt": {
+                                  "anyOf": [
+                                    {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "expiredAt": {
+                                  "anyOf": [
+                                    {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "source": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "source",
+                                "accessUntil",
+                                "cancelAtPeriodEnd",
+                                "activatedAt",
+                                "cancellationRequestedAt",
+                                "expiredAt",
+                                "version",
+                                "updatedAt"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "stripeCustomer": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "billingReference": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "linked": {
+                                  "enum": [
+                                    true
+                                  ],
+                                  "type": "boolean"
+                                },
+                                "updatedAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "linked",
+                                "billingReference",
+                                "createdAt",
+                                "updatedAt"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "linked": {
+                                  "enum": [
+                                    false
+                                  ],
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "linked"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "entitlement",
+                        "stripeCustomer",
+                        "checkoutAttempts"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Investigate membership and Stripe ledger without exposing Stripe IDs",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/accounts/{accountId}/reactivate": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "pending_email"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "pending_password"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "pending_passkey"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "active"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "suspended"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "closed"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "suspendedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "accountId",
+                        "status",
+                        "suspendedAt",
+                        "changed"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Reactivate a suspended account",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/accounts/{accountId}/suspend": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "immoral"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "abusive"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "spam"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "off_topic"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "illegal"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "other"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "pending_email"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "pending_password"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "pending_passkey"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "active"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "suspended"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "closed"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "suspendedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "accountId",
+                        "status",
+                        "suspendedAt",
+                        "changed"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Suspend (restrict) an account",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/audit": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "operatorAccountId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "targetAccountId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "events": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "action": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "metadata": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": {},
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "occurredAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "operatorAccountId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "requestId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "targetAccountId": {
+                                "anyOf": [
+                                  {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "targetSignalId": {
+                                "anyOf": [
+                                  {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "operatorAccountId",
+                              "action",
+                              "targetAccountId",
+                              "targetSignalId",
+                              "requestId",
+                              "metadata",
+                              "occurredAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "events"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Platform operator audit history",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/communities": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "communities": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "boundAccounts": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "cityName": {
+                                "type": "string"
+                              },
+                              "countryCode": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "slug": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "slug",
+                              "displayName",
+                              "countryCode",
+                              "cityName",
+                              "status",
+                              "boundAccounts"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "communities"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "List communities with bound-account counts",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/discussions": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contributions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "accountId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "body": {
+                                "type": "string"
+                              },
+                              "communitySlug": {
+                                "type": "string"
+                              },
+                              "contributionId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "intent": {
+                                "type": "string"
+                              },
+                              "sessionId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "signalId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "signalSlug": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "contributionId",
+                              "sessionId",
+                              "signalId",
+                              "signalSlug",
+                              "communitySlug",
+                              "intent",
+                              "body",
+                              "accountId",
+                              "createdAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "contributions"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Recent discussion contributions inventory",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/memberships": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "memberships": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "accessUntil": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "accountId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "activatedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "email": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "expiredAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "source": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "updatedAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "accountId",
+                              "status",
+                              "source",
+                              "accessUntil",
+                              "activatedAt",
+                              "expiredAt",
+                              "updatedAt",
+                              "email"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "memberships"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "List membership entitlements",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/operators": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "operators": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "accountId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "grantedAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "grantedByAccountId": {
+                                "anyOf": [
+                                  {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "role": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "viewer"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "investigator"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "moderator"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "account_admin"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "ops_admin"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "role_admin"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "accountId",
+                              "role",
+                              "grantedAt",
+                              "grantedByAccountId"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "operators"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "List active platform operators",
+        "tags": [
+          "Platform"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "accountId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "viewer"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "investigator"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "moderator"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "account_admin"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "ops_admin"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "role_admin"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "accountId",
+                  "role"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "active": {
+                          "type": "boolean"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "role": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "viewer"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "investigator"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "moderator"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "account_admin"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "ops_admin"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "role_admin"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "accountId",
+                        "role",
+                        "active",
+                        "changed"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Grant or update a platform operator role",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/operators/{accountId}/revoke": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "active": {
+                          "type": "boolean"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "role": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "viewer"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "investigator"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "moderator"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "account_admin"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "ops_admin"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "role_admin"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "accountId",
+                        "role",
+                        "active",
+                        "changed"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Revoke platform operator access",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/session": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "role": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "viewer"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "investigator"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "moderator"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "account_admin"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "ops_admin"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "role_admin"
+                              ],
+                              "type": "string"
+                            }
+                          ],
+                          "title": "PlatformOperatorRole"
+                        }
+                      },
+                      "required": [
+                        "accountId",
+                        "role"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Current platform operator session",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/signals": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hiddenOnly",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "signals": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "authorAccountId": {
+                                "anyOf": [
+                                  {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "authorDisplayName": {
+                                "type": "string"
+                              },
+                              "communitySlug": {
+                                "type": "string"
+                              },
+                              "headline": {
+                                "type": "string"
+                              },
+                              "hidden": {
+                                "type": "boolean"
+                              },
+                              "hiddenAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "hiddenReason": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "publishedAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "slug": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "slug",
+                              "headline",
+                              "communitySlug",
+                              "authorDisplayName",
+                              "authorAccountId",
+                              "hidden",
+                              "hiddenAt",
+                              "hiddenReason",
+                              "publishedAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "signals"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Platform-wide signal moderation inventory",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/signals/{signalId}/hide": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "immoral"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "abusive"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "spam"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "off_topic"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "illegal"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "other"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "hidden": {
+                          "type": "boolean"
+                        },
+                        "hiddenAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "hiddenReason": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "signalId": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "signalId",
+                        "hidden",
+                        "hiddenAt",
+                        "hiddenReason",
+                        "changed"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Hide a published signal",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/signals/{signalId}/unhide": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "changed": {
+                          "type": "boolean"
+                        },
+                        "hidden": {
+                          "type": "boolean"
+                        },
+                        "hiddenAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "hiddenReason": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "signalId": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "signalId",
+                        "hidden",
+                        "hiddenAt",
+                        "hiddenReason",
+                        "changed"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Unhide a signal",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "counts": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "accounts": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "active": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "pending": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "suspended": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "total": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "total",
+                                "active",
+                                "suspended",
+                                "pending"
+                              ],
+                              "type": "object"
+                            },
+                            "communities": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "total": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "total"
+                              ],
+                              "type": "object"
+                            },
+                            "memberships": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "active": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "expired": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "suspended": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "total": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "total",
+                                "active",
+                                "suspended",
+                                "expired"
+                              ],
+                              "type": "object"
+                            },
+                            "signals": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "hidden": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "published": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "published",
+                                "hidden"
+                              ],
+                              "type": "object"
+                            },
+                            "submissions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "pendingReview": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "pendingReview"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "accounts",
+                            "memberships",
+                            "signals",
+                            "submissions",
+                            "communities"
+                          ],
+                          "type": "object"
+                        },
+                        "health": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "build": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "commitSha": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "environment": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "development"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "test"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "staging"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "production"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "service": {
+                                  "enum": [
+                                    "town-api"
+                                  ],
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "service",
+                                "environment",
+                                "version",
+                                "commitSha"
+                              ],
+                              "type": "object"
+                            },
+                            "checks": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "config": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "ok"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "fail"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "database": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "ok"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "fail"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "timeout"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "migrations": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "ok"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "fail"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "unknown"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "config",
+                                "database",
+                                "migrations"
+                              ],
+                              "type": "object"
+                            },
+                            "live": {
+                              "enum": [
+                                "ok"
+                              ],
+                              "type": "string"
+                            },
+                            "ready": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "ready"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "not_ready"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "live",
+                            "ready",
+                            "checks",
+                            "build"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "health",
+                        "counts"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Platform health and operational counts",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/submissions": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "submissions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "accountId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "communitySlug": {
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "headline": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "accountId",
+                              "communitySlug",
+                              "headline",
+                              "status",
+                              "createdAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "submissions"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Pending signal submissions inventory",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
     "/v1/signals/{signalId}": {
       "get": {
         "parameters": [
@@ -12573,6 +16115,10 @@
     {
       "description": "Stripe is the sole membership payment provider for the TOWN web launch. Flag-gated Checkout and Customer Portal require an active session; POST /v1/billing/stripe/webhook verifies raw Stripe signatures. Never exposes Stripe customer/subscription/invoice identifiers in public API responses; only Stripe-issued Checkout/Portal URLs and bounded membership status are returned. Google Play purchase and RTDN ingress remain in-tree for historical native-store work, stay flag-gated off by default (GOOGLE_PLAY_BILLING_ENABLED / GOOGLE_PLAY_RTDN_INGRESS_ENABLED), and are outside the current critical path. When enabled, Google Play purchase ingress acknowledges purchases only after durable paid_pending_binding provision and does not process RTDN, voided purchases, refunds, or finalize binding to active. Flutter, Apple In-App Purchase, and native app-store distribution are outside the current product path.",
       "name": "Billing"
+    },
+    {
+      "description": "Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.",
+      "name": "Platform"
     }
   ]
 }

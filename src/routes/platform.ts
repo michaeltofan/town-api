@@ -1,0 +1,1261 @@
+import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
+import { randomUUID } from 'node:crypto';
+import type { Env } from '../config/env.js';
+import { hideSignal, unhideSignal } from '../db/repositories/signals.js';
+import type { AccountRow, PlatformAuditAction } from '../db/schema.js';
+import { revokeAllAccountSessions } from '../ceremony/repositories/account-sessions.js';
+import {
+  findAccountById,
+  lockAccountById,
+  transitionAccountState,
+} from '../identity/repositories/accounts.js';
+import { appendIdentitySecurityEvent } from '../identity/repositories/security-events.js';
+import { normalizeEmail } from '../identity/email-normalize.js';
+import { toIsoTimestamp } from '../lib/timestamps.js';
+import { buildIdentityFromEnv } from '../ops/build-identity.js';
+import { resolvePlatformOperator, requireOperatorCapability } from '../platform/auth.js';
+import {
+  appendPlatformAuditEvent,
+  listPlatformAuditEvents,
+} from '../platform/repositories/audit.js';
+import {
+  getPlatformAccountDetail,
+  getPlatformAccountEmails,
+  getPlatformAccountPayments,
+  getPlatformStatusCounts,
+  listPlatformAccounts,
+  listPlatformCommunities,
+  listPlatformDiscussions,
+  listPlatformMemberships,
+  listPlatformSignals,
+  listPlatformSubmissions,
+} from '../platform/repositories/inventory.js';
+import {
+  listActivePlatformOperators,
+  revokePlatformOperator,
+  upsertPlatformOperator,
+} from '../platform/repositories/operators.js';
+import { isPlatformOperatorRole } from '../platform/roles.js';
+import { DomainErrorResponseSchema } from '../schemas/error.js';
+import {
+  PlatformAccountActionResponseSchema,
+  PlatformAccountDetailResponseSchema,
+  PlatformAccountEmailsResponseSchema,
+  PlatformAccountIdParamsSchema,
+  PlatformAccountPaymentsResponseSchema,
+  PlatformAccountsQuerySchema,
+  PlatformAccountsResponseSchema,
+  PlatformAccountSuspendBodySchema,
+  PlatformAuditQuerySchema,
+  PlatformAuditResponseSchema,
+  PlatformCommunitiesResponseSchema,
+  PlatformDiscussionsResponseSchema,
+  PlatformMembershipsQuerySchema,
+  PlatformMembershipsResponseSchema,
+  PlatformOperatorActionResponseSchema,
+  PlatformOperatorGrantBodySchema,
+  PlatformOperatorsResponseSchema,
+  PlatformSessionResponseSchema,
+  PlatformSignalActionResponseSchema,
+  PlatformSignalHideBodySchema,
+  PlatformSignalIdParamsSchema,
+  PlatformSignalsQuerySchema,
+  PlatformSignalsResponseSchema,
+  PlatformStatusResponseSchema,
+  PlatformSubmissionsResponseSchema,
+} from '../schemas/platform.js';
+import { accountNotFoundError } from '../errors/app-error.js';
+
+export type PlatformRoutesOptions = {
+  env: Env;
+  now?: () => string;
+  generateId?: () => string;
+};
+
+/**
+ * Separate platform-operator administration plane under `/v1/platform/*`.
+ *
+ * Authz: active session AND active `platform_operators` row (never `accounts.is_owner`).
+ * Unauthorized callers receive generic 404 so the surface is not revealed.
+ * Mutating actions write `platform_audit_events` and, where applicable, identity audits.
+ */
+export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions> = (
+  app,
+  options,
+  done,
+) => {
+  const { env } = options;
+  const now = () => (options.now ?? (() => new Date().toISOString()))();
+  const generateId = options.generateId ?? (() => randomUUID());
+  const identity = buildIdentityFromEnv(env);
+
+  async function requireOperator(
+    request: Parameters<typeof resolvePlatformOperator>[2],
+    capability: Parameters<typeof requireOperatorCapability>[1],
+  ) {
+    const operator = await resolvePlatformOperator(app.database.db, env, request, now);
+    if (!operator || !requireOperatorCapability(operator, capability)) {
+      return null;
+    }
+    return operator;
+  }
+
+  async function audit(
+    operatorAccountId: string,
+    action: PlatformAuditAction,
+    requestId: string,
+    extra?: {
+      targetAccountId?: string | null;
+      targetSignalId?: string | null;
+      metadata?: Record<string, unknown> | null;
+    },
+  ): Promise<void> {
+    await appendPlatformAuditEvent(app.database.db, {
+      id: generateId(),
+      operatorAccountId,
+      action,
+      occurredAt: now(),
+      requestId,
+      targetAccountId: extra?.targetAccountId ?? null,
+      targetSignalId: extra?.targetSignalId ?? null,
+      metadata: extra?.metadata ?? null,
+    });
+  }
+
+  app.get(
+    '/v1/platform/session',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Current platform operator session',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: {
+          200: PlatformSessionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_status');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      return { data: { accountId: operator.accountId, role: operator.role } };
+    },
+  );
+
+  app.get(
+    '/v1/platform/status',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Platform health and operational counts',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: {
+          200: PlatformStatusResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_status');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const checks: {
+        config: 'ok' | 'fail';
+        database: 'ok' | 'fail' | 'timeout';
+        migrations: 'ok' | 'fail' | 'unknown';
+      } = {
+        config: 'ok',
+        database: 'ok',
+        migrations: 'ok',
+      };
+      let ready: 'ready' | 'not_ready' = 'ready';
+
+      if (app.isShuttingDown) {
+        checks.database = 'fail';
+        checks.migrations = 'unknown';
+        ready = 'not_ready';
+      } else {
+        const databaseStatus = await app.database.checkConnection();
+        checks.database = databaseStatus;
+        if (databaseStatus !== 'ok') {
+          checks.migrations = 'unknown';
+          ready = 'not_ready';
+        } else {
+          const migrationResult = await app.database.checkMigrations();
+          checks.migrations = migrationResult.status;
+          if (migrationResult.status !== 'ok') {
+            ready = 'not_ready';
+          }
+        }
+      }
+
+      const counts = await getPlatformStatusCounts(app.database.db);
+      await audit(operator.accountId, 'status_viewed', request.id);
+
+      return {
+        data: {
+          health: {
+            live: 'ok' as const,
+            ready,
+            checks,
+            build: {
+              service: identity.service,
+              environment: identity.environment,
+              version: identity.version,
+              commitSha: identity.commitSha,
+            },
+          },
+          counts,
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/accounts',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'List or search accounts',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        querystring: PlatformAccountsQuerySchema,
+        response: {
+          200: PlatformAccountsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_accounts');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      let email: string | undefined;
+      if (request.query.email) {
+        try {
+          email = normalizeEmail(request.query.email);
+        } catch {
+          return { data: { accounts: [] } };
+        }
+      }
+
+      const accounts = await listPlatformAccounts(app.database.db, {
+        limit: request.query.limit ?? 50,
+        ...(request.query.status ? { status: request.query.status } : {}),
+        ...(email ? { email } : {}),
+        ...(request.query.q ? { q: request.query.q } : {}),
+      });
+
+      return {
+        data: {
+          accounts: accounts.map((row) => ({
+            accountId: row.accountId,
+            status: row.status as
+              | 'pending_email'
+              | 'pending_password'
+              | 'pending_passkey'
+              | 'active'
+              | 'suspended'
+              | 'closed',
+            isOwner: row.isOwner,
+            email: row.email,
+            communitySlug: row.communitySlug,
+            membershipStatus: row.membershipStatus,
+            suspendedAt: row.suspendedAt === null ? null : toIsoTimestamp(row.suspendedAt),
+            createdAt: toIsoTimestamp(row.createdAt),
+          })),
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/accounts/:accountId',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Account detail for operators',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformAccountIdParamsSchema,
+        response: {
+          200: PlatformAccountDetailResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_accounts');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const detail = await getPlatformAccountDetail(app.database.db, request.params.accountId);
+      if (!detail) {
+        throw accountNotFoundError();
+      }
+
+      await audit(operator.accountId, 'account_inspected', request.id, {
+        targetAccountId: detail.accountId,
+      });
+
+      return {
+        data: {
+          accountId: detail.accountId,
+          status: detail.status as
+            | 'pending_email'
+            | 'pending_password'
+            | 'pending_passkey'
+            | 'active'
+            | 'suspended'
+            | 'closed',
+          isOwner: detail.isOwner,
+          email: detail.email,
+          communitySlug: detail.communitySlug,
+          membershipStatus: detail.membershipStatus,
+          suspendedAt: detail.suspendedAt === null ? null : toIsoTimestamp(detail.suspendedAt),
+          accountReadyAt:
+            detail.accountReadyAt === null ? null : toIsoTimestamp(detail.accountReadyAt),
+          closedAt: detail.closedAt === null ? null : toIsoTimestamp(detail.closedAt),
+          createdAt: toIsoTimestamp(detail.createdAt),
+          updatedAt: toIsoTimestamp(detail.updatedAt),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/accounts/:accountId/suspend',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Suspend (restrict) an account',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformAccountIdParamsSchema,
+        body: PlatformAccountSuspendBodySchema,
+        response: {
+          200: PlatformAccountActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_accounts');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const targetAccountId = request.params.accountId;
+      const nowIso = now();
+      const reason = request.body.reason;
+
+      const result = await app.database.db.transaction(async (tx) => {
+        const orderedIds =
+          operator.accountId === targetAccountId
+            ? [operator.accountId]
+            : [operator.accountId, targetAccountId].sort((a, b) => a.localeCompare(b));
+
+        const lockedById = new Map<string, AccountRow>();
+        for (const id of orderedIds) {
+          const row = await lockAccountById(tx, id);
+          if (row) {
+            lockedById.set(id, row);
+          }
+        }
+
+        const operatorRow = lockedById.get(operator.accountId);
+        if (operatorRow?.status !== 'active') {
+          return { kind: 'forbidden' as const };
+        }
+
+        const target = lockedById.get(targetAccountId);
+        if (!target) {
+          return { kind: 'missing' as const };
+        }
+
+        if (target.status !== 'active') {
+          return { kind: 'ok' as const, account: target, changed: false };
+        }
+
+        const suspended = await transitionAccountState(tx, {
+          accountId: target.id,
+          to: 'suspended',
+          at: nowIso,
+        });
+
+        await revokeAllAccountSessions(tx, {
+          accountId: target.id,
+          reason: 'account_suspended',
+          now: nowIso,
+        });
+
+        await appendIdentitySecurityEvent(tx, {
+          id: generateId(),
+          accountId: operator.accountId,
+          eventType: 'account_suspended',
+          occurredAt: nowIso,
+          requestId: request.id,
+          metadata: {
+            targetAccountId: target.id,
+            reason,
+            actorKind: 'platform_operator',
+          },
+        });
+
+        await appendPlatformAuditEvent(tx, {
+          id: generateId(),
+          operatorAccountId: operator.accountId,
+          action: 'account_suspended',
+          occurredAt: nowIso,
+          requestId: request.id,
+          targetAccountId: target.id,
+          metadata: { reason },
+        });
+
+        return { kind: 'ok' as const, account: suspended, changed: true };
+      });
+
+      if (result.kind === 'forbidden') {
+        reply.callNotFound();
+        return;
+      }
+      if (result.kind === 'missing') {
+        throw accountNotFoundError();
+      }
+
+      return {
+        data: {
+          accountId: result.account.id,
+          status: result.account.status as
+            | 'pending_email'
+            | 'pending_password'
+            | 'pending_passkey'
+            | 'active'
+            | 'suspended'
+            | 'closed',
+          suspendedAt:
+            result.account.suspendedAt === null ? null : toIsoTimestamp(result.account.suspendedAt),
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/accounts/:accountId/reactivate',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Reactivate a suspended account',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformAccountIdParamsSchema,
+        response: {
+          200: PlatformAccountActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_accounts');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const targetAccountId = request.params.accountId;
+      const nowIso = now();
+
+      const result = await app.database.db.transaction(async (tx) => {
+        const orderedIds =
+          operator.accountId === targetAccountId
+            ? [operator.accountId]
+            : [operator.accountId, targetAccountId].sort((a, b) => a.localeCompare(b));
+
+        const lockedById = new Map<string, AccountRow>();
+        for (const id of orderedIds) {
+          const row = await lockAccountById(tx, id);
+          if (row) {
+            lockedById.set(id, row);
+          }
+        }
+
+        const operatorRow = lockedById.get(operator.accountId);
+        if (operatorRow?.status !== 'active') {
+          return { kind: 'forbidden' as const };
+        }
+
+        const target = lockedById.get(targetAccountId);
+        if (!target) {
+          return { kind: 'missing' as const };
+        }
+
+        if (target.status !== 'suspended') {
+          return { kind: 'ok' as const, account: target, changed: false };
+        }
+
+        const activated = await transitionAccountState(tx, {
+          accountId: target.id,
+          to: 'active',
+          at: nowIso,
+        });
+
+        await appendIdentitySecurityEvent(tx, {
+          id: generateId(),
+          accountId: operator.accountId,
+          eventType: 'account_activated',
+          occurredAt: nowIso,
+          requestId: request.id,
+          metadata: {
+            targetAccountId: target.id,
+            actorKind: 'platform_operator',
+          },
+        });
+
+        await appendPlatformAuditEvent(tx, {
+          id: generateId(),
+          operatorAccountId: operator.accountId,
+          action: 'account_reactivated',
+          occurredAt: nowIso,
+          requestId: request.id,
+          targetAccountId: target.id,
+        });
+
+        return { kind: 'ok' as const, account: activated, changed: true };
+      });
+
+      if (result.kind === 'forbidden') {
+        reply.callNotFound();
+        return;
+      }
+      if (result.kind === 'missing') {
+        throw accountNotFoundError();
+      }
+
+      return {
+        data: {
+          accountId: result.account.id,
+          status: result.account.status as
+            | 'pending_email'
+            | 'pending_password'
+            | 'pending_passkey'
+            | 'active'
+            | 'suspended'
+            | 'closed',
+          suspendedAt:
+            result.account.suspendedAt === null ? null : toIsoTimestamp(result.account.suspendedAt),
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/communities',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'List communities with bound-account counts',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: {
+          200: PlatformCommunitiesResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_communities');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const rows = await listPlatformCommunities(app.database.db);
+      return { data: { communities: rows } };
+    },
+  );
+
+  app.get(
+    '/v1/platform/memberships',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'List membership entitlements',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        querystring: PlatformMembershipsQuerySchema,
+        response: {
+          200: PlatformMembershipsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_memberships');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const memberships = await listPlatformMemberships(app.database.db, {
+        limit: request.query.limit ?? 50,
+        ...(request.query.status ? { status: request.query.status } : {}),
+      });
+      return {
+        data: {
+          memberships: memberships.map((row) => ({
+            accountId: row.accountId,
+            status: row.status,
+            source: row.source,
+            accessUntil: row.accessUntil === null ? null : toIsoTimestamp(row.accessUntil),
+            activatedAt: row.activatedAt === null ? null : toIsoTimestamp(row.activatedAt),
+            expiredAt: row.expiredAt === null ? null : toIsoTimestamp(row.expiredAt),
+            updatedAt: toIsoTimestamp(row.updatedAt),
+            email: row.email,
+          })),
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/signals',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Platform-wide signal moderation inventory',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        querystring: PlatformSignalsQuerySchema,
+        response: {
+          200: PlatformSignalsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_signals');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const rows = await listPlatformSignals(app.database.db, {
+        limit: request.query.limit ?? 50,
+        hiddenOnly: request.query.hiddenOnly ?? false,
+      });
+      return {
+        data: {
+          signals: rows.map((row) => ({
+            id: row.id,
+            slug: row.slug,
+            headline: row.headline,
+            communitySlug: row.communitySlug,
+            authorDisplayName: row.authorDisplayName,
+            authorAccountId: row.authorAccountId,
+            hidden: row.hidden,
+            hiddenAt: row.hiddenAt === null ? null : toIsoTimestamp(row.hiddenAt),
+            hiddenReason: row.hiddenReason,
+            publishedAt: toIsoTimestamp(row.publishedAt),
+          })),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/signals/:signalId/hide',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Hide a published signal',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformSignalIdParamsSchema,
+        body: PlatformSignalHideBodySchema,
+        response: {
+          200: PlatformSignalActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_signals');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const nowIso = now();
+      const result = await app.database.db.transaction(async (tx) => {
+        const hidden = await hideSignal(tx, {
+          signalId: request.params.signalId,
+          reason: request.body.reason,
+          hiddenByAccountId: operator.accountId,
+          at: nowIso,
+        });
+        if (!hidden) {
+          return null;
+        }
+        if (hidden.changed) {
+          await appendIdentitySecurityEvent(tx, {
+            id: generateId(),
+            accountId: operator.accountId,
+            eventType: 'signal_hidden',
+            occurredAt: nowIso,
+            requestId: request.id,
+            metadata: {
+              signalId: hidden.signal.id,
+              reason: request.body.reason,
+              actorKind: 'platform_operator',
+            },
+          });
+          await appendPlatformAuditEvent(tx, {
+            id: generateId(),
+            operatorAccountId: operator.accountId,
+            action: 'signal_hidden',
+            occurredAt: nowIso,
+            requestId: request.id,
+            targetSignalId: hidden.signal.id,
+            metadata: { reason: request.body.reason },
+          });
+        }
+        return hidden;
+      });
+
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+
+      return {
+        data: {
+          signalId: result.signal.id,
+          hidden: result.signal.hiddenAt !== null,
+          hiddenAt: result.signal.hiddenAt === null ? null : toIsoTimestamp(result.signal.hiddenAt),
+          hiddenReason: result.signal.hiddenReason,
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/signals/:signalId/unhide',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Unhide a signal',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformSignalIdParamsSchema,
+        response: {
+          200: PlatformSignalActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_signals');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const nowIso = now();
+      const result = await app.database.db.transaction(async (tx) => {
+        const visible = await unhideSignal(tx, {
+          signalId: request.params.signalId,
+          at: nowIso,
+        });
+        if (!visible) {
+          return null;
+        }
+        if (visible.changed) {
+          await appendIdentitySecurityEvent(tx, {
+            id: generateId(),
+            accountId: operator.accountId,
+            eventType: 'signal_unhidden',
+            occurredAt: nowIso,
+            requestId: request.id,
+            metadata: {
+              signalId: visible.signal.id,
+              actorKind: 'platform_operator',
+            },
+          });
+          await appendPlatformAuditEvent(tx, {
+            id: generateId(),
+            operatorAccountId: operator.accountId,
+            action: 'signal_unhidden',
+            occurredAt: nowIso,
+            requestId: request.id,
+            targetSignalId: visible.signal.id,
+          });
+        }
+        return visible;
+      });
+
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+
+      return {
+        data: {
+          signalId: result.signal.id,
+          hidden: result.signal.hiddenAt !== null,
+          hiddenAt: result.signal.hiddenAt === null ? null : toIsoTimestamp(result.signal.hiddenAt),
+          hiddenReason: result.signal.hiddenReason,
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/submissions',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Pending signal submissions inventory',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: {
+          200: PlatformSubmissionsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_submissions');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const submissions = await listPlatformSubmissions(app.database.db, { limit: 50 });
+      return {
+        data: {
+          submissions: submissions.map((row) => ({
+            ...row,
+            createdAt: toIsoTimestamp(row.createdAt),
+          })),
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/discussions',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Recent discussion contributions inventory',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: {
+          200: PlatformDiscussionsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_discussions');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const contributions = await listPlatformDiscussions(app.database.db, { limit: 50 });
+      return {
+        data: {
+          contributions: contributions.flatMap((row) => {
+            if (!row.accountId) {
+              return [];
+            }
+            return [
+              {
+                contributionId: row.contributionId,
+                sessionId: row.sessionId,
+                signalId: row.signalId,
+                signalSlug: row.signalSlug,
+                communitySlug: row.communitySlug,
+                intent: row.intent,
+                body: row.body,
+                accountId: row.accountId,
+                createdAt: toIsoTimestamp(row.createdAt),
+              },
+            ];
+          }),
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/audit',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Platform operator audit history',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        querystring: PlatformAuditQuerySchema,
+        response: {
+          200: PlatformAuditResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_audit');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const action =
+        request.query.action && isPlatformAuditAction(request.query.action)
+          ? request.query.action
+          : undefined;
+
+      const events = await listPlatformAuditEvents(app.database.db, {
+        limit: request.query.limit ?? 50,
+        ...(request.query.operatorAccountId
+          ? { operatorAccountId: request.query.operatorAccountId }
+          : {}),
+        ...(request.query.targetAccountId
+          ? { targetAccountId: request.query.targetAccountId }
+          : {}),
+        ...(action ? { action } : {}),
+        ...(request.query.from ? { from: request.query.from } : {}),
+        ...(request.query.to ? { to: request.query.to } : {}),
+      });
+
+      await audit(operator.accountId, 'audit_inspected', request.id);
+
+      return {
+        data: {
+          events: events.map((event) => ({
+            id: event.id,
+            operatorAccountId: event.operatorAccountId,
+            action: event.action,
+            targetAccountId: event.targetAccountId,
+            targetSignalId: event.targetSignalId,
+            requestId: event.requestId,
+            metadata: (event.metadata as Record<string, unknown> | null) ?? null,
+            occurredAt: toIsoTimestamp(event.occurredAt),
+          })),
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/accounts/:accountId/emails',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Investigate account emails and challenges',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformAccountIdParamsSchema,
+        response: {
+          200: PlatformAccountEmailsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_emails');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const account = await findAccountById(app.database.db, request.params.accountId);
+      if (!account) {
+        throw accountNotFoundError();
+      }
+
+      const data = await getPlatformAccountEmails(app.database.db, request.params.accountId);
+      await audit(operator.accountId, 'email_inspected', request.id, {
+        targetAccountId: request.params.accountId,
+      });
+
+      return {
+        data: {
+          emails: data.emails.map((row) => ({
+            ...row,
+            verifiedAt: row.verifiedAt === null ? null : toIsoTimestamp(row.verifiedAt),
+            revokedAt: row.revokedAt === null ? null : toIsoTimestamp(row.revokedAt),
+            createdAt: toIsoTimestamp(row.createdAt),
+          })),
+          challenges: data.challenges.map((row) => ({
+            ...row,
+            createdAt: toIsoTimestamp(row.createdAt),
+            expiresAt: toIsoTimestamp(row.expiresAt),
+            consumedAt: row.consumedAt === null ? null : toIsoTimestamp(row.consumedAt),
+            revokedAt: row.revokedAt === null ? null : toIsoTimestamp(row.revokedAt),
+          })),
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/accounts/:accountId/payments',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Investigate membership and Stripe ledger without exposing Stripe IDs',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformAccountIdParamsSchema,
+        response: {
+          200: PlatformAccountPaymentsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_payments');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const account = await findAccountById(app.database.db, request.params.accountId);
+      if (!account) {
+        throw accountNotFoundError();
+      }
+
+      const data = await getPlatformAccountPayments(app.database.db, request.params.accountId);
+      await audit(operator.accountId, 'payment_inspected', request.id, {
+        targetAccountId: request.params.accountId,
+      });
+
+      return {
+        data: {
+          entitlement: data.entitlement
+            ? {
+                status: data.entitlement.status,
+                source: data.entitlement.source,
+                accessUntil:
+                  data.entitlement.accessUntil === null
+                    ? null
+                    : toIsoTimestamp(data.entitlement.accessUntil),
+                cancelAtPeriodEnd: data.entitlement.cancelAtPeriodEnd,
+                activatedAt:
+                  data.entitlement.activatedAt === null
+                    ? null
+                    : toIsoTimestamp(data.entitlement.activatedAt),
+                cancellationRequestedAt:
+                  data.entitlement.cancellationRequestedAt === null
+                    ? null
+                    : toIsoTimestamp(data.entitlement.cancellationRequestedAt),
+                expiredAt:
+                  data.entitlement.expiredAt === null
+                    ? null
+                    : toIsoTimestamp(data.entitlement.expiredAt),
+                version: data.entitlement.version,
+                updatedAt: toIsoTimestamp(data.entitlement.updatedAt),
+              }
+            : null,
+          stripeCustomer: data.stripeCustomer.linked
+            ? {
+                linked: true as const,
+                billingReference: data.stripeCustomer.billingReference,
+                createdAt: toIsoTimestamp(data.stripeCustomer.createdAt),
+                updatedAt: toIsoTimestamp(data.stripeCustomer.updatedAt),
+              }
+            : { linked: false as const },
+          checkoutAttempts: data.checkoutAttempts.map((row) => ({
+            id: row.id,
+            status: row.status,
+            hasStripeSession: row.hasStripeSession,
+            createdAt: toIsoTimestamp(row.createdAt),
+            expiresAt: toIsoTimestamp(row.expiresAt),
+            completedAt: row.completedAt === null ? null : toIsoTimestamp(row.completedAt),
+          })),
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/operators',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'List active platform operators',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: {
+          200: PlatformOperatorsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_operators');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const operators = await listActivePlatformOperators(app.database.db);
+      return {
+        data: {
+          operators: operators.map((row) => ({
+            accountId: row.accountId,
+            role: row.role as
+              | 'viewer'
+              | 'investigator'
+              | 'moderator'
+              | 'account_admin'
+              | 'ops_admin'
+              | 'role_admin',
+            grantedAt: toIsoTimestamp(row.grantedAt),
+            grantedByAccountId: row.grantedByAccountId,
+          })),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/operators',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Grant or update a platform operator role',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        body: PlatformOperatorGrantBodySchema,
+        response: {
+          200: PlatformOperatorActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_operators');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      if (!isPlatformOperatorRole(request.body.role)) {
+        reply.callNotFound();
+        return;
+      }
+
+      const target = await findAccountById(app.database.db, request.body.accountId);
+      if (!target) {
+        throw accountNotFoundError();
+      }
+
+      const nowIso = now();
+      const result = await upsertPlatformOperator(app.database.db, {
+        accountId: request.body.accountId,
+        role: request.body.role,
+        grantedByAccountId: operator.accountId,
+        at: nowIso,
+      });
+
+      if (result.outcome !== 'already_active') {
+        await appendPlatformAuditEvent(app.database.db, {
+          id: generateId(),
+          operatorAccountId: operator.accountId,
+          action: result.outcome === 'role_changed' ? 'operator_role_changed' : 'operator_granted',
+          occurredAt: nowIso,
+          requestId: request.id,
+          targetAccountId: request.body.accountId,
+          metadata: { role: request.body.role },
+        });
+      }
+
+      return {
+        data: {
+          accountId: result.row.accountId,
+          role: result.row.role as
+            'viewer' | 'investigator' | 'moderator' | 'account_admin' | 'ops_admin' | 'role_admin',
+          active: result.row.revokedAt === null,
+          changed: result.outcome !== 'already_active',
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/operators/:accountId/revoke',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Revoke platform operator access',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformAccountIdParamsSchema,
+        response: {
+          200: PlatformOperatorActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_operators');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      if (request.params.accountId === operator.accountId) {
+        reply.callNotFound();
+        return;
+      }
+
+      const nowIso = now();
+      const result = await revokePlatformOperator(app.database.db, {
+        accountId: request.params.accountId,
+        at: nowIso,
+      });
+      if (!result) {
+        throw accountNotFoundError();
+      }
+
+      if (result.changed) {
+        await appendPlatformAuditEvent(app.database.db, {
+          id: generateId(),
+          operatorAccountId: operator.accountId,
+          action: 'operator_revoked',
+          occurredAt: nowIso,
+          requestId: request.id,
+          targetAccountId: request.params.accountId,
+          metadata: { role: result.row.role },
+        });
+      }
+
+      return {
+        data: {
+          accountId: result.row.accountId,
+          role: result.row.role as
+            'viewer' | 'investigator' | 'moderator' | 'account_admin' | 'ops_admin' | 'role_admin',
+          active: result.row.revokedAt === null,
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  done();
+};
+
+const PLATFORM_AUDIT_ACTIONS = new Set<PlatformAuditAction>([
+  'operator_granted',
+  'operator_revoked',
+  'operator_role_changed',
+  'account_suspended',
+  'account_reactivated',
+  'signal_hidden',
+  'signal_unhidden',
+  'status_viewed',
+  'account_inspected',
+  'audit_inspected',
+  'email_inspected',
+  'payment_inspected',
+]);
+
+function isPlatformAuditAction(value: string): value is PlatformAuditAction {
+  return PLATFORM_AUDIT_ACTIONS.has(value as PlatformAuditAction);
+}

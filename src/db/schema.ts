@@ -125,6 +125,46 @@ export const accounts = town.table(
   ],
 );
 
+/**
+ * Platform operator allowlist — separate from community owner (`accounts.is_owner`).
+ * Active operators (revoked_at IS NULL) may use `/v1/platform/*` surfaces.
+ * Bootstrap via CLI (`account:mark-platform-operator`); role_admin may grant later.
+ */
+export const platformOperators = town.table(
+  'platform_operators',
+  {
+    accountId: uuid('account_id').primaryKey(),
+    role: text('role').notNull(),
+    grantedAt: timestamp('granted_at', { withTimezone: true, mode: 'string' }).notNull(),
+    grantedByAccountId: uuid('granted_by_account_id'),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'platform_operators_account_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.grantedByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'platform_operators_granted_by_account_id_fkey',
+    }).onDelete('restrict'),
+    check(
+      'platform_operators_role_valid',
+      sql`${table.role} in ('viewer', 'investigator', 'moderator', 'account_admin', 'ops_admin', 'role_admin')`,
+    ),
+    check(
+      'platform_operators_revoked_not_before_granted',
+      sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.grantedAt}`,
+    ),
+    index('platform_operators_active_role_idx')
+      .on(table.role)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
+
 export const signals = town.table(
   'signals',
   {
@@ -221,6 +261,67 @@ export const signals = town.table(
       table.communityId,
       table.publicationStatus,
       table.position,
+    ),
+  ],
+);
+
+/**
+ * Append-only audit of platform-operator actions. Separate from identity_security_events
+ * so operator actor identity is first-class without expanding the identity event enum.
+ */
+export const platformAuditEvents = town.table(
+  'platform_audit_events',
+  {
+    id: uuid('id').primaryKey(),
+    operatorAccountId: uuid('operator_account_id').notNull(),
+    action: text('action').notNull(),
+    targetAccountId: uuid('target_account_id'),
+    targetSignalId: uuid('target_signal_id'),
+    requestId: text('request_id'),
+    metadata: jsonb('metadata'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.operatorAccountId],
+      foreignColumns: [accounts.id],
+      name: 'platform_audit_events_operator_account_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.targetAccountId],
+      foreignColumns: [accounts.id],
+      name: 'platform_audit_events_target_account_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.targetSignalId],
+      foreignColumns: [signals.id],
+      name: 'platform_audit_events_target_signal_id_fkey',
+    }).onDelete('restrict'),
+    check(
+      'platform_audit_events_action_valid',
+      sql`${table.action} in (
+        'operator_granted',
+        'operator_revoked',
+        'operator_role_changed',
+        'account_suspended',
+        'account_reactivated',
+        'signal_hidden',
+        'signal_unhidden',
+        'status_viewed',
+        'account_inspected',
+        'audit_inspected',
+        'email_inspected',
+        'payment_inspected'
+      )`,
+    ),
+    index('platform_audit_events_occurred_at_idx').on(table.occurredAt),
+    index('platform_audit_events_operator_occurred_idx').on(
+      table.operatorAccountId,
+      table.occurredAt,
+    ),
+    index('platform_audit_events_target_account_occurred_idx').on(
+      table.targetAccountId,
+      table.occurredAt,
     ),
   ],
 );
@@ -1402,6 +1503,8 @@ export type SignalMediaUploadRow = typeof signalMediaUploads.$inferSelect;
 export type SignalDiscussionMediaUploadRow = typeof signalDiscussionMediaUploads.$inferSelect;
 export type SignalDiscussionContributionRow = typeof signalDiscussionContributions.$inferSelect;
 export type AccountRow = typeof accounts.$inferSelect;
+export type PlatformOperatorRow = typeof platformOperators.$inferSelect;
+export type PlatformAuditEventRow = typeof platformAuditEvents.$inferSelect;
 export type AccountEmailRow = typeof accountEmails.$inferSelect;
 export type PasskeyCredentialRow = typeof passkeyCredentials.$inferSelect;
 export type AccountPasswordCredentialRow = typeof accountPasswordCredentials.$inferSelect;
@@ -1421,6 +1524,28 @@ export type MembershipSourceEventRow = typeof membershipSourceEvents.$inferSelec
 
 export type AccountStatus =
   'pending_email' | 'pending_password' | 'pending_passkey' | 'active' | 'suspended' | 'closed';
+
+export type PlatformOperatorRole =
+  | 'viewer'
+  | 'investigator'
+  | 'moderator'
+  | 'account_admin'
+  | 'ops_admin'
+  | 'role_admin';
+
+export type PlatformAuditAction =
+  | 'operator_granted'
+  | 'operator_revoked'
+  | 'operator_role_changed'
+  | 'account_suspended'
+  | 'account_reactivated'
+  | 'signal_hidden'
+  | 'signal_unhidden'
+  | 'status_viewed'
+  | 'account_inspected'
+  | 'audit_inspected'
+  | 'email_inspected'
+  | 'payment_inspected';
 
 export type SignalHideReason = 'immoral' | 'abusive' | 'spam' | 'off_topic' | 'illegal' | 'other';
 

@@ -909,9 +909,27 @@ Useful scripts:
 | `npm run membership:contract:check`    | verify committed membership contract             |
 | `npm run billing:contract:generate`    | write billing foundation contract                |
 | `npm run billing:contract:check`       | verify committed billing contract                |
+| `npm run account:mark-platform-operator` | CLI grant platform operator (setup-code gated) |
 | `npm test`                             | unit tests (no PostgreSQL required)              |
 | `npm run test:integration`             | PostgreSQL 18 integration suite                  |
 | `npm run check`                        | non-destructive quality gate                     |
+
+## Platform operator area V1
+
+Separate administration plane for TOWN platform operators (not community
+owners). HTTP surface is `/v1/platform/*`; authz requires an active session
+plus an active `platform_operators` row. Bootstrap with:
+
+```bash
+PLATFORM_OPERATOR_SETUP_CODE=... \
+PLATFORM_OPERATOR_SETUP_CODE_EXPECTED=... \
+npm run account:mark-platform-operator -- --account-id <uuid> --role role_admin
+```
+
+Capabilities include status monitoring, account/membership/community
+inventories, signal moderation, email/payment investigation (no Stripe
+provider IDs), suspend/reactivate, operational audit, and role_admin
+operator management. Unauthorized callers receive generic 404.
 
 ## Deployment Readiness V1
 
@@ -937,7 +955,7 @@ Current repository exclusions (not a claim that Stripe is unimplemented):
 - public password or social login
 - GPS / residency / production local verification evidence plumbing
 - confirmation removal / confirmer identity lists / comments / moderation
-- notifications / admin tooling
+- notifications / general-purpose admin CRUD outside `/v1/platform`
 - Redis / queues / workers / GraphQL
 - Flutter client development, Google Play / Apple In-App Purchase as the
   current launch payment path, and native Android/iOS app-store distribution

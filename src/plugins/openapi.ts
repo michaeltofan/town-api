@@ -50,6 +50,11 @@ const openApiPlugin: FastifyPluginAsync = async (app) => {
           description:
             'Stripe is the sole membership payment provider for the TOWN web launch. Flag-gated Checkout and Customer Portal require an active session; POST /v1/billing/stripe/webhook verifies raw Stripe signatures. Never exposes Stripe customer/subscription/invoice identifiers in public API responses; only Stripe-issued Checkout/Portal URLs and bounded membership status are returned. Google Play purchase and RTDN ingress remain in-tree for historical native-store work, stay flag-gated off by default (GOOGLE_PLAY_BILLING_ENABLED / GOOGLE_PLAY_RTDN_INGRESS_ENABLED), and are outside the current critical path. When enabled, Google Play purchase ingress acknowledges purchases only after durable paid_pending_binding provision and does not process RTDN, voided purchases, refunds, or finalize binding to active. Flutter, Apple In-App Purchase, and native app-store distribution are outside the current product path.',
         },
+        {
+          name: 'Platform',
+          description:
+            'Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.',
+        },
       ],
       components: {
         securitySchemes: {
