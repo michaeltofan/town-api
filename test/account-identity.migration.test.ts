@@ -17,6 +17,8 @@ const EXPECTED_TABLES = [
   'membership_entitlements',
   'membership_source_events',
   'passkey_credentials',
+  'platform_audit_events',
+  'platform_operators',
   'recovery_grants',
   'setup_grants',
   'signal_confirmations',
