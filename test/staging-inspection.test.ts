@@ -32,6 +32,9 @@ function schemaOkQueryHandler(text: string): QueryResult<Record<string, unknown>
       { column_name: 'status', data_type: 'text', is_nullable: 'NO' },
       { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
       { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
+      { column_name: 'reviewed_at', data_type: 'timestamp with time zone', is_nullable: 'YES' },
+      { column_name: 'reviewed_by_account_id', data_type: 'uuid', is_nullable: 'YES' },
+      { column_name: 'review_reason', data_type: 'text', is_nullable: 'YES' },
     ]);
   }
   if (text.includes("con.contype = 'p'")) {
@@ -63,13 +66,21 @@ function schemaOkQueryHandler(text: string): QueryResult<Record<string, unknown>
         foreign_column_name: 'id',
         confdeltype: 'r',
       },
+      {
+        conname: 'signal_submissions_reviewed_by_account_id_fkey',
+        column_name: 'reviewed_by_account_id',
+        foreign_table_schema: 'town',
+        foreign_table_name: 'accounts',
+        foreign_column_name: 'id',
+        confdeltype: 'r',
+      },
     ]);
   }
   if (text.includes('signal_submissions_status_valid')) {
     return emptyResult([
       {
         conname: 'signal_submissions_status_valid',
-        definition: `CHECK ((status = 'pending_review'::text))`,
+        definition: `CHECK ((status = ANY (ARRAY['pending_review'::text, 'rejected'::text])))`,
       },
     ]);
   }
@@ -510,6 +521,14 @@ describe('staging inspection output contract', () => {
               column_name: 'community_id',
               foreign_table_schema: 'town',
               foreign_table_name: 'communities',
+              foreign_column_name: 'id',
+              confdeltype: 'r',
+            },
+            {
+              conname: 'signal_submissions_reviewed_by_account_id_fkey',
+              column_name: 'reviewed_by_account_id',
+              foreign_table_schema: 'town',
+              foreign_table_name: 'accounts',
               foreign_column_name: 'id',
               confdeltype: 'r',
             },

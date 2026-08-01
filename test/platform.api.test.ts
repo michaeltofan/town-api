@@ -18,10 +18,15 @@ import { activateMembership } from '../src/membership/transitions/activate.js';
 import type {
   PlatformAccountActionResponse,
   PlatformAccountsResponse,
+  PlatformDiscussionActionResponse,
+  PlatformDiscussionsResponse,
   PlatformMembershipActionResponse,
   PlatformMembershipsResponse,
   PlatformSessionResponse,
   PlatformStatusResponse,
+  PlatformSubmissionActionResponse,
+  PlatformSubmissionDetailResponse,
+  PlatformSubmissionsResponse,
 } from '../src/schemas/platform.js';
 import {
   activatePasskeyAccountAndLinkCommunity,
@@ -46,6 +51,9 @@ describe('platform operator area', () => {
     ctx = await createMembershipTestApp({
       now: () => clock.now,
       localEligibilityResolver: createEligibleTestResolver(),
+      envOverrides: {
+        SIGNAL_SUBMISSION_ENABLED: 'true',
+      },
     });
   });
 
@@ -689,4 +697,348 @@ describe('platform operator area', () => {
       0,
     );
   });
+
+  it('moderates submissions with reject/restore, audit, inventory, and role gates', async () => {
+    const moderator = await registerMember('PlatformSubmissionMod+setup@example.com');
+    await grantOperator(moderator.accountId, 'moderator');
+    const roleAdmin = await registerMember('PlatformSubmissionRoleAdmin+setup@example.com');
+    await grantOperator(roleAdmin.accountId, 'role_admin');
+    const viewer = await registerMember('PlatformSubmissionViewer+setup@example.com');
+    await grantOperator(viewer.accountId, 'viewer');
+    const author = await registerMember('PlatformSubmissionAuthor+setup@example.com');
+    // Operators + author registrations are intentionally sequential over the shared DB.
+
+    const create = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/communities/milano-it/signal-submissions',
+      headers: { authorization: `Session ${author.sessionToken}` },
+      payload: {
+        headline: 'Platform fixture submission tram delay',
+        body: 'Controlled pending submission for platform moderation tests.',
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const submissionId = create.json<{ data: { id: string } }>().data.id;
+
+    const inventory = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/platform/submissions?status=pending_review&communitySlug=milano-it',
+      headers: { authorization: `Session ${viewer.sessionToken}` },
+    });
+    expect(inventory.statusCode).toBe(200);
+    expect(inventory.json<PlatformSubmissionsResponse>().data.submissions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: submissionId,
+          status: 'pending_review',
+          allowedActions: ['reject'],
+        }),
+      ]),
+    );
+
+    const detail = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/platform/submissions/${submissionId}`,
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json<PlatformSubmissionDetailResponse>()).toMatchObject({
+      data: {
+        id: submissionId,
+        accountId: author.accountId,
+        communitySlug: 'milano-it',
+        status: 'pending_review',
+        allowedActions: ['reject'],
+      },
+    });
+
+    const viewerReject = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/submissions/${submissionId}/reject`,
+      headers: { authorization: `Session ${viewer.sessionToken}` },
+      payload: { reason: 'spam' },
+    });
+    expect(viewerReject.statusCode).toBe(404);
+
+    const reject = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/submissions/${submissionId}/reject`,
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+      payload: { reason: 'spam' },
+    });
+    expect(reject.statusCode).toBe(200);
+    expect(reject.json<PlatformSubmissionActionResponse>()).toMatchObject({
+      data: {
+        id: submissionId,
+        status: 'rejected',
+        reviewReason: 'spam',
+        changed: true,
+        allowedActions: ['restore'],
+      },
+    });
+
+    const rejectRetry = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/submissions/${submissionId}/reject`,
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+      payload: { reason: 'abusive' },
+    });
+    expect(rejectRetry.statusCode).toBe(200);
+    expect(rejectRetry.json<PlatformSubmissionActionResponse>()).toMatchObject({
+      data: { status: 'rejected', reviewReason: 'spam', changed: false },
+    });
+
+    const rejectedInventory = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/platform/submissions?status=rejected&q=${encodeURIComponent(submissionId)}`,
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+    });
+    expect(rejectedInventory.statusCode).toBe(200);
+    expect(rejectedInventory.json<PlatformSubmissionsResponse>().data.submissions).toEqual([
+      expect.objectContaining({
+        id: submissionId,
+        status: 'rejected',
+        allowedActions: ['restore'],
+      }),
+    ]);
+
+    const rejectAudits = await ctx.app.database.db
+      .select()
+      .from(platformAuditEvents)
+      .where(
+        and(
+          eq(platformAuditEvents.action, 'submission_rejected'),
+          eq(platformAuditEvents.targetAccountId, author.accountId),
+        ),
+      );
+    expect(rejectAudits).toHaveLength(1);
+    expect(rejectAudits[0]?.operatorAccountId).toBe(moderator.accountId);
+    expect(rejectAudits[0]?.metadata).toMatchObject({
+      contentType: 'signal_submission',
+      submissionId,
+      reason: 'spam',
+      beforeStatus: 'pending_review',
+      afterStatus: 'rejected',
+    });
+
+    const restore = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/submissions/${submissionId}/restore`,
+      headers: { authorization: `Session ${roleAdmin.sessionToken}` },
+      payload: { reason: 'other' },
+    });
+    expect(restore.statusCode).toBe(200);
+    expect(restore.json<PlatformSubmissionActionResponse>()).toMatchObject({
+      data: {
+        id: submissionId,
+        status: 'pending_review',
+        reviewReason: null,
+        changed: true,
+        allowedActions: ['reject'],
+      },
+    });
+
+    const restoreRetry = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/submissions/${submissionId}/restore`,
+      headers: { authorization: `Session ${roleAdmin.sessionToken}` },
+      payload: { reason: 'other' },
+    });
+    expect(restoreRetry.statusCode).toBe(200);
+    expect(restoreRetry.json<PlatformSubmissionActionResponse>().data.changed).toBe(false);
+
+    const restoreAudits = await ctx.app.database.db
+      .select()
+      .from(platformAuditEvents)
+      .where(eq(platformAuditEvents.action, 'submission_restored'));
+    expect(
+      restoreAudits.some(
+        (event) =>
+          event.operatorAccountId === roleAdmin.accountId &&
+          (event.metadata as { submissionId?: string } | null)?.submissionId === submissionId,
+      ),
+    ).toBe(true);
+
+    const signalStillModeratable = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/hide`,
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+      payload: { reason: 'off_topic' },
+    });
+    expect(signalStillModeratable.statusCode).toBe(200);
+    await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/unhide`,
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+    });
+
+    const membershipsStillReadable = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/platform/memberships?limit=5',
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+    });
+    expect(membershipsStillReadable.statusCode).toBe(200);
+  }, 180_000);
+
+  it('moderates discussion contributions with hide/unhide, visibility, and role gates', async () => {
+    const moderator = await registerMember('PlatformDiscussionMod+setup@example.com');
+    await grantOperator(moderator.accountId, 'moderator');
+    const viewer = await registerMember('PlatformDiscussionViewer+setup@example.com');
+    await grantOperator(viewer.accountId, 'viewer');
+    const investigator = await registerMember('PlatformDiscussionInvestigator+setup@example.com');
+    await grantOperator(investigator.accountId, 'investigator');
+    const author = await registerMember('PlatformDiscussionAuthor+setup@example.com');
+    const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal1;
+    const contributionText = 'Platform fixture discussion contribution for hide tests.';
+
+    const contribute = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/signals/${signalId}/discussion-session/contributions`,
+      headers: { authorization: `Session ${author.sessionToken}` },
+      payload: { text: contributionText, intent: 'observation' },
+    });
+    expect(contribute.statusCode).toBe(201);
+    const contributions = contribute.json<{
+      data: { contributions: { id: string; text: string }[] };
+    }>().data.contributions;
+    const contribution = contributions.find((row) => row.text === contributionText);
+    expect(contribution).toBeDefined();
+    if (!contribution) {
+      throw new Error('expected fixture contribution');
+    }
+    const contributionId = contribution.id;
+
+    const inventory = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/platform/discussions?q=${encodeURIComponent('Platform fixture discussion')}`,
+      headers: { authorization: `Session ${viewer.sessionToken}` },
+    });
+    expect(inventory.statusCode).toBe(200);
+    expect(inventory.json<PlatformDiscussionsResponse>().data.contributions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contributionId,
+          accountId: author.accountId,
+          hidden: false,
+          allowedActions: ['hide'],
+        }),
+      ]),
+    );
+
+    const insufficientHide = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/discussions/${contributionId}/hide`,
+      headers: { authorization: `Session ${investigator.sessionToken}` },
+      payload: { reason: 'spam' },
+    });
+    expect(insufficientHide.statusCode).toBe(404);
+
+    const hide = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/discussions/${contributionId}/hide`,
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+      payload: { reason: 'spam' },
+    });
+    expect(hide.statusCode).toBe(200);
+    expect(hide.json<PlatformDiscussionActionResponse>()).toMatchObject({
+      data: {
+        contributionId,
+        accountId: author.accountId,
+        signalId,
+        hidden: true,
+        hiddenReason: 'spam',
+        changed: true,
+        allowedActions: ['unhide'],
+      },
+    });
+
+    const hideRetry = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/discussions/${contributionId}/hide`,
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+      payload: { reason: 'abusive' },
+    });
+    expect(hideRetry.statusCode).toBe(200);
+    expect(hideRetry.json<PlatformDiscussionActionResponse>()).toMatchObject({
+      data: { hidden: true, hiddenReason: 'spam', changed: false },
+    });
+
+    const publicSession = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/discussion-session`,
+      headers: { authorization: `Session ${author.sessionToken}` },
+    });
+    expect(publicSession.statusCode).toBe(200);
+    const publicContributions = publicSession.json<{
+      data: { contributions: { id: string }[] };
+    }>().data.contributions;
+    expect(publicContributions.some((row) => row.id === contributionId)).toBe(false);
+
+    const hiddenInventory = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/platform/discussions?hiddenOnly=true',
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+    });
+    expect(hiddenInventory.statusCode).toBe(200);
+    expect(hiddenInventory.json<PlatformDiscussionsResponse>().data.contributions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ contributionId, hidden: true, allowedActions: ['unhide'] }),
+      ]),
+    );
+
+    const hideAudits = await ctx.app.database.db
+      .select()
+      .from(platformAuditEvents)
+      .where(eq(platformAuditEvents.action, 'discussion_contribution_hidden'));
+    expect(
+      hideAudits.some(
+        (event) =>
+          event.operatorAccountId === moderator.accountId &&
+          event.targetSignalId === signalId &&
+          (event.metadata as { contributionId?: string } | null)?.contributionId === contributionId,
+      ),
+    ).toBe(true);
+
+    const unhide = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/discussions/${contributionId}/unhide`,
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+      payload: { reason: 'other' },
+    });
+    expect(unhide.statusCode).toBe(200);
+    expect(unhide.json<PlatformDiscussionActionResponse>()).toMatchObject({
+      data: { contributionId, hidden: false, changed: true, allowedActions: ['hide'] },
+    });
+
+    const unhideRetry = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/discussions/${contributionId}/unhide`,
+      headers: { authorization: `Session ${moderator.sessionToken}` },
+      payload: { reason: 'other' },
+    });
+    expect(unhideRetry.statusCode).toBe(200);
+    expect(unhideRetry.json<PlatformDiscussionActionResponse>().data.changed).toBe(false);
+
+    const restoredPublic = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/discussion-session`,
+      headers: { authorization: `Session ${author.sessionToken}` },
+    });
+    expect(
+      restoredPublic
+        .json<{ data: { contributions: { id: string }[] } }>()
+        .data.contributions.some((row) => row.id === contributionId),
+    ).toBe(true);
+
+    const unhideAudits = await ctx.app.database.db
+      .select()
+      .from(platformAuditEvents)
+      .where(eq(platformAuditEvents.action, 'discussion_contribution_unhidden'));
+    expect(
+      unhideAudits.some(
+        (event) =>
+          (event.metadata as { contributionId?: string } | null)?.contributionId === contributionId,
+      ),
+    ).toBe(true);
+  }, 180_000);
 });

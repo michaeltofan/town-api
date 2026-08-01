@@ -225,23 +225,107 @@ export async function listPlatformSignals(db: Db, input: { limit: number; hidden
     .limit(input.limit);
 }
 
-export async function listPlatformSubmissions(db: Db, input: { limit: number }) {
-  return db
+export async function listPlatformSubmissions(
+  db: Db,
+  input: {
+    limit: number;
+    status?: string;
+    communitySlug?: string;
+    q?: string;
+  },
+) {
+  const filters: SQL[] = [];
+  if (input.status) {
+    filters.push(eq(signalSubmissions.status, input.status));
+  }
+  if (input.communitySlug) {
+    filters.push(eq(communities.slug, input.communitySlug));
+  }
+  if (input.q) {
+    const pattern = `%${input.q}%`;
+    const search = or(
+      ilike(signalSubmissions.headline, pattern),
+      ilike(signalSubmissions.body, pattern),
+      sql`${signalSubmissions.accountId}::text ilike ${pattern}`,
+      sql`${signalSubmissions.id}::text ilike ${pattern}`,
+    );
+    if (search) {
+      filters.push(search);
+    }
+  }
+
+  const base = db
     .select({
       id: signalSubmissions.id,
       accountId: signalSubmissions.accountId,
       communitySlug: communities.slug,
       headline: signalSubmissions.headline,
+      body: signalSubmissions.body,
       status: signalSubmissions.status,
+      reviewReason: signalSubmissions.reviewReason,
+      reviewedAt: signalSubmissions.reviewedAt,
+      reviewedByAccountId: signalSubmissions.reviewedByAccountId,
       createdAt: signalSubmissions.createdAt,
+      updatedAt: signalSubmissions.updatedAt,
+    })
+    .from(signalSubmissions)
+    .innerJoin(communities, eq(communities.id, signalSubmissions.communityId));
+  const filtered = filters.length === 0 ? base : base.where(and(...filters));
+  return filtered.orderBy(desc(signalSubmissions.createdAt)).limit(input.limit);
+}
+
+export async function getPlatformSubmissionDetail(db: Db, submissionId: string) {
+  const rows = await db
+    .select({
+      id: signalSubmissions.id,
+      accountId: signalSubmissions.accountId,
+      communitySlug: communities.slug,
+      communityId: communities.id,
+      headline: signalSubmissions.headline,
+      body: signalSubmissions.body,
+      status: signalSubmissions.status,
+      reviewReason: signalSubmissions.reviewReason,
+      reviewedAt: signalSubmissions.reviewedAt,
+      reviewedByAccountId: signalSubmissions.reviewedByAccountId,
+      createdAt: signalSubmissions.createdAt,
+      updatedAt: signalSubmissions.updatedAt,
     })
     .from(signalSubmissions)
     .innerJoin(communities, eq(communities.id, signalSubmissions.communityId))
-    .orderBy(desc(signalSubmissions.createdAt))
-    .limit(input.limit);
+    .where(eq(signalSubmissions.id, submissionId))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-export async function listPlatformDiscussions(db: Db, input: { limit: number }) {
+export async function listPlatformDiscussions(
+  db: Db,
+  input: {
+    limit: number;
+    hiddenOnly?: boolean;
+    communitySlug?: string;
+    q?: string;
+  },
+) {
+  const filters: SQL[] = [isNotNull(actors.accountId)];
+  if (input.hiddenOnly) {
+    filters.push(isNotNull(signalDiscussionContributions.hiddenAt));
+  }
+  if (input.communitySlug) {
+    filters.push(eq(communities.slug, input.communitySlug));
+  }
+  if (input.q) {
+    const pattern = `%${input.q}%`;
+    const search = or(
+      ilike(signalDiscussionContributions.text, pattern),
+      ilike(signals.slug, pattern),
+      sql`${actors.accountId}::text ilike ${pattern}`,
+      sql`${signalDiscussionContributions.id}::text ilike ${pattern}`,
+    );
+    if (search) {
+      filters.push(search);
+    }
+  }
+
   return db
     .select({
       contributionId: signalDiscussionContributions.id,
@@ -252,6 +336,9 @@ export async function listPlatformDiscussions(db: Db, input: { limit: number }) 
       intent: signalDiscussionContributions.intent,
       body: signalDiscussionContributions.text,
       accountId: actors.accountId,
+      hidden: sql<boolean>`${signalDiscussionContributions.hiddenAt} is not null`.mapWith(Boolean),
+      hiddenAt: signalDiscussionContributions.hiddenAt,
+      hiddenReason: signalDiscussionContributions.hiddenReason,
       createdAt: signalDiscussionContributions.createdAt,
     })
     .from(signalDiscussionContributions)
@@ -262,7 +349,7 @@ export async function listPlatformDiscussions(db: Db, input: { limit: number }) 
     .innerJoin(signals, eq(signals.id, signalDiscussionSessions.signalId))
     .innerJoin(communities, eq(communities.id, signals.communityId))
     .innerJoin(actors, eq(actors.id, signalDiscussionContributions.actorId))
-    .where(isNotNull(actors.accountId))
+    .where(and(...filters))
     .orderBy(desc(signalDiscussionContributions.createdAt))
     .limit(input.limit);
 }
@@ -396,7 +483,8 @@ export async function getPlatformStatusCounts(db: Db) {
 
   const [submissionStats] = await db
     .select({ pendingReview: count(signalSubmissions.id) })
-    .from(signalSubmissions);
+    .from(signalSubmissions)
+    .where(eq(signalSubmissions.status, 'pending_review'));
 
   const [communityStats] = await db.select({ total: count(communities.id) }).from(communities);
 

@@ -402,6 +402,21 @@ export const PlatformSignalActionResponseSchema = Type.Object(
   { additionalProperties: false, $id: 'PlatformSignalActionResponse' },
 );
 
+export const PlatformSubmissionAllowedActionSchema = Type.Union(
+  [Type.Literal('reject'), Type.Literal('restore')],
+  { $id: 'PlatformSubmissionAllowedAction' },
+);
+
+export const PlatformSubmissionsQuerySchema = Type.Object(
+  {
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 50 })),
+    status: Type.Optional(Type.Union([Type.Literal('pending_review'), Type.Literal('rejected')])),
+    communitySlug: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+    q: Type.Optional(Type.String({ minLength: 1, maxLength: 320 })),
+  },
+  { additionalProperties: false, $id: 'PlatformSubmissionsQuery' },
+);
+
 export const PlatformSubmissionsResponseSchema = Type.Object(
   {
     data: Type.Object(
@@ -413,8 +428,14 @@ export const PlatformSubmissionsResponseSchema = Type.Object(
               accountId: Type.String({ format: 'uuid' }),
               communitySlug: Type.String(),
               headline: Type.String(),
-              status: Type.String(),
+              body: Type.String(),
+              status: Type.Union([Type.Literal('pending_review'), Type.Literal('rejected')]),
+              reviewReason: Type.Union([Type.String(), Type.Null()]),
+              reviewedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+              reviewedByAccountId: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
               createdAt: Type.String({ format: 'date-time' }),
+              updatedAt: Type.String({ format: 'date-time' }),
+              allowedActions: Type.Array(PlatformSubmissionAllowedActionSchema),
             },
             { additionalProperties: false },
           ),
@@ -424,6 +445,79 @@ export const PlatformSubmissionsResponseSchema = Type.Object(
     ),
   },
   { additionalProperties: false, $id: 'PlatformSubmissionsResponse' },
+);
+
+export const PlatformSubmissionIdParamsSchema = Type.Object(
+  {
+    submissionId: Type.String({ format: 'uuid' }),
+  },
+  { additionalProperties: false, $id: 'PlatformSubmissionIdParams' },
+);
+
+export const PlatformSubmissionRejectBodySchema = Type.Object(
+  {
+    reason: SignalHideReasonSchema,
+  },
+  { additionalProperties: false, $id: 'PlatformSubmissionRejectBody' },
+);
+
+export const PlatformSubmissionActionResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        id: Type.String({ format: 'uuid' }),
+        accountId: Type.String({ format: 'uuid' }),
+        communitySlug: Type.String(),
+        status: Type.Union([Type.Literal('pending_review'), Type.Literal('rejected')]),
+        reviewReason: Type.Union([Type.String(), Type.Null()]),
+        reviewedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+        reviewedByAccountId: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
+        changed: Type.Boolean(),
+        allowedActions: Type.Array(PlatformSubmissionAllowedActionSchema),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformSubmissionActionResponse' },
+);
+
+export const PlatformSubmissionDetailResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        id: Type.String({ format: 'uuid' }),
+        accountId: Type.String({ format: 'uuid' }),
+        communitySlug: Type.String(),
+        communityId: Type.String({ format: 'uuid' }),
+        headline: Type.String(),
+        body: Type.String(),
+        status: Type.Union([Type.Literal('pending_review'), Type.Literal('rejected')]),
+        reviewReason: Type.Union([Type.String(), Type.Null()]),
+        reviewedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+        reviewedByAccountId: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
+        createdAt: Type.String({ format: 'date-time' }),
+        updatedAt: Type.String({ format: 'date-time' }),
+        allowedActions: Type.Array(PlatformSubmissionAllowedActionSchema),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformSubmissionDetailResponse' },
+);
+
+export const PlatformDiscussionAllowedActionSchema = Type.Union(
+  [Type.Literal('hide'), Type.Literal('unhide')],
+  { $id: 'PlatformDiscussionAllowedAction' },
+);
+
+export const PlatformDiscussionsQuerySchema = Type.Object(
+  {
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 50 })),
+    hiddenOnly: Type.Optional(Type.Boolean({ default: false })),
+    communitySlug: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+    q: Type.Optional(Type.String({ minLength: 1, maxLength: 320 })),
+  },
+  { additionalProperties: false, $id: 'PlatformDiscussionsQuery' },
 );
 
 export const PlatformDiscussionsResponseSchema = Type.Object(
@@ -441,7 +535,11 @@ export const PlatformDiscussionsResponseSchema = Type.Object(
               intent: Type.String(),
               body: Type.String(),
               accountId: Type.String({ format: 'uuid' }),
+              hidden: Type.Boolean(),
+              hiddenAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+              hiddenReason: Type.Union([Type.String(), Type.Null()]),
               createdAt: Type.String({ format: 'date-time' }),
+              allowedActions: Type.Array(PlatformDiscussionAllowedActionSchema),
             },
             { additionalProperties: false },
           ),
@@ -451,6 +549,39 @@ export const PlatformDiscussionsResponseSchema = Type.Object(
     ),
   },
   { additionalProperties: false, $id: 'PlatformDiscussionsResponse' },
+);
+
+export const PlatformDiscussionContributionIdParamsSchema = Type.Object(
+  {
+    contributionId: Type.String({ format: 'uuid' }),
+  },
+  { additionalProperties: false, $id: 'PlatformDiscussionContributionIdParams' },
+);
+
+export const PlatformDiscussionHideBodySchema = Type.Object(
+  {
+    reason: SignalHideReasonSchema,
+  },
+  { additionalProperties: false, $id: 'PlatformDiscussionHideBody' },
+);
+
+export const PlatformDiscussionActionResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        contributionId: Type.String({ format: 'uuid' }),
+        signalId: Type.String({ format: 'uuid' }),
+        accountId: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
+        hidden: Type.Boolean(),
+        hiddenAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+        hiddenReason: Type.Union([Type.String(), Type.Null()]),
+        changed: Type.Boolean(),
+        allowedActions: Type.Array(PlatformDiscussionAllowedActionSchema),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformDiscussionActionResponse' },
 );
 
 export const PlatformAuditQuerySchema = Type.Object(
@@ -644,4 +775,15 @@ export type PlatformAccountActionResponse = Static<typeof PlatformAccountActionR
 export type PlatformMembershipsResponse = Static<typeof PlatformMembershipsResponseSchema>;
 export type PlatformMembershipActionResponse = Static<
   typeof PlatformMembershipActionResponseSchema
+>;
+export type PlatformSubmissionsResponse = Static<typeof PlatformSubmissionsResponseSchema>;
+export type PlatformSubmissionDetailResponse = Static<
+  typeof PlatformSubmissionDetailResponseSchema
+>;
+export type PlatformSubmissionActionResponse = Static<
+  typeof PlatformSubmissionActionResponseSchema
+>;
+export type PlatformDiscussionsResponse = Static<typeof PlatformDiscussionsResponseSchema>;
+export type PlatformDiscussionActionResponse = Static<
+  typeof PlatformDiscussionActionResponseSchema
 >;

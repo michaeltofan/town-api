@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
   actors,
@@ -91,7 +91,12 @@ export async function listDiscussionContributionsForSession(
       signalDiscussionMediaUploads,
       eq(signalDiscussionMediaUploads.id, signalDiscussionContributions.mediaUploadId),
     )
-    .where(eq(signalDiscussionContributions.sessionId, sessionId))
+    .where(
+      and(
+        eq(signalDiscussionContributions.sessionId, sessionId),
+        isNull(signalDiscussionContributions.hiddenAt),
+      ),
+    )
     .orderBy(asc(signalDiscussionContributions.createdAt));
 
   return rows.map((row) => ({

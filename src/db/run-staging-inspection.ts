@@ -57,10 +57,10 @@ export type StagingInspectionResult = {
 type ExpectedColumn = {
   readonly column_name: string;
   readonly data_type: string;
-  readonly is_nullable: 'NO';
+  readonly is_nullable: 'YES' | 'NO';
 };
 
-/** Hardcoded expected shape for town.signal_submissions (migration 0013). */
+/** Hardcoded expected shape for town.signal_submissions (moderation-ready). */
 export const EXPECTED_SIGNAL_SUBMISSIONS_COLUMNS: readonly ExpectedColumn[] = [
   { column_name: 'id', data_type: 'uuid', is_nullable: 'NO' },
   { column_name: 'account_id', data_type: 'uuid', is_nullable: 'NO' },
@@ -71,6 +71,10 @@ export const EXPECTED_SIGNAL_SUBMISSIONS_COLUMNS: readonly ExpectedColumn[] = [
   { column_name: 'status', data_type: 'text', is_nullable: 'NO' },
   { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
   { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
+  // Added by 0035 after created_at/updated_at (ordinal append order).
+  { column_name: 'reviewed_at', data_type: 'timestamp with time zone', is_nullable: 'YES' },
+  { column_name: 'reviewed_by_account_id', data_type: 'uuid', is_nullable: 'YES' },
+  { column_name: 'review_reason', data_type: 'text', is_nullable: 'YES' },
 ];
 
 export type RunStagingInspectionOptions = {
@@ -275,6 +279,14 @@ async function assertSignalSubmissionsSchema(client: PoolClient): Promise<void> 
       foreign_column_name: 'id',
       confdeltype: 'r',
     },
+    {
+      conname: 'signal_submissions_reviewed_by_account_id_fkey',
+      column_name: 'reviewed_by_account_id',
+      foreign_table_schema: 'town',
+      foreign_table_name: 'accounts',
+      foreign_column_name: 'id',
+      confdeltype: 'r',
+    },
   ];
 
   if (JSON.stringify(foreignKeys.rows) !== JSON.stringify(expectedFks)) {
@@ -303,18 +315,24 @@ async function assertSignalSubmissionsSchema(client: PoolClient): Promise<void> 
     );
   }
   const definition = checkRow.definition.toLowerCase();
-  if (!definition.includes('pending_review')) {
+  if (!definition.includes('pending_review') || !definition.includes('rejected')) {
     throw new StagingInspectionError(
       'SCHEMA_MISMATCH',
-      'signal_submissions_status_valid must permit pending_review',
+      'signal_submissions_status_valid must permit pending_review and rejected',
     );
   }
-  // Reject definitions that clearly allow additional literals besides pending_review.
-  const quotedLiterals = [...checkRow.definition.matchAll(/'([^']+)'/g)].map((match) => match[1]);
-  if (quotedLiterals.length !== 1 || quotedLiterals[0] !== 'pending_review') {
+  // Reject definitions that allow literals beyond the moderation-ready statuses.
+  const quotedLiterals = [...checkRow.definition.matchAll(/'([^']+)'/g)].map(
+    (match) => match[1] ?? '',
+  );
+  const allowedStatuses = new Set(['pending_review', 'rejected']);
+  if (
+    quotedLiterals.length !== 2 ||
+    quotedLiterals.some((literal) => !allowedStatuses.has(literal))
+  ) {
     throw new StagingInspectionError(
       'SCHEMA_MISMATCH',
-      'signal_submissions_status_valid must permit exactly pending_review',
+      'signal_submissions_status_valid must permit exactly pending_review and rejected',
     );
   }
 

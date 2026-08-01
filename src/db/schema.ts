@@ -314,7 +314,11 @@ export const platformAuditEvents = town.table(
         'payment_inspected',
         'membership_granted',
         'membership_extended',
-        'membership_cancellation_scheduled'
+        'membership_cancellation_scheduled',
+        'submission_rejected',
+        'submission_restored',
+        'discussion_contribution_hidden',
+        'discussion_contribution_unhidden'
       )`,
     ),
     index('platform_audit_events_occurred_at_idx').on(table.occurredAt),
@@ -429,6 +433,9 @@ export const signalSubmissions = town.table(
     headline: text('headline').notNull(),
     body: text('body').notNull(),
     status: text('status').notNull(),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'string' }),
+    reviewedByAccountId: uuid('reviewed_by_account_id'),
+    reviewReason: text('review_reason'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
@@ -448,8 +455,34 @@ export const signalSubmissions = town.table(
       foreignColumns: [communities.id],
       name: 'signal_submissions_community_id_fkey',
     }).onDelete('restrict'),
-    check('signal_submissions_status_valid', sql`${table.status} in ('pending_review')`),
+    foreignKey({
+      columns: [table.reviewedByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'signal_submissions_reviewed_by_account_id_fkey',
+    }).onDelete('restrict'),
+    check(
+      'signal_submissions_status_valid',
+      sql`${table.status} in ('pending_review', 'rejected')`,
+    ),
+    check(
+      'signal_submissions_review_reason_valid',
+      sql`${table.reviewReason} is null or ${table.reviewReason} in ('immoral', 'abusive', 'spam', 'off_topic', 'illegal', 'other')`,
+    ),
+    check(
+      'signal_submissions_review_state_consistent',
+      sql`(
+        (${table.status} = 'pending_review'
+          and ${table.reviewedAt} is null
+          and ${table.reviewedByAccountId} is null
+          and ${table.reviewReason} is null)
+        or (${table.status} = 'rejected'
+          and ${table.reviewedAt} is not null
+          and ${table.reviewedByAccountId} is not null
+          and ${table.reviewReason} is not null)
+      )`,
+    ),
     index('signal_submissions_account_created_at_idx').on(table.accountId, table.createdAt),
+    index('signal_submissions_status_created_at_idx').on(table.status, table.createdAt),
   ],
 );
 
@@ -589,6 +622,9 @@ export const signalDiscussionContributions = town.table(
     text: text('text').notNull(),
     intent: text('intent').notNull(),
     mediaUploadId: uuid('media_upload_id'),
+    hiddenAt: timestamp('hidden_at', { withTimezone: true, mode: 'string' }),
+    hiddenReason: text('hidden_reason'),
+    hiddenByAccountId: uuid('hidden_by_account_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -612,13 +648,33 @@ export const signalDiscussionContributions = town.table(
       foreignColumns: [signalDiscussionMediaUploads.id],
       name: 'signal_discussion_contributions_media_upload_id_fkey',
     }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.hiddenByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'signal_discussion_contributions_hidden_by_account_id_fkey',
+    }).onDelete('restrict'),
     unique('signal_discussion_contributions_media_upload_id_unique').on(table.mediaUploadId),
     check(
       'signal_discussion_contributions_intent_valid',
       sql`${table.intent} in ('observation', 'proposal', 'next_step')`,
     ),
+    check(
+      'signal_discussion_contributions_hidden_reason_valid',
+      sql`${table.hiddenReason} is null or ${table.hiddenReason} in ('immoral', 'abusive', 'spam', 'off_topic', 'illegal', 'other')`,
+    ),
+    check(
+      'signal_discussion_contributions_hidden_state_consistent',
+      sql`(
+        (${table.hiddenAt} is null and ${table.hiddenReason} is null and ${table.hiddenByAccountId} is null)
+        or (${table.hiddenAt} is not null and ${table.hiddenReason} is not null and ${table.hiddenByAccountId} is not null)
+      )`,
+    ),
     index('signal_discussion_contributions_session_created_at_idx').on(
       table.sessionId,
+      table.createdAt,
+    ),
+    index('signal_discussion_contributions_hidden_created_at_idx').on(
+      table.hiddenAt,
       table.createdAt,
     ),
   ],
@@ -1546,7 +1602,11 @@ export type PlatformAuditAction =
   | 'payment_inspected'
   | 'membership_granted'
   | 'membership_extended'
-  | 'membership_cancellation_scheduled';
+  | 'membership_cancellation_scheduled'
+  | 'submission_rejected'
+  | 'submission_restored'
+  | 'discussion_contribution_hidden'
+  | 'discussion_contribution_unhidden';
 
 export type SignalHideReason = 'immoral' | 'abusive' | 'spam' | 'off_topic' | 'illegal' | 'other';
 
@@ -1676,5 +1736,5 @@ export type MembershipSourceEventResult = 'applied' | 'replayed' | 'rejected' | 
 export type CivicAccessLevel = 'visitor' | 'read_only' | 'participant';
 export type LocalParticipationEligibility =
   'eligible' | 'not_verified' | 'expired' | 'mismatched_community' | 'unavailable';
-export type SignalSubmissionStatus = 'pending_review';
+export type SignalSubmissionStatus = 'pending_review' | 'rejected';
 export type StripeCheckoutAttemptStatus = 'creating' | 'open' | 'completed' | 'expired' | 'failed';
