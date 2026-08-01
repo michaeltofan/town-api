@@ -142,11 +142,13 @@ describe('authentication ceremony repositories', () => {
   async function prepareActiveAccount(accountId: string): Promise<{
     emailId: string;
     passkeyId: string;
+    passwordCredentialId: string;
     actorId: string;
   }> {
     const suffix = accountId.replace(/-/g, '').slice(-12);
     const emailId = `32000000-0000-4000-8000-${suffix}`;
     const passkeyId = `33000000-0000-4000-8000-${suffix}`;
+    const passwordCredentialId = `37000000-0000-4000-8000-${suffix}`;
     const actorId = `34000000-0000-4000-8000-${suffix}`;
 
     await createAccountShell(db(), { id: accountId, createdAt: T0, updatedAt: T0 });
@@ -166,7 +168,7 @@ describe('authentication ceremony repositories', () => {
     });
     const password = await hashPassword('test-password-15chars');
     await createAccountPasswordCredential(db(), {
-      id: `37000000-0000-4000-8000-${suffix}`,
+      id: passwordCredentialId,
       accountId,
       passwordHash: password.hash,
       algorithm: password.algorithm,
@@ -201,7 +203,7 @@ describe('authentication ceremony repositories', () => {
       now: T3,
     });
     await transitionAccountState(db(), { accountId, to: 'active', at: T3 });
-    return { emailId, passkeyId, actorId };
+    return { emailId, passkeyId, passwordCredentialId, actorId };
   }
 
   describe('setup grants', () => {
@@ -422,7 +424,7 @@ describe('authentication ceremony repositories', () => {
       expect(columns.rows.map((row) => row.column_name)).not.toContain('token');
     });
 
-    it('rejects accounts without verified email, passkey, or linked actor', async () => {
+    it('rejects accounts without verified email, active credential, or linked actor', async () => {
       const noEmailVerified = '30000000-0000-4000-8000-000000000015';
       await createAccountShell(db(), { id: noEmailVerified, createdAt: T0, updatedAt: T0 });
       await addAccountEmail(db(), {
@@ -435,25 +437,30 @@ describe('authentication ceremony repositories', () => {
       });
       // Force active-looking status without requirements via direct SQL is forbidden;
       // instead assert pending cannot create sessions (already covered) and incomplete active path:
-      const noPasskey = '30000000-0000-4000-8000-000000000016';
-      await preparePendingPasskeyAccount(noPasskey);
+      const noCredential = '30000000-0000-4000-8000-000000000016';
+      await preparePendingPasskeyAccount(noCredential);
+      const noCredentialSuffix = noCredential.replace(/-/g, '').slice(-12);
+      await db().execute(
+        sql`UPDATE town.account_password_credentials SET revoked_at = ${T3}
+         WHERE id = ${`35000000-0000-4000-8000-${noCredentialSuffix}`}`,
+      );
       const actorId = '34000000-0000-4000-8000-000000000016';
       await createCivicActor(db(), {
         id: actorId,
-        displayLabel: 'No passkey actor',
+        displayLabel: 'No credential actor',
         communityId: FOUNDATION_COMMUNITY_IDS.milanoIt,
         createdAt: T2,
         updatedAt: T2,
       });
-      await linkActorToAccount(db(), { actorId, accountId: noPasskey, at: T3 });
+      await linkActorToAccount(db(), { actorId, accountId: noCredential, at: T3 });
       await ensureWebAuthnUserHandle(db(), {
-        accountId: noPasskey,
-        handle: deterministicSha256(`ceremony-webauthn-handle-${noPasskey}`),
+        accountId: noCredential,
+        handle: deterministicSha256(`ceremony-webauthn-handle-${noCredential}`),
         now: T3,
       });
       await expect(
-        transitionAccountState(db(), { accountId: noPasskey, to: 'active', at: T3 }),
-      ).rejects.toMatchObject({ code: 'ACTIVE_REQUIRES_ACTIVE_PASSKEY' });
+        transitionAccountState(db(), { accountId: noCredential, to: 'active', at: T3 }),
+      ).rejects.toMatchObject({ code: 'ACTIVE_REQUIRES_ACTIVE_CREDENTIAL' });
 
       const noActor = '30000000-0000-4000-8000-000000000017';
       await preparePendingPasskeyAccount(noActor);
@@ -492,20 +499,23 @@ describe('authentication ceremony repositories', () => {
         }),
       ).rejects.toMatchObject({ code: 'SESSION_REQUIRES_VERIFIED_PRIMARY_EMAIL' });
 
-      const noPasskeyActive = '30000000-0000-4000-8000-000000000019';
-      const preparedPk = await prepareActiveAccount(noPasskeyActive);
+      const noCredentialActive = '30000000-0000-4000-8000-000000000019';
+      const preparedPk = await prepareActiveAccount(noCredentialActive);
       await db().execute(
         sql`UPDATE town.passkey_credentials SET revoked_at = ${T3} WHERE id = ${preparedPk.passkeyId}`,
+      );
+      await db().execute(
+        sql`UPDATE town.account_password_credentials SET revoked_at = ${T3} WHERE id = ${preparedPk.passwordCredentialId}`,
       );
       await expect(
         createAccountSession(db(), {
           id: '36000000-0000-4000-8000-000000000019',
-          accountId: noPasskeyActive,
-          tokenHash: deterministicSha256('session-no-passkey'),
+          accountId: noCredentialActive,
+          tokenHash: deterministicSha256('session-no-credential'),
           clientType: 'mobile',
           createdAt: T3,
         }),
-      ).rejects.toMatchObject({ code: 'SESSION_REQUIRES_ACTIVE_PASSKEY' });
+      ).rejects.toMatchObject({ code: 'SESSION_REQUIRES_ACTIVE_CREDENTIAL' });
 
       const noActorActive = '30000000-0000-4000-8000-00000000001a';
       const preparedActor = await prepareActiveAccount(noActorActive);

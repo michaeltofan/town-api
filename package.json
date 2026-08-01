@@ -37,6 +37,7 @@
     "account:mark-platform-operator": "tsx scripts/mark-platform-operator.ts",
     "account:mark-platform-operator:production": "node dist/scripts/mark-platform-operator.js",
     "platform:moderation-fixtures": "tsx scripts/seed-platform-moderation-fixtures.ts",
+    "account:bootstrap-platform-owner": "tsx scripts/bootstrap-platform-owner.ts",
     "identity:fixtures:load": "tsx scripts/load-identity-fixtures.ts",
     "identity:contract:generate": "tsx scripts/identity-contract.ts generate",
     "identity:contract:check": "tsx scripts/identity-contract.ts check",
