@@ -232,6 +232,13 @@
       "when": 1786041600000,
       "tag": "0032_member_signal_publish",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786128000000,
+      "tag": "0033_platform_operators",
+      "breakpoints": true
     }
   ]
 }

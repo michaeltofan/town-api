@@ -29,6 +29,7 @@ import { passwordChangeRoutes } from './routes/password-change.js';
 import { signalsRoutes } from './routes/signals.js';
 import { signalModerationRoutes } from './routes/signal-moderation.js';
 import { accountModerationRoutes } from './routes/account-moderation.js';
+import { platformRoutes } from './routes/platform.js';
 import { billingRoutes } from './routes/billing.js';
 import { googlePlayRoutes } from './routes/google-play.js';
 import { googlePlayRtdnRoutes } from './routes/google-play-rtdn.js';
@@ -166,6 +167,8 @@ const SENSITIVE_HEADER_REDACT = {
     '*.CONTROLLED_CONFIRMATION_KEY',
     '*.OWNER_SETUP_CODE',
     '*.OWNER_SETUP_CODE_EXPECTED',
+    '*.PLATFORM_OPERATOR_SETUP_CODE',
+    '*.PLATFORM_OPERATOR_SETUP_CODE_EXPECTED',
   ],
   censor: '[Redacted]',
 };
@@ -251,6 +254,13 @@ export async function buildApp(options: BuildAppOptions) {
       : {}),
   });
   await app.register(accountModerationRoutes, {
+    env: options.env,
+    ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
+    ...(options.membership?.generateId !== undefined
+      ? { generateId: options.membership.generateId }
+      : {}),
+  });
+  await app.register(platformRoutes, {
     env: options.env,
     ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
     ...(options.membership?.generateId !== undefined

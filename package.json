@@ -34,6 +34,8 @@
     "db:inspect:staging:production": "node dist/scripts/db-inspect-staging.js",
     "account:mark-owner": "tsx scripts/mark-account-owner.ts",
     "account:mark-owner:production": "node dist/scripts/mark-account-owner.js",
+    "account:mark-platform-operator": "tsx scripts/mark-platform-operator.ts",
+    "account:mark-platform-operator:production": "node dist/scripts/mark-platform-operator.js",
     "identity:fixtures:load": "tsx scripts/load-identity-fixtures.ts",
     "identity:contract:generate": "tsx scripts/identity-contract.ts generate",
     "identity:contract:check": "tsx scripts/identity-contract.ts check",
