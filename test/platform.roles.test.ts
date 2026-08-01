@@ -21,6 +21,12 @@ describe('platform operator roles', () => {
     expect(operatorHasCapability('role_admin', 'manage_operators')).toBe(true);
   });
 
+  it('grants manage_memberships only from ops_admin upward', () => {
+    expect(operatorHasCapability('account_admin', 'manage_memberships')).toBe(false);
+    expect(operatorHasCapability('ops_admin', 'manage_memberships')).toBe(true);
+    expect(operatorHasCapability('role_admin', 'manage_memberships')).toBe(true);
+  });
+
   it('allows investigators to read payments and audit', () => {
     expect(operatorHasCapability('viewer', 'read_payments')).toBe(false);
     expect(operatorHasCapability('investigator', 'read_payments')).toBe(true);

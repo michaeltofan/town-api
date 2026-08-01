@@ -28,7 +28,7 @@ describe('membership contract', () => {
       'paid_pending_binding',
       'suspended',
     ]);
-    expect(doc.entitlement.sources).toEqual(['test_fixture', 'stripe', 'google_play']);
+    expect(doc.entitlement.sources).toEqual(['test_fixture', 'stripe', 'google_play', 'admin']);
     expect(doc.sourceEvents.eventTypes).toEqual([
       'activate',
       'schedule_cancellation',

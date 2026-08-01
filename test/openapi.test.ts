@@ -83,11 +83,17 @@ describe('OpenAPI contract', () => {
     expect(scheme?.description?.toLowerCase()).toContain('temporary');
     expect(scheme?.description?.toLowerCase()).toContain('not public authentication');
 
-    // Membership foundation: self-read remains mutation-free; platform inventory is operator-only.
+    // Membership foundation: account self-read stays mutation-free; platform mutations are operator-only.
     const membershipPaths = Object.keys(document.paths)
       .filter((p) => p.includes('membership'))
       .sort();
-    expect(membershipPaths).toEqual(['/v1/account/membership', '/v1/platform/memberships']);
+    expect(membershipPaths).toEqual([
+      '/v1/account/membership',
+      '/v1/platform/memberships',
+      '/v1/platform/memberships/grant',
+      '/v1/platform/memberships/{accountId}/extend',
+      '/v1/platform/memberships/{accountId}/schedule-cancellation',
+    ]);
     const membership = document.paths['/v1/account/membership'] as Record<string, unknown>;
     expect(membership.get).toBeDefined();
     expect(membership.post).toBeUndefined();
@@ -100,6 +106,16 @@ describe('OpenAPI contract', () => {
     >;
     expect(platformMemberships.get).toBeDefined();
     expect(platformMemberships.post).toBeUndefined();
+    const grantPath = document.paths['/v1/platform/memberships/grant'] as
+      Record<string, unknown> | undefined;
+    const extendPath = document.paths['/v1/platform/memberships/{accountId}/extend'] as
+      Record<string, unknown> | undefined;
+    const scheduleCancellationPath = document.paths[
+      '/v1/platform/memberships/{accountId}/schedule-cancellation'
+    ] as Record<string, unknown> | undefined;
+    expect(grantPath?.post).toBeDefined();
+    expect(extendPath?.post).toBeDefined();
+    expect(scheduleCancellationPath?.post).toBeDefined();
 
     // Billing foundation: Stripe checkout/portal/webhook plus Google Play purchase and RTDN ingress.
     const billingPaths = Object.keys(document.paths)

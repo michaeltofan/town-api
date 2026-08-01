@@ -50,7 +50,7 @@ export function generateMembershipContractDocument(): unknown {
         'paid_pending_binding',
         'suspended',
       ],
-      sources: ['test_fixture', 'stripe', 'google_play'],
+      sources: ['test_fixture', 'stripe', 'google_play', 'admin'],
       versioning: {
         column: 'version',
         semantics: 'Monotonically increases by 1 on each applied transition',

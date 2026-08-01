@@ -239,6 +239,13 @@
       "when": 1786128000000,
       "tag": "0033_platform_operators",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1786214400000,
+      "tag": "0034_platform_membership_ops",
+      "breakpoints": true
     }
   ]
 }
