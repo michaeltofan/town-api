@@ -30,11 +30,11 @@ function schemaOkQueryHandler(text: string): QueryResult<Record<string, unknown>
       { column_name: 'headline', data_type: 'text', is_nullable: 'NO' },
       { column_name: 'body', data_type: 'text', is_nullable: 'NO' },
       { column_name: 'status', data_type: 'text', is_nullable: 'NO' },
+      { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
+      { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
       { column_name: 'reviewed_at', data_type: 'timestamp with time zone', is_nullable: 'YES' },
       { column_name: 'reviewed_by_account_id', data_type: 'uuid', is_nullable: 'YES' },
       { column_name: 'review_reason', data_type: 'text', is_nullable: 'YES' },
-      { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
-      { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
     ]);
   }
   if (text.includes("con.contype = 'p'")) {

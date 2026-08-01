@@ -69,11 +69,12 @@ export const EXPECTED_SIGNAL_SUBMISSIONS_COLUMNS: readonly ExpectedColumn[] = [
   { column_name: 'headline', data_type: 'text', is_nullable: 'NO' },
   { column_name: 'body', data_type: 'text', is_nullable: 'NO' },
   { column_name: 'status', data_type: 'text', is_nullable: 'NO' },
+  { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
+  { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
+  // Added by 0035 after created_at/updated_at (ordinal append order).
   { column_name: 'reviewed_at', data_type: 'timestamp with time zone', is_nullable: 'YES' },
   { column_name: 'reviewed_by_account_id', data_type: 'uuid', is_nullable: 'YES' },
   { column_name: 'review_reason', data_type: 'text', is_nullable: 'YES' },
-  { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
-  { column_name: 'updated_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
 ];
 
 export type RunStagingInspectionOptions = {
