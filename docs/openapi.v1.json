@@ -14631,6 +14631,262 @@
                     "data": {
                       "additionalProperties": false,
                       "properties": {
+                        "components": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "api": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "detail": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 160,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "ok"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "degraded"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "fail"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "timeout"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "disabled"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "misconfigured"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "detail"
+                              ],
+                              "type": "object"
+                            },
+                            "database": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "detail": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 160,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "ok"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "degraded"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "fail"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "timeout"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "disabled"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "misconfigured"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "detail"
+                              ],
+                              "type": "object"
+                            },
+                            "email": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "detail": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 160,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "ok"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "degraded"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "fail"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "timeout"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "disabled"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "misconfigured"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "detail"
+                              ],
+                              "type": "object"
+                            },
+                            "stripe": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "detail": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 160,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "ok"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "degraded"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "fail"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "timeout"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "disabled"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "misconfigured"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "detail"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "api",
+                            "database",
+                            "email",
+                            "stripe"
+                          ],
+                          "type": "object"
+                        },
                         "counts": {
                           "additionalProperties": false,
                           "properties": {
@@ -14911,6 +15167,7 @@
                       },
                       "required": [
                         "health",
+                        "components",
                         "counts"
                       ],
                       "type": "object"

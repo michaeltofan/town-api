@@ -38,6 +38,23 @@ export const PlatformSessionResponseSchema = Type.Object(
   { additionalProperties: false, $id: 'PlatformSessionResponse' },
 );
 
+export const PlatformComponentStatusSchema = Type.Union([
+  Type.Literal('ok'),
+  Type.Literal('degraded'),
+  Type.Literal('fail'),
+  Type.Literal('timeout'),
+  Type.Literal('disabled'),
+  Type.Literal('misconfigured'),
+]);
+
+export const PlatformComponentCheckSchema = Type.Object(
+  {
+    status: PlatformComponentStatusSchema,
+    detail: Type.Union([Type.String({ maxLength: 160 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 export const PlatformStatusResponseSchema = Type.Object(
   {
     data: Type.Object(
@@ -76,6 +93,15 @@ export const PlatformStatusResponseSchema = Type.Object(
               },
               { additionalProperties: false },
             ),
+          },
+          { additionalProperties: false },
+        ),
+        components: Type.Object(
+          {
+            api: PlatformComponentCheckSchema,
+            database: PlatformComponentCheckSchema,
+            email: PlatformComponentCheckSchema,
+            stripe: PlatformComponentCheckSchema,
           },
           { additionalProperties: false },
         ),

@@ -149,6 +149,14 @@ describe('platform operator area', () => {
     expect(status.statusCode).toBe(200);
     const body = status.json<PlatformStatusResponse>();
     expect(body.data.health.live).toBe('ok');
+    expect(body.data.components.api.status).toBe('ok');
+    expect(body.data.components.database.status).toBe('ok');
+    expect(['ok', 'disabled', 'misconfigured', 'fail', 'timeout', 'degraded']).toContain(
+      body.data.components.email.status,
+    );
+    expect(['ok', 'disabled', 'misconfigured', 'fail', 'timeout', 'degraded']).toContain(
+      body.data.components.stripe.status,
+    );
     expect(body.data.counts.accounts.total).toBeGreaterThan(0);
 
     const audits = await ctx.app.database.db
