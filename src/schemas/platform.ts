@@ -55,6 +55,44 @@ export const PlatformComponentCheckSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const PlatformTechnicalErrorsQuerySchema = Type.Object(
+  {
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50, default: 20 })),
+  },
+  { additionalProperties: false, $id: 'PlatformTechnicalErrorsQuery' },
+);
+
+export const PlatformTechnicalErrorsResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        errors: Type.Array(
+          Type.Object(
+            {
+              id: Type.String({ format: 'uuid' }),
+              occurredAt: Type.String({ format: 'date-time' }),
+              requestId: Type.String(),
+              method: Type.Union([Type.String(), Type.Null()]),
+              route: Type.Union([Type.String(), Type.Null()]),
+              statusCode: Type.Integer({ minimum: 500, maximum: 599 }),
+              errorCode: Type.String(),
+              errorName: Type.Union([Type.String(), Type.Null()]),
+              message: Type.String(),
+              environment: Type.String(),
+              service: Type.String(),
+              version: Type.String(),
+              commitSha: Type.Union([Type.String(), Type.Null()]),
+            },
+            { additionalProperties: false },
+          ),
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformTechnicalErrorsResponse' },
+);
+
 export const PlatformStatusResponseSchema = Type.Object(
   {
     data: Type.Object(
@@ -796,6 +834,7 @@ export const PlatformOperatorActionResponseSchema = Type.Object(
 
 export type PlatformSessionResponse = Static<typeof PlatformSessionResponseSchema>;
 export type PlatformStatusResponse = Static<typeof PlatformStatusResponseSchema>;
+export type PlatformTechnicalErrorsResponse = Static<typeof PlatformTechnicalErrorsResponseSchema>;
 export type PlatformAccountsResponse = Static<typeof PlatformAccountsResponseSchema>;
 export type PlatformAccountActionResponse = Static<typeof PlatformAccountActionResponseSchema>;
 export type PlatformMembershipsResponse = Static<typeof PlatformMembershipsResponseSchema>;

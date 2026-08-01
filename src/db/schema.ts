@@ -318,7 +318,8 @@ export const platformAuditEvents = town.table(
         'submission_rejected',
         'submission_restored',
         'discussion_contribution_hidden',
-        'discussion_contribution_unhidden'
+        'discussion_contribution_unhidden',
+        'technical_errors_inspected'
       )`,
     ),
     index('platform_audit_events_occurred_at_idx').on(table.occurredAt),
@@ -1587,6 +1588,58 @@ export type AccountStatus =
 export type PlatformOperatorRole =
   'viewer' | 'investigator' | 'moderator' | 'account_admin' | 'ops_admin' | 'role_admin';
 
+/**
+ * Bounded durable buffer of recent server-side technical errors for platform ops.
+ * Stores only sanitized diagnostic fields — never bodies, headers, stacks, or secrets.
+ */
+export const platformTechnicalErrors = town.table(
+  'platform_technical_errors',
+  {
+    id: uuid('id').primaryKey(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull(),
+    requestId: text('request_id').notNull(),
+    method: text('method'),
+    route: text('route'),
+    statusCode: integer('status_code').notNull(),
+    errorCode: text('error_code').notNull(),
+    errorName: text('error_name'),
+    message: text('message').notNull(),
+    environment: text('environment').notNull(),
+    service: text('service').notNull(),
+    version: text('version').notNull(),
+    commitSha: text('commit_sha'),
+  },
+  (table) => [
+    check(
+      'platform_technical_errors_status_code_server',
+      sql`${table.statusCode} >= 500 and ${table.statusCode} <= 599`,
+    ),
+    check(
+      'platform_technical_errors_request_id_nonempty',
+      sql`char_length(${table.requestId}) > 0`,
+    ),
+    check(
+      'platform_technical_errors_error_code_nonempty',
+      sql`char_length(${table.errorCode}) > 0`,
+    ),
+    check('platform_technical_errors_message_nonempty', sql`char_length(${table.message}) > 0`),
+    check('platform_technical_errors_message_bounded', sql`char_length(${table.message}) <= 240`),
+    check(
+      'platform_technical_errors_route_bounded',
+      sql`${table.route} is null or char_length(${table.route}) <= 160`,
+    ),
+    check(
+      'platform_technical_errors_method_bounded',
+      sql`${table.method} is null or char_length(${table.method}) <= 16`,
+    ),
+    check(
+      'platform_technical_errors_error_name_bounded',
+      sql`${table.errorName} is null or char_length(${table.errorName}) <= 80`,
+    ),
+    index('platform_technical_errors_occurred_at_idx').on(table.occurredAt),
+  ],
+);
+
 export type PlatformAuditAction =
   | 'operator_granted'
   | 'operator_revoked'
@@ -1606,7 +1659,10 @@ export type PlatformAuditAction =
   | 'submission_rejected'
   | 'submission_restored'
   | 'discussion_contribution_hidden'
-  | 'discussion_contribution_unhidden';
+  | 'discussion_contribution_unhidden'
+  | 'technical_errors_inspected';
+
+export type PlatformTechnicalErrorRow = typeof platformTechnicalErrors.$inferSelect;
 
 export type SignalHideReason = 'immoral' | 'abusive' | 'spam' | 'off_topic' | 'illegal' | 'other';
 

@@ -30,6 +30,7 @@ import { signalsRoutes } from './routes/signals.js';
 import { signalModerationRoutes } from './routes/signal-moderation.js';
 import { accountModerationRoutes } from './routes/account-moderation.js';
 import { platformRoutes } from './routes/platform.js';
+import { appendPlatformTechnicalError } from './platform/repositories/technical-errors.js';
 import { billingRoutes } from './routes/billing.js';
 import { googlePlayRoutes } from './routes/google-play.js';
 import { googlePlayRtdnRoutes } from './routes/google-play-rtdn.js';
@@ -236,8 +237,19 @@ export async function buildApp(options: BuildAppOptions) {
   });
 
   const database = options.database ?? createDatabaseFromEnv(options.env);
+  const identity = buildIdentityFromEnv(options.env);
 
-  await app.register(errorHandlerPlugin);
+  await app.register(errorHandlerPlugin, {
+    recordTechnicalError: async (input) => {
+      await appendPlatformTechnicalError(database.db, {
+        ...input,
+        environment: identity.environment,
+        service: identity.service,
+        version: identity.version,
+        commitSha: identity.commitSha,
+      });
+    },
+  });
   await app.register(corsPlugin, { env: options.env });
   await app.register(cookie);
   await app.register(openApiPlugin);

@@ -54,6 +54,7 @@ import {
   schedulePlatformMembershipCancellation,
 } from '../platform/services/memberships.js';
 import { collectOperationalComponents } from '../platform/services/status-checks.js';
+import { listPlatformTechnicalErrors } from '../platform/repositories/technical-errors.js';
 import { DomainErrorResponseSchema } from '../schemas/error.js';
 import {
   PlatformAccountActionResponseSchema,
@@ -88,6 +89,8 @@ import {
   PlatformSignalsQuerySchema,
   PlatformSignalsResponseSchema,
   PlatformStatusResponseSchema,
+  PlatformTechnicalErrorsQuerySchema,
+  PlatformTechnicalErrorsResponseSchema,
   PlatformSubmissionActionResponseSchema,
   PlatformSubmissionDetailResponseSchema,
   PlatformSubmissionIdParamsSchema,
@@ -1519,6 +1522,54 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
   );
 
   app.get(
+    '/v1/platform/errors',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Recent sanitized technical errors for operator diagnosis',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        querystring: PlatformTechnicalErrorsQuerySchema,
+        response: {
+          200: PlatformTechnicalErrorsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_status');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const errors = await listPlatformTechnicalErrors(app.database.db, {
+        limit: request.query.limit ?? 20,
+      });
+      await audit(operator.accountId, 'technical_errors_inspected', request.id);
+
+      return {
+        data: {
+          errors: errors.map((row) => ({
+            id: row.id,
+            occurredAt: toIsoTimestamp(row.occurredAt),
+            requestId: row.requestId,
+            method: row.method,
+            route: row.route,
+            statusCode: row.statusCode,
+            errorCode: row.errorCode,
+            errorName: row.errorName,
+            message: row.message,
+            environment: row.environment,
+            service: row.service,
+            version: row.version,
+            commitSha: row.commitSha,
+          })),
+        },
+      };
+    },
+  );
+
+  app.get(
     '/v1/platform/audit',
     {
       schema: {
@@ -1890,6 +1941,7 @@ const PLATFORM_AUDIT_ACTIONS = new Set<PlatformAuditAction>([
   'submission_restored',
   'discussion_contribution_hidden',
   'discussion_contribution_unhidden',
+  'technical_errors_inspected',
 ]);
 
 function isPlatformAuditAction(value: string): value is PlatformAuditAction {

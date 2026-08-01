@@ -12575,6 +12575,193 @@
         ]
       }
     },
+    "/v1/platform/errors": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "commitSha": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "errorCode": {
+                                "type": "string"
+                              },
+                              "errorName": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "method": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "occurredAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "requestId": {
+                                "type": "string"
+                              },
+                              "route": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "service": {
+                                "type": "string"
+                              },
+                              "statusCode": {
+                                "maximum": 599,
+                                "minimum": 500,
+                                "type": "integer"
+                              },
+                              "version": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "occurredAt",
+                              "requestId",
+                              "method",
+                              "route",
+                              "statusCode",
+                              "errorCode",
+                              "errorName",
+                              "message",
+                              "environment",
+                              "service",
+                              "version",
+                              "commitSha"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Recent sanitized technical errors for operator diagnosis",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
     "/v1/platform/memberships": {
       "get": {
         "parameters": [
