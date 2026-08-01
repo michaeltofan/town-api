@@ -53,6 +53,7 @@ import {
   grantPlatformMembership,
   schedulePlatformMembershipCancellation,
 } from '../platform/services/memberships.js';
+import { collectOperationalComponents } from '../platform/services/status-checks.js';
 import { DomainErrorResponseSchema } from '../schemas/error.js';
 import {
   PlatformAccountActionResponseSchema,
@@ -235,6 +236,13 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
         }
       }
 
+      const components = await collectOperationalComponents({
+        env,
+        shuttingDown: app.isShuttingDown,
+        databaseConnection: checks.database,
+        migrations: checks.migrations,
+      });
+
       const counts = await getPlatformStatusCounts(app.database.db);
       await audit(operator.accountId, 'status_viewed', request.id);
 
@@ -251,6 +259,7 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
               commitSha: identity.commitSha,
             },
           },
+          components,
           counts,
         },
       };
