@@ -6,7 +6,8 @@ import { createOfficialStripeAdapter } from '../../billing/stripe-adapter.js';
  * Distinct operational component checks for GET /v1/platform/status.
  *
  * Scope: API process, database readiness, email provider, Stripe billing.
- * No backup, alerts, or secret leakage in details.
+ * No backup or secret leakage in details. Alert/uptime persistence is handled
+ * separately from these probe results.
  */
 
 export type PlatformComponentStatus =
