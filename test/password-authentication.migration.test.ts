@@ -160,7 +160,7 @@ describe('password sign-in migration 0027', () => {
        FROM drizzle.__drizzle_migrations
        ORDER BY id ASC`,
     );
-    expect(ordered.rows).toHaveLength(35);
+    expect(ordered.rows).toHaveLength(36);
     for (let index = 0; index < ordered.rows.length; index += 1) {
       expect(ordered.rows[index]?.id).toBe(index + 1);
     }
