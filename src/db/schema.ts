@@ -1526,12 +1526,7 @@ export type AccountStatus =
   'pending_email' | 'pending_password' | 'pending_passkey' | 'active' | 'suspended' | 'closed';
 
 export type PlatformOperatorRole =
-  | 'viewer'
-  | 'investigator'
-  | 'moderator'
-  | 'account_admin'
-  | 'ops_admin'
-  | 'role_admin';
+  'viewer' | 'investigator' | 'moderator' | 'account_admin' | 'ops_admin' | 'role_admin';
 
 export type PlatformAuditAction =
   | 'operator_granted'
