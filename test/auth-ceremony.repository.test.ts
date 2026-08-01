@@ -437,24 +437,29 @@ describe('authentication ceremony repositories', () => {
       });
       // Force active-looking status without requirements via direct SQL is forbidden;
       // instead assert pending cannot create sessions (already covered) and incomplete active path:
-      const noPasskey = '30000000-0000-4000-8000-000000000016';
-      await preparePendingPasskeyAccount(noPasskey);
+      const noCredential = '30000000-0000-4000-8000-000000000016';
+      await preparePendingPasskeyAccount(noCredential);
+      const noCredentialSuffix = noCredential.replace(/-/g, '').slice(-12);
+      await db().execute(
+        sql`UPDATE town.account_password_credentials SET revoked_at = ${T3}
+         WHERE id = ${`35000000-0000-4000-8000-${noCredentialSuffix}`}`,
+      );
       const actorId = '34000000-0000-4000-8000-000000000016';
       await createCivicActor(db(), {
         id: actorId,
-        displayLabel: 'No passkey actor',
+        displayLabel: 'No credential actor',
         communityId: FOUNDATION_COMMUNITY_IDS.milanoIt,
         createdAt: T2,
         updatedAt: T2,
       });
-      await linkActorToAccount(db(), { actorId, accountId: noPasskey, at: T3 });
+      await linkActorToAccount(db(), { actorId, accountId: noCredential, at: T3 });
       await ensureWebAuthnUserHandle(db(), {
-        accountId: noPasskey,
-        handle: deterministicSha256(`ceremony-webauthn-handle-${noPasskey}`),
+        accountId: noCredential,
+        handle: deterministicSha256(`ceremony-webauthn-handle-${noCredential}`),
         now: T3,
       });
       await expect(
-        transitionAccountState(db(), { accountId: noPasskey, to: 'active', at: T3 }),
+        transitionAccountState(db(), { accountId: noCredential, to: 'active', at: T3 }),
       ).rejects.toMatchObject({ code: 'ACTIVE_REQUIRES_ACTIVE_CREDENTIAL' });
 
       const noActor = '30000000-0000-4000-8000-000000000017';
