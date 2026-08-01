@@ -78,6 +78,26 @@ export function membershipAlreadyActiveError(): AppError {
   return new AppError(409, 'MEMBERSHIP_ALREADY_ACTIVE', 'Membership is already active.');
 }
 
+export function providerManagedMembershipError(): AppError {
+  return new AppError(
+    409,
+    'PROVIDER_MANAGED_MEMBERSHIP',
+    'This membership is managed by an external billing provider and cannot be changed locally from the platform console.',
+  );
+}
+
+export function membershipOperationNotAllowedError(message: string): AppError {
+  return new AppError(409, 'MEMBERSHIP_OPERATION_NOT_ALLOWED', message);
+}
+
+export function membershipEntitlementNotFoundError(): AppError {
+  return new AppError(
+    404,
+    'MEMBERSHIP_ENTITLEMENT_NOT_FOUND',
+    'No membership entitlement was found for this account.',
+  );
+}
+
 export function localEligibilityAlreadyBoundError(): AppError {
   return new AppError(
     409,

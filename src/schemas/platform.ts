@@ -244,8 +244,14 @@ export const PlatformMembershipsQuerySchema = Type.Object(
   {
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 50 })),
     status: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+    q: Type.Optional(Type.String({ minLength: 1, maxLength: 320 })),
   },
   { additionalProperties: false, $id: 'PlatformMembershipsQuery' },
+);
+
+export const PlatformMembershipAllowedActionSchema = Type.Union(
+  [Type.Literal('extend'), Type.Literal('schedule_cancellation')],
+  { $id: 'PlatformMembershipAllowedAction' },
 );
 
 export const PlatformMembershipsResponseSchema = Type.Object(
@@ -260,9 +266,15 @@ export const PlatformMembershipsResponseSchema = Type.Object(
               source: Type.String(),
               accessUntil: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
               activatedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+              cancellationRequestedAt: Type.Union([
+                Type.String({ format: 'date-time' }),
+                Type.Null(),
+              ]),
+              cancelAtPeriodEnd: Type.Boolean(),
               expiredAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
               updatedAt: Type.String({ format: 'date-time' }),
               email: Type.Union([Type.String(), Type.Null()]),
+              allowedActions: Type.Array(PlatformMembershipAllowedActionSchema),
             },
             { additionalProperties: false },
           ),
@@ -272,6 +284,56 @@ export const PlatformMembershipsResponseSchema = Type.Object(
     ),
   },
   { additionalProperties: false, $id: 'PlatformMembershipsResponse' },
+);
+
+export const PlatformMembershipReasonSchema = Type.String({ minLength: 3, maxLength: 256 });
+
+export const PlatformMembershipGrantBodySchema = Type.Object(
+  {
+    accountId: Type.String({ format: 'uuid' }),
+    accessUntil: Type.String({ format: 'date-time' }),
+    reason: PlatformMembershipReasonSchema,
+    idempotencyKey: Type.String({ format: 'uuid' }),
+  },
+  { additionalProperties: false, $id: 'PlatformMembershipGrantBody' },
+);
+
+export const PlatformMembershipExtendBodySchema = Type.Object(
+  {
+    accessUntil: Type.String({ format: 'date-time' }),
+    reason: PlatformMembershipReasonSchema,
+    idempotencyKey: Type.String({ format: 'uuid' }),
+  },
+  { additionalProperties: false, $id: 'PlatformMembershipExtendBody' },
+);
+
+export const PlatformMembershipScheduleCancellationBodySchema = Type.Object(
+  {
+    reason: PlatformMembershipReasonSchema,
+    idempotencyKey: Type.String({ format: 'uuid' }),
+  },
+  { additionalProperties: false, $id: 'PlatformMembershipScheduleCancellationBody' },
+);
+
+export const PlatformMembershipActionResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        accountId: Type.String({ format: 'uuid' }),
+        status: Type.String(),
+        source: Type.String(),
+        accessUntil: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+        activatedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+        cancellationRequestedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+        cancelAtPeriodEnd: Type.Boolean(),
+        expiredAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+        changed: Type.Boolean(),
+        allowedActions: Type.Array(PlatformMembershipAllowedActionSchema),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformMembershipActionResponse' },
 );
 
 export const PlatformSignalsQuerySchema = Type.Object(
@@ -579,3 +641,7 @@ export type PlatformSessionResponse = Static<typeof PlatformSessionResponseSchem
 export type PlatformStatusResponse = Static<typeof PlatformStatusResponseSchema>;
 export type PlatformAccountsResponse = Static<typeof PlatformAccountsResponseSchema>;
 export type PlatformAccountActionResponse = Static<typeof PlatformAccountActionResponseSchema>;
+export type PlatformMembershipsResponse = Static<typeof PlatformMembershipsResponseSchema>;
+export type PlatformMembershipActionResponse = Static<
+  typeof PlatformMembershipActionResponseSchema
+>;

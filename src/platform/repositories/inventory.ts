@@ -155,10 +155,24 @@ export async function listPlatformCommunities(db: Db) {
     .orderBy(asc(communities.position));
 }
 
-export async function listPlatformMemberships(db: Db, input: { limit: number; status?: string }) {
+export async function listPlatformMemberships(
+  db: Db,
+  input: { limit: number; status?: string; q?: string },
+) {
   const filters: SQL[] = [];
   if (input.status) {
     filters.push(eq(membershipEntitlements.status, input.status));
+  }
+  if (input.q) {
+    const pattern = `%${input.q}%`;
+    const search = or(
+      ilike(accountEmails.emailNormalized, pattern),
+      ilike(accountEmails.emailOriginal, pattern),
+      sql`${membershipEntitlements.accountId}::text ilike ${pattern}`,
+    );
+    if (search) {
+      filters.push(search);
+    }
   }
   const base = db
     .select({
@@ -167,6 +181,8 @@ export async function listPlatformMemberships(db: Db, input: { limit: number; st
       source: membershipEntitlements.source,
       accessUntil: membershipEntitlements.accessUntil,
       activatedAt: membershipEntitlements.activatedAt,
+      cancellationRequestedAt: membershipEntitlements.cancellationRequestedAt,
+      cancelAtPeriodEnd: membershipEntitlements.cancelAtPeriodEnd,
       expiredAt: membershipEntitlements.expiredAt,
       updatedAt: membershipEntitlements.updatedAt,
       email: accountEmails.emailOriginal,

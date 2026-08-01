@@ -311,7 +311,10 @@ export const platformAuditEvents = town.table(
         'account_inspected',
         'audit_inspected',
         'email_inspected',
-        'payment_inspected'
+        'payment_inspected',
+        'membership_granted',
+        'membership_extended',
+        'membership_cancellation_scheduled'
       )`,
     ),
     index('platform_audit_events_occurred_at_idx').on(table.occurredAt),
@@ -1010,7 +1013,7 @@ export const membershipEntitlements = town.table(
     ),
     check(
       'membership_entitlements_source_valid',
-      sql`${table.source} in ('test_fixture', 'stripe', 'google_play')`,
+      sql`${table.source} in ('test_fixture', 'stripe', 'google_play', 'admin')`,
     ),
     check('membership_entitlements_version_positive', sql`${table.version} >= 1`),
     check(
@@ -1081,7 +1084,7 @@ export const membershipSourceEvents = town.table(
     unique('membership_source_events_source_event_unique').on(table.source, table.sourceEventId),
     check(
       'membership_source_events_source_valid',
-      sql`${table.source} in ('test_fixture', 'stripe', 'google_play')`,
+      sql`${table.source} in ('test_fixture', 'stripe', 'google_play', 'admin')`,
     ),
     check(
       'membership_source_events_event_type_valid',
@@ -1540,7 +1543,10 @@ export type PlatformAuditAction =
   | 'account_inspected'
   | 'audit_inspected'
   | 'email_inspected'
-  | 'payment_inspected';
+  | 'payment_inspected'
+  | 'membership_granted'
+  | 'membership_extended'
+  | 'membership_cancellation_scheduled';
 
 export type SignalHideReason = 'immoral' | 'abusive' | 'spam' | 'off_topic' | 'illegal' | 'other';
 
@@ -1656,7 +1662,7 @@ export type IdentitySecurityEventType =
 
 export type MembershipStatus =
   'inactive' | 'active' | 'cancelling' | 'expired' | 'paid_pending_binding' | 'suspended';
-export type MembershipSource = 'test_fixture' | 'stripe' | 'google_play';
+export type MembershipSource = 'test_fixture' | 'stripe' | 'google_play' | 'admin';
 export type MembershipSourceEventType =
   | 'activate'
   | 'schedule_cancellation'

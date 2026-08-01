@@ -36,6 +36,12 @@ import {
   upsertPlatformOperator,
 } from '../platform/repositories/operators.js';
 import { isPlatformOperatorRole } from '../platform/roles.js';
+import {
+  computePlatformMembershipAllowedActions,
+  extendPlatformMembership,
+  grantPlatformMembership,
+  schedulePlatformMembershipCancellation,
+} from '../platform/services/memberships.js';
 import { DomainErrorResponseSchema } from '../schemas/error.js';
 import {
   PlatformAccountActionResponseSchema,
@@ -50,6 +56,10 @@ import {
   PlatformAuditResponseSchema,
   PlatformCommunitiesResponseSchema,
   PlatformDiscussionsResponseSchema,
+  PlatformMembershipActionResponseSchema,
+  PlatformMembershipExtendBodySchema,
+  PlatformMembershipGrantBodySchema,
+  PlatformMembershipScheduleCancellationBodySchema,
   PlatformMembershipsQuerySchema,
   PlatformMembershipsResponseSchema,
   PlatformOperatorActionResponseSchema,
@@ -605,6 +615,7 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
       const memberships = await listPlatformMemberships(app.database.db, {
         limit: request.query.limit ?? 50,
         ...(request.query.status ? { status: request.query.status } : {}),
+        ...(request.query.q ? { q: request.query.q } : {}),
       });
       return {
         data: {
@@ -614,10 +625,188 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
             source: row.source,
             accessUntil: row.accessUntil === null ? null : toIsoTimestamp(row.accessUntil),
             activatedAt: row.activatedAt === null ? null : toIsoTimestamp(row.activatedAt),
+            cancellationRequestedAt:
+              row.cancellationRequestedAt === null
+                ? null
+                : toIsoTimestamp(row.cancellationRequestedAt),
+            cancelAtPeriodEnd: row.cancelAtPeriodEnd,
             expiredAt: row.expiredAt === null ? null : toIsoTimestamp(row.expiredAt),
             updatedAt: toIsoTimestamp(row.updatedAt),
             email: row.email,
+            allowedActions: computePlatformMembershipAllowedActions({
+              source: row.source,
+              status: row.status,
+            }),
           })),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/memberships/grant',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Grant an administrative membership entitlement',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        body: PlatformMembershipGrantBodySchema,
+        response: {
+          200: PlatformMembershipActionResponseSchema,
+          404: DomainErrorResponseSchema,
+          409: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_memberships');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const result = await grantPlatformMembership(app.database.db, {
+        accountId: request.body.accountId,
+        accessUntil: request.body.accessUntil,
+        reason: request.body.reason,
+        idempotencyKey: request.body.idempotencyKey,
+        operatorAccountId: operator.accountId,
+        requestId: request.id,
+        now: now(),
+        generateId,
+      });
+
+      return {
+        data: {
+          accountId: result.after.accountId,
+          status: result.after.status,
+          source: result.after.source,
+          accessUntil:
+            result.after.accessUntil === null ? null : toIsoTimestamp(result.after.accessUntil),
+          activatedAt:
+            result.after.activatedAt === null ? null : toIsoTimestamp(result.after.activatedAt),
+          cancellationRequestedAt:
+            result.after.cancellationRequestedAt === null
+              ? null
+              : toIsoTimestamp(result.after.cancellationRequestedAt),
+          cancelAtPeriodEnd: result.after.cancelAtPeriodEnd,
+          expiredAt:
+            result.after.expiredAt === null ? null : toIsoTimestamp(result.after.expiredAt),
+          changed: result.changed,
+          allowedActions: result.allowedActions,
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/memberships/:accountId/extend',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Extend accessUntil for an administrative membership',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformAccountIdParamsSchema,
+        body: PlatformMembershipExtendBodySchema,
+        response: {
+          200: PlatformMembershipActionResponseSchema,
+          404: DomainErrorResponseSchema,
+          409: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_memberships');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const result = await extendPlatformMembership(app.database.db, {
+        accountId: request.params.accountId,
+        accessUntil: request.body.accessUntil,
+        reason: request.body.reason,
+        idempotencyKey: request.body.idempotencyKey,
+        operatorAccountId: operator.accountId,
+        requestId: request.id,
+        now: now(),
+        generateId,
+      });
+
+      return {
+        data: {
+          accountId: result.after.accountId,
+          status: result.after.status,
+          source: result.after.source,
+          accessUntil:
+            result.after.accessUntil === null ? null : toIsoTimestamp(result.after.accessUntil),
+          activatedAt:
+            result.after.activatedAt === null ? null : toIsoTimestamp(result.after.activatedAt),
+          cancellationRequestedAt:
+            result.after.cancellationRequestedAt === null
+              ? null
+              : toIsoTimestamp(result.after.cancellationRequestedAt),
+          cancelAtPeriodEnd: result.after.cancelAtPeriodEnd,
+          expiredAt:
+            result.after.expiredAt === null ? null : toIsoTimestamp(result.after.expiredAt),
+          changed: result.changed,
+          allowedActions: result.allowedActions,
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/memberships/:accountId/schedule-cancellation',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Schedule cancellation for an administrative membership',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformAccountIdParamsSchema,
+        body: PlatformMembershipScheduleCancellationBodySchema,
+        response: {
+          200: PlatformMembershipActionResponseSchema,
+          404: DomainErrorResponseSchema,
+          409: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_memberships');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const result = await schedulePlatformMembershipCancellation(app.database.db, {
+        accountId: request.params.accountId,
+        reason: request.body.reason,
+        idempotencyKey: request.body.idempotencyKey,
+        operatorAccountId: operator.accountId,
+        requestId: request.id,
+        now: now(),
+        generateId,
+      });
+
+      return {
+        data: {
+          accountId: result.after.accountId,
+          status: result.after.status,
+          source: result.after.source,
+          accessUntil:
+            result.after.accessUntil === null ? null : toIsoTimestamp(result.after.accessUntil),
+          activatedAt:
+            result.after.activatedAt === null ? null : toIsoTimestamp(result.after.activatedAt),
+          cancellationRequestedAt:
+            result.after.cancellationRequestedAt === null
+              ? null
+              : toIsoTimestamp(result.after.cancellationRequestedAt),
+          cancelAtPeriodEnd: result.after.cancelAtPeriodEnd,
+          expiredAt:
+            result.after.expiredAt === null ? null : toIsoTimestamp(result.after.expiredAt),
+          changed: result.changed,
+          allowedActions: result.allowedActions,
         },
       };
     },
@@ -1254,6 +1443,9 @@ const PLATFORM_AUDIT_ACTIONS = new Set<PlatformAuditAction>([
   'audit_inspected',
   'email_inspected',
   'payment_inspected',
+  'membership_granted',
+  'membership_extended',
+  'membership_cancellation_scheduled',
 ]);
 
 function isPlatformAuditAction(value: string): value is PlatformAuditAction {

@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { and, eq, isNull } from 'drizzle-orm';
 import {
   accountSessions,
   accounts,
   identitySecurityEvents,
+  membershipEntitlements,
   platformAuditEvents,
   platformOperators,
   signals,
@@ -12,9 +14,12 @@ import {
   FOUNDATION_COMMUNITY_IDS,
   FOUNDATION_SIGNAL_IDS,
 } from '../src/db/seeds/foundation-content.js';
+import { activateMembership } from '../src/membership/transitions/activate.js';
 import type {
   PlatformAccountActionResponse,
   PlatformAccountsResponse,
+  PlatformMembershipActionResponse,
+  PlatformMembershipsResponse,
   PlatformSessionResponse,
   PlatformStatusResponse,
 } from '../src/schemas/platform.js';
@@ -29,6 +34,7 @@ import type { SoftPasskeyMaterial } from './helpers/webauthn-soft-authenticator.
 
 const FIXED_NOW = '2026-08-01T12:00:00.000Z';
 const ACCESS_UNTIL = '2030-01-01T00:00:00.000Z';
+const EXTENDED_UNTIL = '2031-01-01T00:00:00.000Z';
 
 describe('platform operator area', () => {
   let ctx: Awaited<ReturnType<typeof createMembershipTestApp>>;
@@ -295,5 +301,392 @@ describe('platform operator area', () => {
       payload: { reason: 'spam' },
     });
     expect(suspend.statusCode).toBe(404);
+  });
+
+  async function registerAccountWithoutMembership(email: string): Promise<{
+    accountId: string;
+    sessionToken: string;
+  }> {
+    clock.now = new Date(new Date(clock.now).getTime() + 16 * 60_000).toISOString();
+    const registration = await activatePasskeyAccountAndLinkCommunity({
+      app: ctx.app,
+      delivery: ctx.delivery,
+      email,
+      communityId: FOUNDATION_COMMUNITY_IDS.milanoIt,
+    });
+    const login = await loginMobileSession({
+      app: ctx.app,
+      material: registration.material,
+      anonymousClientKey: nextAnonymousClientKey(),
+    });
+    return { accountId: registration.accountId, sessionToken: login.sessionToken };
+  }
+
+  it('role_admin can grant, extend, and schedule-cancel admin memberships with audit', async () => {
+    const operator = await registerMember('PlatformMembershipOpsAdmin+setup@example.com');
+    await grantOperator(operator.accountId, 'role_admin');
+    const target = await registerAccountWithoutMembership(
+      'PlatformMembershipGrantTarget+setup@example.com',
+    );
+    const grantKey = randomUUID();
+
+    const grant = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/platform/memberships/grant',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accountId: target.accountId,
+        accessUntil: ACCESS_UNTIL,
+        reason: 'Comped civic access for verified partner',
+        idempotencyKey: grantKey,
+      },
+    });
+    expect(grant.statusCode).toBe(200);
+    expect(grant.json<PlatformMembershipActionResponse>()).toMatchObject({
+      data: {
+        accountId: target.accountId,
+        status: 'active',
+        source: 'admin',
+        accessUntil: ACCESS_UNTIL,
+        changed: true,
+        allowedActions: ['extend', 'schedule_cancellation'],
+      },
+    });
+
+    const list = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/platform/memberships?q=${encodeURIComponent(target.accountId)}`,
+      headers: { authorization: `Session ${operator.sessionToken}` },
+    });
+    expect(list.statusCode).toBe(200);
+    const listed = list.json<PlatformMembershipsResponse>().data.memberships;
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          accountId: target.accountId,
+          source: 'admin',
+          status: 'active',
+          accessUntil: ACCESS_UNTIL,
+          allowedActions: ['extend', 'schedule_cancellation'],
+        }),
+      ]),
+    );
+
+    const grantReplay = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/platform/memberships/grant',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accountId: target.accountId,
+        accessUntil: ACCESS_UNTIL,
+        reason: 'Comped civic access for verified partner',
+        idempotencyKey: grantKey,
+      },
+    });
+    expect(grantReplay.statusCode).toBe(200);
+    expect(grantReplay.json<PlatformMembershipActionResponse>().data.changed).toBe(false);
+
+    const grantAudits = await ctx.app.database.db
+      .select()
+      .from(platformAuditEvents)
+      .where(
+        and(
+          eq(platformAuditEvents.action, 'membership_granted'),
+          eq(platformAuditEvents.targetAccountId, target.accountId),
+        ),
+      );
+    expect(grantAudits).toHaveLength(1);
+    expect(grantAudits[0]?.operatorAccountId).toBe(operator.accountId);
+    expect(grantAudits[0]?.metadata).toMatchObject({
+      reason: 'Comped civic access for verified partner',
+    });
+
+    const extendKey = randomUUID();
+    const extend = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/memberships/${target.accountId}/extend`,
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accessUntil: EXTENDED_UNTIL,
+        reason: 'Extend partner access through next cycle',
+        idempotencyKey: extendKey,
+      },
+    });
+    expect(extend.statusCode).toBe(200);
+    expect(extend.json<PlatformMembershipActionResponse>()).toMatchObject({
+      data: {
+        accountId: target.accountId,
+        status: 'active',
+        source: 'admin',
+        accessUntil: EXTENDED_UNTIL,
+        changed: true,
+      },
+    });
+
+    const extendReplay = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/memberships/${target.accountId}/extend`,
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accessUntil: EXTENDED_UNTIL,
+        reason: 'Extend partner access through next cycle',
+        idempotencyKey: extendKey,
+      },
+    });
+    expect(extendReplay.statusCode).toBe(200);
+    expect(extendReplay.json<PlatformMembershipActionResponse>().data.changed).toBe(false);
+
+    const cancelKey = randomUUID();
+    const cancel = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/memberships/${target.accountId}/schedule-cancellation`,
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        reason: 'Partner engagement completed',
+        idempotencyKey: cancelKey,
+      },
+    });
+    expect(cancel.statusCode).toBe(200);
+    expect(cancel.json<PlatformMembershipActionResponse>()).toMatchObject({
+      data: {
+        accountId: target.accountId,
+        status: 'cancelling',
+        source: 'admin',
+        cancelAtPeriodEnd: true,
+        changed: true,
+        allowedActions: [],
+      },
+    });
+
+    const cancelReplay = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/memberships/${target.accountId}/schedule-cancellation`,
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        reason: 'Partner engagement completed',
+        idempotencyKey: cancelKey,
+      },
+    });
+    expect(cancelReplay.statusCode).toBe(200);
+    expect(cancelReplay.json<PlatformMembershipActionResponse>().data.changed).toBe(false);
+
+    const refreshed = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/platform/memberships?q=${encodeURIComponent(target.accountId)}`,
+      headers: { authorization: `Session ${operator.sessionToken}` },
+    });
+    expect(refreshed.json<PlatformMembershipsResponse>().data.memberships).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          accountId: target.accountId,
+          status: 'cancelling',
+          source: 'admin',
+          accessUntil: EXTENDED_UNTIL,
+          cancelAtPeriodEnd: true,
+          allowedActions: [],
+        }),
+      ]),
+    );
+
+    const cancelAudits = await ctx.app.database.db
+      .select()
+      .from(platformAuditEvents)
+      .where(
+        and(
+          eq(platformAuditEvents.action, 'membership_cancellation_scheduled'),
+          eq(platformAuditEvents.targetAccountId, target.accountId),
+        ),
+      );
+    expect(cancelAudits).toHaveLength(1);
+  });
+
+  it('refuses ordinary users and insufficient roles for membership mutations', async () => {
+    const member = await registerAccountWithoutMembership(
+      'PlatformMembershipOrdinary+setup@example.com',
+    );
+    const viewer = await registerMember('PlatformMembershipViewer+setup@example.com');
+    await grantOperator(viewer.accountId, 'viewer');
+    const accountAdmin = await registerMember('PlatformMembershipAccountAdmin+setup@example.com');
+    await grantOperator(accountAdmin.accountId, 'account_admin');
+    const target = await registerAccountWithoutMembership(
+      'PlatformMembershipDeniedTarget+setup@example.com',
+    );
+
+    const ordinary = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/platform/memberships/grant',
+      headers: { authorization: `Session ${member.sessionToken}` },
+      payload: {
+        accountId: target.accountId,
+        accessUntil: ACCESS_UNTIL,
+        reason: 'Should be hidden',
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(ordinary.statusCode).toBe(404);
+
+    const viewerDenied = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/platform/memberships/grant',
+      headers: { authorization: `Session ${viewer.sessionToken}` },
+      payload: {
+        accountId: target.accountId,
+        accessUntil: ACCESS_UNTIL,
+        reason: 'Viewer cannot grant',
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(viewerDenied.statusCode).toBe(404);
+
+    const accountAdminDenied = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/memberships/${target.accountId}/extend`,
+      headers: { authorization: `Session ${accountAdmin.sessionToken}` },
+      payload: {
+        accessUntil: EXTENDED_UNTIL,
+        reason: 'Account admin cannot extend',
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(accountAdminDenied.statusCode).toBe(404);
+  });
+
+  it('rejects invalid transitions and provider-managed Stripe membership mutations', async () => {
+    const operator = await registerMember('PlatformMembershipStripeOps+setup@example.com');
+    await grantOperator(operator.accountId, 'ops_admin');
+    const target = await registerAccountWithoutMembership(
+      'PlatformMembershipStripeTarget+setup@example.com',
+    );
+
+    await activateMembership(
+      ctx.app.database.db,
+      {
+        source: 'stripe',
+        sourceEventId: `stripe:test:activate:${randomUUID()}`,
+        eventType: 'activate',
+        accountId: target.accountId,
+        effectiveAt: clock.now,
+        accessUntil: ACCESS_UNTIL,
+        sourceCustomerId: 'cus_test_platform',
+        sourceSubscriptionId: `sub_test_platform_${randomUUID()}`,
+      },
+      { processedAt: clock.now, nodeEnv: 'test' },
+    );
+
+    const grantOverStripe = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/platform/memberships/grant',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accountId: target.accountId,
+        accessUntil: EXTENDED_UNTIL,
+        reason: 'Must not overwrite Stripe',
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(grantOverStripe.statusCode).toBe(409);
+    expect(grantOverStripe.json()).toMatchObject({
+      error: { code: 'PROVIDER_MANAGED_MEMBERSHIP' },
+    });
+
+    const extendStripe = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/memberships/${target.accountId}/extend`,
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accessUntil: EXTENDED_UNTIL,
+        reason: 'Must not extend Stripe locally',
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(extendStripe.statusCode).toBe(409);
+    expect(extendStripe.json()).toMatchObject({
+      error: { code: 'PROVIDER_MANAGED_MEMBERSHIP' },
+    });
+
+    const cancelStripe = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/memberships/${target.accountId}/schedule-cancellation`,
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        reason: 'Must not cancel Stripe locally',
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(cancelStripe.statusCode).toBe(409);
+    expect(cancelStripe.json()).toMatchObject({
+      error: { code: 'PROVIDER_MANAGED_MEMBERSHIP' },
+    });
+
+    const stripeRow = await ctx.app.database.db
+      .select()
+      .from(membershipEntitlements)
+      .where(eq(membershipEntitlements.accountId, target.accountId))
+      .limit(1);
+    expect(stripeRow[0]?.source).toBe('stripe');
+    expect(stripeRow[0]?.status).toBe('active');
+    expect(new Date(stripeRow[0]?.accessUntil ?? '').getTime()).toBe(
+      new Date(ACCESS_UNTIL).getTime(),
+    );
+
+    const adminTarget = await registerAccountWithoutMembership(
+      'PlatformMembershipInvalidExtend+setup@example.com',
+    );
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/platform/memberships/grant',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accountId: adminTarget.accountId,
+        accessUntil: ACCESS_UNTIL,
+        reason: 'Baseline admin grant',
+        idempotencyKey: randomUUID(),
+      },
+    });
+
+    const invalidExtend = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/memberships/${adminTarget.accountId}/extend`,
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accessUntil: ACCESS_UNTIL,
+        reason: 'Not strictly later',
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(invalidExtend.statusCode).toBe(409);
+    expect(invalidExtend.json()).toMatchObject({
+      error: { code: 'MEMBERSHIP_OPERATION_NOT_ALLOWED' },
+    });
+  });
+
+  it('keeps existing console inventory surfaces working after membership ops', async () => {
+    const operator = await registerMember('PlatformMembershipRegression+setup@example.com');
+    await grantOperator(operator.accountId, 'ops_admin');
+
+    const status = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/platform/status',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+    });
+    expect(status.statusCode).toBe(200);
+
+    const accountsList = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/platform/accounts?limit=10',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+    });
+    expect(accountsList.statusCode).toBe(200);
+    expect(accountsList.json<PlatformAccountsResponse>().data.accounts.length).toBeGreaterThan(0);
+
+    const memberships = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/platform/memberships?limit=10',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+    });
+    expect(memberships.statusCode).toBe(200);
+    expect(memberships.json<PlatformMembershipsResponse>().data.memberships.length).toBeGreaterThan(
+      0,
+    );
   });
 });

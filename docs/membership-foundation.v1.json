@@ -33,7 +33,8 @@
     "sources": [
       "test_fixture",
       "stripe",
-      "google_play"
+      "google_play",
+      "admin"
     ],
     "stateInvariants": [
       "inactive => access_until null and cancel_at_period_end false",
