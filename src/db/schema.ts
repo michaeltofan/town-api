@@ -319,7 +319,10 @@ export const platformAuditEvents = town.table(
         'submission_restored',
         'discussion_contribution_hidden',
         'discussion_contribution_unhidden',
-        'technical_errors_inspected'
+        'technical_errors_inspected',
+        'uptime_inspected',
+        'alerts_inspected',
+        'alert_acknowledged'
       )`,
     ),
     index('platform_audit_events_occurred_at_idx').on(table.occurredAt),
@@ -1640,6 +1643,109 @@ export const platformTechnicalErrors = town.table(
   ],
 );
 
+/**
+ * Bounded opportunistic uptime samples from operator status checks.
+ * Stores component statuses only — no probe secrets or provider payloads.
+ */
+export const platformUptimeSamples = town.table(
+  'platform_uptime_samples',
+  {
+    id: uuid('id').primaryKey(),
+    sampledAt: timestamp('sampled_at', { withTimezone: true, mode: 'string' }).notNull(),
+    apiStatus: text('api_status').notNull(),
+    databaseStatus: text('database_status').notNull(),
+    emailStatus: text('email_status').notNull(),
+    stripeStatus: text('stripe_status').notNull(),
+    overallStatus: text('overall_status').notNull(),
+    environment: text('environment').notNull(),
+    service: text('service').notNull(),
+    version: text('version').notNull(),
+    commitSha: text('commit_sha'),
+  },
+  (table) => [
+    check(
+      'platform_uptime_samples_api_status_valid',
+      sql`${table.apiStatus} in ('ok', 'degraded', 'fail', 'timeout', 'disabled', 'misconfigured')`,
+    ),
+    check(
+      'platform_uptime_samples_database_status_valid',
+      sql`${table.databaseStatus} in ('ok', 'degraded', 'fail', 'timeout', 'disabled', 'misconfigured')`,
+    ),
+    check(
+      'platform_uptime_samples_email_status_valid',
+      sql`${table.emailStatus} in ('ok', 'degraded', 'fail', 'timeout', 'disabled', 'misconfigured')`,
+    ),
+    check(
+      'platform_uptime_samples_stripe_status_valid',
+      sql`${table.stripeStatus} in ('ok', 'degraded', 'fail', 'timeout', 'disabled', 'misconfigured')`,
+    ),
+    check(
+      'platform_uptime_samples_overall_status_valid',
+      sql`${table.overallStatus} in ('ok', 'degraded', 'fail', 'timeout', 'misconfigured')`,
+    ),
+    index('platform_uptime_samples_sampled_at_idx').on(table.sampledAt),
+  ],
+);
+
+/**
+ * In-console operational alerts for unhealthy components (no email/pager delivery).
+ */
+export const platformAlerts = town.table(
+  'platform_alerts',
+  {
+    id: uuid('id').primaryKey(),
+    openedAt: timestamp('opened_at', { withTimezone: true, mode: 'string' }).notNull(),
+    component: text('component').notNull(),
+    status: text('status').notNull(),
+    severity: text('severity').notNull(),
+    detail: text('detail'),
+    environment: text('environment').notNull(),
+    commitSha: text('commit_sha'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true, mode: 'string' }),
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true, mode: 'string' }),
+    acknowledgedByAccountId: uuid('acknowledged_by_account_id'),
+  },
+  (table) => [
+    check(
+      'platform_alerts_component_valid',
+      sql`${table.component} in ('api', 'database', 'email', 'stripe')`,
+    ),
+    check(
+      'platform_alerts_status_valid',
+      sql`${table.status} in ('degraded', 'fail', 'timeout', 'misconfigured')`,
+    ),
+    check('platform_alerts_severity_valid', sql`${table.severity} in ('warning', 'critical')`),
+    check(
+      'platform_alerts_detail_bounded',
+      sql`${table.detail} is null or char_length(${table.detail}) <= 160`,
+    ),
+    check(
+      'platform_alerts_resolved_not_before_opened',
+      sql`${table.resolvedAt} is null or ${table.resolvedAt} >= ${table.openedAt}`,
+    ),
+    check(
+      'platform_alerts_ack_not_before_opened',
+      sql`${table.acknowledgedAt} is null or ${table.acknowledgedAt} >= ${table.openedAt}`,
+    ),
+    check(
+      'platform_alerts_ack_consistency',
+      sql`(
+        (${table.acknowledgedAt} is null and ${table.acknowledgedByAccountId} is null)
+        or (${table.acknowledgedAt} is not null and ${table.acknowledgedByAccountId} is not null)
+      )`,
+    ),
+    foreignKey({
+      columns: [table.acknowledgedByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'platform_alerts_acknowledged_by_account_id_fkey',
+    }).onDelete('restrict'),
+    index('platform_alerts_opened_at_idx').on(table.openedAt),
+    index('platform_alerts_open_component_idx')
+      .on(table.component)
+      .where(sql`${table.resolvedAt} is null`),
+  ],
+);
+
 export type PlatformAuditAction =
   | 'operator_granted'
   | 'operator_revoked'
@@ -1660,9 +1766,21 @@ export type PlatformAuditAction =
   | 'submission_restored'
   | 'discussion_contribution_hidden'
   | 'discussion_contribution_unhidden'
-  | 'technical_errors_inspected';
+  | 'technical_errors_inspected'
+  | 'uptime_inspected'
+  | 'alerts_inspected'
+  | 'alert_acknowledged';
 
 export type PlatformTechnicalErrorRow = typeof platformTechnicalErrors.$inferSelect;
+export type PlatformUptimeSampleRow = typeof platformUptimeSamples.$inferSelect;
+export type PlatformAlertRow = typeof platformAlerts.$inferSelect;
+
+export type PlatformComponentStatusValue =
+  'ok' | 'degraded' | 'fail' | 'timeout' | 'disabled' | 'misconfigured';
+export type PlatformOverallStatusValue = 'ok' | 'degraded' | 'fail' | 'timeout' | 'misconfigured';
+export type PlatformUptimeComponentValue = 'api' | 'database' | 'email' | 'stripe';
+export type PlatformAlertStatusValue = 'degraded' | 'fail' | 'timeout' | 'misconfigured';
+export type PlatformAlertSeverityValue = 'warning' | 'critical';
 
 export type SignalHideReason = 'immoral' | 'abusive' | 'spam' | 'off_topic' | 'illegal' | 'other';
 

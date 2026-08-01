@@ -18,6 +18,8 @@ import { activateMembership } from '../src/membership/transitions/activate.js';
 import type {
   PlatformAccountActionResponse,
   PlatformAccountsResponse,
+  PlatformAlertActionResponse,
+  PlatformAlertsResponse,
   PlatformDiscussionActionResponse,
   PlatformDiscussionsResponse,
   PlatformMembershipActionResponse,
@@ -27,7 +29,9 @@ import type {
   PlatformSubmissionActionResponse,
   PlatformSubmissionDetailResponse,
   PlatformSubmissionsResponse,
+  PlatformUptimeResponse,
 } from '../src/schemas/platform.js';
+import { recordUptimeObservation } from '../src/platform/services/record-uptime-observation.js';
 import {
   activatePasskeyAccountAndLinkCommunity,
   activateTestMembership,
@@ -164,6 +168,101 @@ describe('platform operator area', () => {
       .from(platformAuditEvents)
       .where(eq(platformAuditEvents.action, 'status_viewed'));
     expect(audits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('records uptime samples, lists alerts, and acknowledges as ops_admin', async () => {
+    const operator = await registerMember('PlatformOperatorUptime+setup@example.com');
+    await grantOperator(operator.accountId, 'ops_admin');
+    const viewer = await registerMember('PlatformViewerUptime+setup@example.com');
+    await grantOperator(viewer.accountId, 'viewer');
+
+    await recordUptimeObservation(ctx.app.database.db, {
+      sampledAt: clock.now,
+      force: true,
+      components: {
+        api: { status: 'ok', detail: 'environment=test' },
+        database: { status: 'fail', detail: 'connection=fail;migrations=unknown' },
+        email: { status: 'disabled', detail: 'email_verification_disabled' },
+        stripe: { status: 'disabled', detail: 'stripe_billing_disabled' },
+      },
+      environment: 'test',
+      service: 'town-api',
+      version: '0.1.0',
+      commitSha: 'abc1234',
+    });
+
+    const uptime = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/platform/uptime?limit=10',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+    });
+    expect(uptime.statusCode).toBe(200);
+    const uptimeBody = uptime.json<PlatformUptimeResponse>();
+    expect(uptimeBody.data.summary.sampleCount).toBeGreaterThanOrEqual(1);
+    expect(uptimeBody.data.summary.openAlertCount).toBeGreaterThanOrEqual(1);
+    expect(uptimeBody.data.samples[0]?.components.database).toBe('fail');
+
+    const alerts = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/platform/alerts?state=open',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+    });
+    expect(alerts.statusCode).toBe(200);
+    const alertsBody = alerts.json<PlatformAlertsResponse>();
+    const databaseAlert = alertsBody.data.alerts.find((row) => row.component === 'database');
+    expect(databaseAlert).toBeDefined();
+    if (!databaseAlert) {
+      throw new Error('expected open database alert');
+    }
+    expect(databaseAlert).toMatchObject({
+      status: 'fail',
+      severity: 'critical',
+      acknowledgedAt: null,
+    });
+
+    const viewerAck = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/alerts/${databaseAlert.id}/acknowledge`,
+      headers: { authorization: `Session ${viewer.sessionToken}` },
+    });
+    expect(viewerAck.statusCode).toBe(404);
+
+    const ack = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/platform/alerts/${databaseAlert.id}/acknowledge`,
+      headers: { authorization: `Session ${operator.sessionToken}` },
+    });
+    expect(ack.statusCode).toBe(200);
+    const ackBody = ack.json<PlatformAlertActionResponse>();
+    expect(ackBody.data.changed).toBe(true);
+    expect(ackBody.data.alert.acknowledgedByAccountId).toBe(operator.accountId);
+
+    await recordUptimeObservation(ctx.app.database.db, {
+      sampledAt: new Date(new Date(clock.now).getTime() + 120_000).toISOString(),
+      force: true,
+      components: {
+        api: { status: 'ok', detail: null },
+        database: { status: 'ok', detail: 'connection=ok;migrations=ok' },
+        email: { status: 'disabled', detail: null },
+        stripe: { status: 'disabled', detail: null },
+      },
+      environment: 'test',
+      service: 'town-api',
+      version: '0.1.0',
+      commitSha: 'abc1234',
+    });
+
+    const openAfter = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/platform/alerts?state=open',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+    });
+    expect(openAfter.statusCode).toBe(200);
+    expect(
+      openAfter
+        .json<PlatformAlertsResponse>()
+        .data.alerts.some((row) => row.component === 'database'),
+    ).toBe(false);
   });
 
   it('lists accounts and suspends / reactivates with platform + identity audit', async () => {

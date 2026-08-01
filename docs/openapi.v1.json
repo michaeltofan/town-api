@@ -11583,6 +11583,534 @@
         ]
       }
     },
+    "/v1/platform/alerts": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "open"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "enum": [
+                    "resolved"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "enum": [
+                    "all"
+                  ],
+                  "type": "string"
+                }
+              ],
+              "default": "open"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "alerts": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "acknowledgedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "acknowledgedByAccountId": {
+                                "anyOf": [
+                                  {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "commitSha": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "component": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "api"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "database"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "email"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "stripe"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "detail": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "openedAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "resolvedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "severity": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "warning"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "critical"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "status": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "degraded"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "fail"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "timeout"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "misconfigured"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "openedAt",
+                              "component",
+                              "status",
+                              "severity",
+                              "detail",
+                              "environment",
+                              "commitSha",
+                              "resolvedAt",
+                              "acknowledgedAt",
+                              "acknowledgedByAccountId"
+                            ],
+                            "title": "PlatformAlertItem",
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "alerts"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "In-console operational alerts for unhealthy components",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/alerts/{alertId}/acknowledge": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alertId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "alert": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acknowledgedAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "acknowledgedByAccountId": {
+                              "anyOf": [
+                                {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "commitSha": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "component": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "api"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "database"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "email"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "stripe"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "environment": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "openedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "resolvedAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "severity": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "warning"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "critical"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "degraded"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "fail"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "timeout"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "misconfigured"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "openedAt",
+                            "component",
+                            "status",
+                            "severity",
+                            "detail",
+                            "environment",
+                            "commitSha",
+                            "resolvedAt",
+                            "acknowledgedAt",
+                            "acknowledgedByAccountId"
+                          ],
+                          "type": "object"
+                        },
+                        "changed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "alert",
+                        "changed"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Acknowledge an operational alert (ops_admin+)",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
     "/v1/platform/audit": {
       "get": {
         "parameters": [
@@ -16337,6 +16865,411 @@
         ]
       }
     },
+    "/v1/platform/uptime": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 48,
+              "maximum": 96,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "samples": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "commitSha": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "components": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "api": {
+                                    "anyOf": [
+                                      {
+                                        "enum": [
+                                          "ok"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "degraded"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "fail"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "timeout"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "disabled"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "misconfigured"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "database": {
+                                    "anyOf": [
+                                      {
+                                        "enum": [
+                                          "ok"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "degraded"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "fail"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "timeout"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "disabled"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "misconfigured"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "email": {
+                                    "anyOf": [
+                                      {
+                                        "enum": [
+                                          "ok"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "degraded"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "fail"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "timeout"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "disabled"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "misconfigured"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "stripe": {
+                                    "anyOf": [
+                                      {
+                                        "enum": [
+                                          "ok"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "degraded"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "fail"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "timeout"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "disabled"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "misconfigured"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "api",
+                                  "database",
+                                  "email",
+                                  "stripe"
+                                ],
+                                "type": "object"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "overallStatus": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "ok"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "degraded"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "fail"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "timeout"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "misconfigured"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "sampledAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "service": {
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "sampledAt",
+                              "overallStatus",
+                              "components",
+                              "environment",
+                              "service",
+                              "version",
+                              "commitSha"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "summary": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "okCount": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "okRatio": {
+                              "anyOf": [
+                                {
+                                  "maximum": 1,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "openAlertCount": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "sampleCount": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "windowEndedAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "windowStartedAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "sampleCount",
+                            "okCount",
+                            "okRatio",
+                            "openAlertCount",
+                            "windowStartedAt",
+                            "windowEndedAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "summary",
+                        "samples"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Recent uptime samples and ok-ratio summary for operator monitoring",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
     "/v1/signals/{signalId}": {
       "get": {
         "parameters": [
@@ -18658,7 +19591,7 @@
       "name": "Billing"
     },
     {
-      "description": "Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.",
+      "description": "Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, uptime samples, in-console component alerts, account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.",
       "name": "Platform"
     }
   ]

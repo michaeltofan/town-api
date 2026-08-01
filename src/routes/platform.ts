@@ -54,7 +54,14 @@ import {
   schedulePlatformMembershipCancellation,
 } from '../platform/services/memberships.js';
 import { collectOperationalComponents } from '../platform/services/status-checks.js';
+import { recordUptimeObservation } from '../platform/services/record-uptime-observation.js';
 import { listPlatformTechnicalErrors } from '../platform/repositories/technical-errors.js';
+import {
+  acknowledgePlatformAlert,
+  countOpenPlatformAlerts,
+  listPlatformAlerts,
+} from '../platform/repositories/alerts.js';
+import { summarizePlatformUptimeSamples } from '../platform/repositories/uptime-samples.js';
 import { DomainErrorResponseSchema } from '../schemas/error.js';
 import {
   PlatformAccountActionResponseSchema,
@@ -65,6 +72,10 @@ import {
   PlatformAccountsQuerySchema,
   PlatformAccountsResponseSchema,
   PlatformAccountSuspendBodySchema,
+  PlatformAlertActionResponseSchema,
+  PlatformAlertIdParamsSchema,
+  PlatformAlertsQuerySchema,
+  PlatformAlertsResponseSchema,
   PlatformAuditQuerySchema,
   PlatformAuditResponseSchema,
   PlatformCommunitiesResponseSchema,
@@ -91,6 +102,8 @@ import {
   PlatformStatusResponseSchema,
   PlatformTechnicalErrorsQuerySchema,
   PlatformTechnicalErrorsResponseSchema,
+  PlatformUptimeQuerySchema,
+  PlatformUptimeResponseSchema,
   PlatformSubmissionActionResponseSchema,
   PlatformSubmissionDetailResponseSchema,
   PlatformSubmissionIdParamsSchema,
@@ -245,6 +258,16 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
         databaseConnection: checks.database,
         migrations: checks.migrations,
       });
+
+      // Opportunistic uptime sample + alert sync; never break status.
+      void recordUptimeObservation(app.database.db, {
+        sampledAt: now(),
+        components,
+        environment: identity.environment,
+        service: identity.service,
+        version: identity.version,
+        commitSha: identity.commitSha,
+      }).catch(() => undefined);
 
       const counts = await getPlatformStatusCounts(app.database.db);
       await audit(operator.accountId, 'status_viewed', request.id);
@@ -1570,6 +1593,182 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
   );
 
   app.get(
+    '/v1/platform/uptime',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Recent uptime samples and ok-ratio summary for operator monitoring',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        querystring: PlatformUptimeQuerySchema,
+        response: {
+          200: PlatformUptimeResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_status');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const summarized = await summarizePlatformUptimeSamples(app.database.db, {
+        limit: request.query.limit ?? 48,
+      });
+      const openAlertCount = await countOpenPlatformAlerts(app.database.db);
+      await audit(operator.accountId, 'uptime_inspected', request.id);
+
+      return {
+        data: {
+          summary: {
+            sampleCount: summarized.sampleCount,
+            okCount: summarized.okCount,
+            okRatio: summarized.okRatio,
+            openAlertCount,
+            windowStartedAt:
+              summarized.windowStartedAt === null
+                ? null
+                : toIsoTimestamp(summarized.windowStartedAt),
+            windowEndedAt:
+              summarized.windowEndedAt === null ? null : toIsoTimestamp(summarized.windowEndedAt),
+          },
+          samples: summarized.samples.map((row) => ({
+            id: row.id,
+            sampledAt: toIsoTimestamp(row.sampledAt),
+            overallStatus: row.overallStatus as
+              'ok' | 'degraded' | 'fail' | 'timeout' | 'misconfigured',
+            components: {
+              api: row.apiStatus as
+                'ok' | 'degraded' | 'fail' | 'timeout' | 'disabled' | 'misconfigured',
+              database: row.databaseStatus as
+                'ok' | 'degraded' | 'fail' | 'timeout' | 'disabled' | 'misconfigured',
+              email: row.emailStatus as
+                'ok' | 'degraded' | 'fail' | 'timeout' | 'disabled' | 'misconfigured',
+              stripe: row.stripeStatus as
+                'ok' | 'degraded' | 'fail' | 'timeout' | 'disabled' | 'misconfigured',
+            },
+            environment: row.environment,
+            service: row.service,
+            version: row.version,
+            commitSha: row.commitSha,
+          })),
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/alerts',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'In-console operational alerts for unhealthy components',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        querystring: PlatformAlertsQuerySchema,
+        response: {
+          200: PlatformAlertsResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_status');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const alerts = await listPlatformAlerts(app.database.db, {
+        limit: request.query.limit ?? 20,
+        state: request.query.state ?? 'open',
+      });
+      await audit(operator.accountId, 'alerts_inspected', request.id);
+
+      return {
+        data: {
+          alerts: alerts.map((row) => ({
+            id: row.id,
+            openedAt: toIsoTimestamp(row.openedAt),
+            component: row.component as 'api' | 'database' | 'email' | 'stripe',
+            status: row.status as 'degraded' | 'fail' | 'timeout' | 'misconfigured',
+            severity: row.severity as 'warning' | 'critical',
+            detail: row.detail,
+            environment: row.environment,
+            commitSha: row.commitSha,
+            resolvedAt: row.resolvedAt === null ? null : toIsoTimestamp(row.resolvedAt),
+            acknowledgedAt: row.acknowledgedAt === null ? null : toIsoTimestamp(row.acknowledgedAt),
+            acknowledgedByAccountId: row.acknowledgedByAccountId,
+          })),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/alerts/:alertId/acknowledge',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Acknowledge an operational alert (ops_admin+)',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformAlertIdParamsSchema,
+        response: {
+          200: PlatformAlertActionResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_alerts');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const result = await acknowledgePlatformAlert(app.database.db, {
+        alertId: request.params.alertId,
+        acknowledgedAt: now(),
+        acknowledgedByAccountId: operator.accountId,
+      });
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+
+      if (result.changed) {
+        await audit(operator.accountId, 'alert_acknowledged', request.id, {
+          metadata: {
+            alertId: result.row.id,
+            component: result.row.component,
+            status: result.row.status,
+          },
+        });
+      }
+
+      const row = result.row;
+      return {
+        data: {
+          alert: {
+            id: row.id,
+            openedAt: toIsoTimestamp(row.openedAt),
+            component: row.component as 'api' | 'database' | 'email' | 'stripe',
+            status: row.status as 'degraded' | 'fail' | 'timeout' | 'misconfigured',
+            severity: row.severity as 'warning' | 'critical',
+            detail: row.detail,
+            environment: row.environment,
+            commitSha: row.commitSha,
+            resolvedAt: row.resolvedAt === null ? null : toIsoTimestamp(row.resolvedAt),
+            acknowledgedAt: row.acknowledgedAt === null ? null : toIsoTimestamp(row.acknowledgedAt),
+            acknowledgedByAccountId: row.acknowledgedByAccountId,
+          },
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.get(
     '/v1/platform/audit',
     {
       schema: {
@@ -1942,6 +2141,9 @@ const PLATFORM_AUDIT_ACTIONS = new Set<PlatformAuditAction>([
   'discussion_contribution_hidden',
   'discussion_contribution_unhidden',
   'technical_errors_inspected',
+  'uptime_inspected',
+  'alerts_inspected',
+  'alert_acknowledged',
 ]);
 
 function isPlatformAuditAction(value: string): value is PlatformAuditAction {

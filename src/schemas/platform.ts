@@ -93,6 +93,135 @@ export const PlatformTechnicalErrorsResponseSchema = Type.Object(
   { additionalProperties: false, $id: 'PlatformTechnicalErrorsResponse' },
 );
 
+export const PlatformUptimeQuerySchema = Type.Object(
+  {
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 96, default: 48 })),
+  },
+  { additionalProperties: false, $id: 'PlatformUptimeQuery' },
+);
+
+export const PlatformUptimeResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        summary: Type.Object(
+          {
+            sampleCount: Type.Integer({ minimum: 0 }),
+            okCount: Type.Integer({ minimum: 0 }),
+            okRatio: Type.Union([Type.Number({ minimum: 0, maximum: 1 }), Type.Null()]),
+            openAlertCount: Type.Integer({ minimum: 0 }),
+            windowStartedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+            windowEndedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+          },
+          { additionalProperties: false },
+        ),
+        samples: Type.Array(
+          Type.Object(
+            {
+              id: Type.String({ format: 'uuid' }),
+              sampledAt: Type.String({ format: 'date-time' }),
+              overallStatus: Type.Union([
+                Type.Literal('ok'),
+                Type.Literal('degraded'),
+                Type.Literal('fail'),
+                Type.Literal('timeout'),
+                Type.Literal('misconfigured'),
+              ]),
+              components: Type.Object(
+                {
+                  api: PlatformComponentStatusSchema,
+                  database: PlatformComponentStatusSchema,
+                  email: PlatformComponentStatusSchema,
+                  stripe: PlatformComponentStatusSchema,
+                },
+                { additionalProperties: false },
+              ),
+              environment: Type.String(),
+              service: Type.String(),
+              version: Type.String(),
+              commitSha: Type.Union([Type.String(), Type.Null()]),
+            },
+            { additionalProperties: false },
+          ),
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformUptimeResponse' },
+);
+
+export const PlatformAlertsQuerySchema = Type.Object(
+  {
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50, default: 20 })),
+    state: Type.Optional(
+      Type.Union([Type.Literal('open'), Type.Literal('resolved'), Type.Literal('all')], {
+        default: 'open',
+      }),
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformAlertsQuery' },
+);
+
+export const PlatformAlertItemSchema = Type.Object(
+  {
+    id: Type.String({ format: 'uuid' }),
+    openedAt: Type.String({ format: 'date-time' }),
+    component: Type.Union([
+      Type.Literal('api'),
+      Type.Literal('database'),
+      Type.Literal('email'),
+      Type.Literal('stripe'),
+    ]),
+    status: Type.Union([
+      Type.Literal('degraded'),
+      Type.Literal('fail'),
+      Type.Literal('timeout'),
+      Type.Literal('misconfigured'),
+    ]),
+    severity: Type.Union([Type.Literal('warning'), Type.Literal('critical')]),
+    detail: Type.Union([Type.String(), Type.Null()]),
+    environment: Type.String(),
+    commitSha: Type.Union([Type.String(), Type.Null()]),
+    resolvedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+    acknowledgedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+    acknowledgedByAccountId: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
+  },
+  { additionalProperties: false, $id: 'PlatformAlertItem' },
+);
+
+export const PlatformAlertsResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        alerts: Type.Array(PlatformAlertItemSchema),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformAlertsResponse' },
+);
+
+export const PlatformAlertIdParamsSchema = Type.Object(
+  {
+    alertId: Type.String({ format: 'uuid' }),
+  },
+  { additionalProperties: false, $id: 'PlatformAlertIdParams' },
+);
+
+export const PlatformAlertActionResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        alert: PlatformAlertItemSchema,
+        changed: Type.Boolean(),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformAlertActionResponse' },
+);
+
 export const PlatformStatusResponseSchema = Type.Object(
   {
     data: Type.Object(
@@ -835,6 +964,9 @@ export const PlatformOperatorActionResponseSchema = Type.Object(
 export type PlatformSessionResponse = Static<typeof PlatformSessionResponseSchema>;
 export type PlatformStatusResponse = Static<typeof PlatformStatusResponseSchema>;
 export type PlatformTechnicalErrorsResponse = Static<typeof PlatformTechnicalErrorsResponseSchema>;
+export type PlatformUptimeResponse = Static<typeof PlatformUptimeResponseSchema>;
+export type PlatformAlertsResponse = Static<typeof PlatformAlertsResponseSchema>;
+export type PlatformAlertActionResponse = Static<typeof PlatformAlertActionResponseSchema>;
 export type PlatformAccountsResponse = Static<typeof PlatformAccountsResponseSchema>;
 export type PlatformAccountActionResponse = Static<typeof PlatformAccountActionResponseSchema>;
 export type PlatformMembershipsResponse = Static<typeof PlatformMembershipsResponseSchema>;
