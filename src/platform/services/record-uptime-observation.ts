@@ -11,7 +11,7 @@ import {
   alertSeverityForStatus,
   deriveOverallStatus,
   isUnhealthyComponentStatus,
-  PLATFORM_UPTIME_COMPONENTS,
+  PLATFORM_ALERT_COMPONENTS,
   sanitizeComponentDetail,
 } from './uptime-alerts.js';
 
@@ -73,7 +73,7 @@ export async function recordUptimeObservation(
 }
 
 async function syncComponentAlerts(db: Db, input: RecordUptimeObservationInput): Promise<void> {
-  for (const component of PLATFORM_UPTIME_COMPONENTS) {
+  for (const component of PLATFORM_ALERT_COMPONENTS) {
     const check = input.components[component];
     if (isUnhealthyComponentStatus(check.status)) {
       await openOrRefreshPlatformAlert(db, {

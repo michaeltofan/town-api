@@ -307,9 +307,18 @@ Rollback:
 
 Backups:
 
-- PostgreSQL 18 point-in-time recovery is provided by the platform. Confirm
-  the retention window with the platform admin before any invasive change.
-- Slice 1 does not manage backup jobs itself.
+- PostgreSQL 18 point-in-time recovery is provided by the platform (Railway).
+  Confirm the retention window with the platform admin before any invasive
+  change.
+- The API does not run dump jobs or workers. Operator console Monitor exposes
+  automated PITR configuration via `DATABASE_BACKUP_*` env vars and records
+  ops_admin verifications at `GET/POST /v1/platform/backup`.
+- Configure staging/production with:
+  `DATABASE_BACKUP_PROVIDER=railway_postgres_pitr`,
+  `DATABASE_BACKUP_PITR_ENABLED=true`,
+  `DATABASE_BACKUP_RETENTION_DAYS=<platform retention>`,
+  and keep operator verification fresher than
+  `DATABASE_BACKUP_VERIFY_MAX_AGE_DAYS` (default 30).
 
 Stripe webhook path (implemented; dashboard configuration remains a human
 operator action and is outside this documentation cleanup):

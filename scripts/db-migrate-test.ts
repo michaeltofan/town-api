@@ -29,6 +29,7 @@ const EXPECTED_TOWN_TABLES = [
   'membership_source_events',
   'passkey_credentials',
   'platform_alerts',
+  'platform_backup_verifications',
   'platform_audit_events',
   'platform_operators',
   'platform_technical_errors',

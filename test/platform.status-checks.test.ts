@@ -145,22 +145,26 @@ describe('platform operational status checks', () => {
     ).resolves.toEqual({ status: 'fail', detail: 'stripe_unreachable' });
   });
 
-  it('collects all four components together', async () => {
+  it('collects all operational components together', async () => {
     const components = await collectOperationalComponents({
       env: baseEnv({
         APP_ENV: 'staging',
         EMAIL_VERIFICATION_ENABLED: true,
         EMAIL_VERIFICATION_DELIVERY_MODE: 'test',
         STRIPE_BILLING_ENABLED: false,
+        DATABASE_BACKUP_PROVIDER: 'none',
+        DATABASE_BACKUP_PITR_ENABLED: false,
       }),
       shuttingDown: false,
       databaseConnection: 'ok',
       migrations: 'ok',
+      nowIso: '2026-08-01T12:00:00.000Z',
     });
 
     expect(components.api.status).toBe('ok');
     expect(components.database.status).toBe('ok');
     expect(components.email).toEqual({ status: 'ok', detail: 'delivery_mode=test' });
     expect(components.stripe).toEqual({ status: 'disabled', detail: 'stripe_billing_disabled' });
+    expect(components.backup).toEqual({ status: 'misconfigured', detail: 'pitr_not_configured' });
   });
 });

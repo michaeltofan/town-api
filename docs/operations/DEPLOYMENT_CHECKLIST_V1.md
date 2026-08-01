@@ -69,7 +69,8 @@ production deployment.
 
 ## Post-flight
 
-- [ ] Confirm PostgreSQL 18 backup / PITR status with the platform admin.
+- [ ] Confirm PostgreSQL 18 backup / PITR status with the platform admin and
+      record verification in `/platform/` Monitor → Backup (`POST /v1/platform/backup/verify`).
 - [ ] File any follow-ups from the smoke run.
 
 ## Exclusions

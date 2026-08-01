@@ -19,6 +19,7 @@ function components(
     database: { status: status('database'), detail: null },
     email: { status: status('email'), detail: null },
     stripe: { status: status('stripe'), detail: null },
+    backup: { status: status('backup'), detail: null },
   };
 }
 

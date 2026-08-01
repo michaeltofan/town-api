@@ -172,6 +172,7 @@ export const PlatformAlertItemSchema = Type.Object(
       Type.Literal('database'),
       Type.Literal('email'),
       Type.Literal('stripe'),
+      Type.Literal('backup'),
     ]),
     status: Type.Union([
       Type.Literal('degraded'),
@@ -222,6 +223,67 @@ export const PlatformAlertActionResponseSchema = Type.Object(
   { additionalProperties: false, $id: 'PlatformAlertActionResponse' },
 );
 
+const PlatformBackupVerificationItemFields = {
+  id: Type.String({ format: 'uuid' }),
+  verifiedAt: Type.String({ format: 'date-time' }),
+  verifiedByAccountId: Type.String({ format: 'uuid' }),
+  provider: Type.Union([Type.Literal('none'), Type.Literal('railway_postgres_pitr')]),
+  pitrEnabled: Type.Boolean(),
+  retentionDays: Type.Union([Type.Integer({ minimum: 1, maximum: 365 }), Type.Null()]),
+  note: Type.Union([Type.String(), Type.Null()]),
+  environment: Type.String(),
+  commitSha: Type.Union([Type.String(), Type.Null()]),
+} as const;
+
+export const PlatformBackupVerificationItemSchema = Type.Object(
+  PlatformBackupVerificationItemFields,
+  { additionalProperties: false },
+);
+
+export const PlatformBackupResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        config: Type.Object(
+          {
+            provider: Type.Union([Type.Literal('none'), Type.Literal('railway_postgres_pitr')]),
+            pitrEnabled: Type.Boolean(),
+            retentionDays: Type.Union([Type.Integer({ minimum: 1, maximum: 365 }), Type.Null()]),
+            verifyMaxAgeDays: Type.Integer({ minimum: 1, maximum: 365 }),
+            automated: Type.Boolean(),
+          },
+          { additionalProperties: false },
+        ),
+        status: PlatformComponentCheckSchema,
+        latestVerification: Type.Union([PlatformBackupVerificationItemSchema, Type.Null()]),
+        recentVerifications: Type.Array(PlatformBackupVerificationItemSchema),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformBackupResponse' },
+);
+
+export const PlatformBackupVerifyBodySchema = Type.Object(
+  {
+    note: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
+  },
+  { additionalProperties: false, $id: 'PlatformBackupVerifyBody' },
+);
+
+export const PlatformBackupVerifyResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        verification: PlatformBackupVerificationItemSchema,
+        status: PlatformComponentCheckSchema,
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformBackupVerifyResponse' },
+);
+
 export const PlatformStatusResponseSchema = Type.Object(
   {
     data: Type.Object(
@@ -269,6 +331,7 @@ export const PlatformStatusResponseSchema = Type.Object(
             database: PlatformComponentCheckSchema,
             email: PlatformComponentCheckSchema,
             stripe: PlatformComponentCheckSchema,
+            backup: PlatformComponentCheckSchema,
           },
           { additionalProperties: false },
         ),
@@ -967,6 +1030,8 @@ export type PlatformTechnicalErrorsResponse = Static<typeof PlatformTechnicalErr
 export type PlatformUptimeResponse = Static<typeof PlatformUptimeResponseSchema>;
 export type PlatformAlertsResponse = Static<typeof PlatformAlertsResponseSchema>;
 export type PlatformAlertActionResponse = Static<typeof PlatformAlertActionResponseSchema>;
+export type PlatformBackupResponse = Static<typeof PlatformBackupResponseSchema>;
+export type PlatformBackupVerifyResponse = Static<typeof PlatformBackupVerifyResponseSchema>;
 export type PlatformAccountsResponse = Static<typeof PlatformAccountsResponseSchema>;
 export type PlatformAccountActionResponse = Static<typeof PlatformAccountActionResponseSchema>;
 export type PlatformMembershipsResponse = Static<typeof PlatformMembershipsResponseSchema>;

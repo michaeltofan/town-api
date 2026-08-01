@@ -55,12 +55,22 @@ import {
 } from '../platform/services/memberships.js';
 import { collectOperationalComponents } from '../platform/services/status-checks.js';
 import { recordUptimeObservation } from '../platform/services/record-uptime-observation.js';
+import {
+  assessBackupComponent,
+  readPlatformBackupConfig,
+  sanitizeBackupNote,
+} from '../platform/services/backup.js';
 import { listPlatformTechnicalErrors } from '../platform/repositories/technical-errors.js';
 import {
   acknowledgePlatformAlert,
   countOpenPlatformAlerts,
   listPlatformAlerts,
 } from '../platform/repositories/alerts.js';
+import {
+  appendPlatformBackupVerification,
+  getLatestPlatformBackupVerification,
+  listPlatformBackupVerifications,
+} from '../platform/repositories/backup-verifications.js';
 import { summarizePlatformUptimeSamples } from '../platform/repositories/uptime-samples.js';
 import { DomainErrorResponseSchema } from '../schemas/error.js';
 import {
@@ -76,6 +86,9 @@ import {
   PlatformAlertIdParamsSchema,
   PlatformAlertsQuerySchema,
   PlatformAlertsResponseSchema,
+  PlatformBackupResponseSchema,
+  PlatformBackupVerifyBodySchema,
+  PlatformBackupVerifyResponseSchema,
   PlatformAuditQuerySchema,
   PlatformAuditResponseSchema,
   PlatformCommunitiesResponseSchema,
@@ -252,16 +265,20 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
         }
       }
 
+      const nowIso = now();
+      const latestBackupVerification = await getLatestPlatformBackupVerification(app.database.db);
       const components = await collectOperationalComponents({
         env,
         shuttingDown: app.isShuttingDown,
         databaseConnection: checks.database,
         migrations: checks.migrations,
+        latestBackupVerification,
+        nowIso,
       });
 
       // Opportunistic uptime sample + alert sync; never break status.
       void recordUptimeObservation(app.database.db, {
-        sampledAt: now(),
+        sampledAt: nowIso,
         components,
         environment: identity.environment,
         service: identity.service,
@@ -1690,7 +1707,7 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
           alerts: alerts.map((row) => ({
             id: row.id,
             openedAt: toIsoTimestamp(row.openedAt),
-            component: row.component as 'api' | 'database' | 'email' | 'stripe',
+            component: row.component as 'api' | 'database' | 'email' | 'stripe' | 'backup',
             status: row.status as 'degraded' | 'fail' | 'timeout' | 'misconfigured',
             severity: row.severity as 'warning' | 'critical',
             detail: row.detail,
@@ -1700,6 +1717,137 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
             acknowledgedAt: row.acknowledgedAt === null ? null : toIsoTimestamp(row.acknowledgedAt),
             acknowledgedByAccountId: row.acknowledgedByAccountId,
           })),
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/backup',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Automated Postgres PITR backup config and operator verifications',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: {
+          200: PlatformBackupResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_status');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const config = readPlatformBackupConfig(env);
+      const recent = await listPlatformBackupVerifications(app.database.db, { limit: 10 });
+      const latest = recent[0] ?? null;
+      const status = assessBackupComponent({
+        env,
+        latestVerification: latest,
+        nowIso: now(),
+      });
+      await audit(operator.accountId, 'backup_inspected', request.id);
+
+      const toItem = (row: (typeof recent)[number]) => ({
+        id: row.id,
+        verifiedAt: toIsoTimestamp(row.verifiedAt),
+        verifiedByAccountId: row.verifiedByAccountId,
+        provider: row.provider as 'none' | 'railway_postgres_pitr',
+        pitrEnabled: row.pitrEnabled,
+        retentionDays: row.retentionDays,
+        note: row.note,
+        environment: row.environment,
+        commitSha: row.commitSha,
+      });
+
+      return {
+        data: {
+          config: {
+            provider: config.provider,
+            pitrEnabled: config.pitrEnabled,
+            retentionDays: config.retentionDays,
+            verifyMaxAgeDays: config.verifyMaxAgeDays,
+            automated: config.automated,
+          },
+          status,
+          latestVerification: latest === null ? null : toItem(latest),
+          recentVerifications: recent.map(toItem),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/backup/verify',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Record operator verification that platform PITR backup is active',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        body: PlatformBackupVerifyBodySchema,
+        response: {
+          200: PlatformBackupVerifyResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_backup');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const config = readPlatformBackupConfig(env);
+      if (!config.automated || config.retentionDays === null) {
+        reply.callNotFound();
+        return;
+      }
+
+      const verifiedAt = now();
+      const verification = await appendPlatformBackupVerification(app.database.db, {
+        verifiedAt,
+        verifiedByAccountId: operator.accountId,
+        provider: config.provider,
+        pitrEnabled: config.pitrEnabled,
+        retentionDays: config.retentionDays,
+        note: sanitizeBackupNote(request.body.note),
+        environment: identity.environment,
+        commitSha: identity.commitSha,
+      });
+
+      await audit(operator.accountId, 'backup_verified', request.id, {
+        metadata: {
+          provider: config.provider,
+          retentionDays: config.retentionDays,
+          verificationId: verification.id,
+        },
+      });
+
+      const status = assessBackupComponent({
+        env,
+        latestVerification: verification,
+        nowIso: verifiedAt,
+      });
+
+      return {
+        data: {
+          verification: {
+            id: verification.id,
+            verifiedAt: toIsoTimestamp(verification.verifiedAt),
+            verifiedByAccountId: verification.verifiedByAccountId,
+            provider: verification.provider as 'none' | 'railway_postgres_pitr',
+            pitrEnabled: verification.pitrEnabled,
+            retentionDays: verification.retentionDays,
+            note: verification.note,
+            environment: verification.environment,
+            commitSha: verification.commitSha,
+          },
+          status,
         },
       };
     },
@@ -1752,7 +1900,7 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
           alert: {
             id: row.id,
             openedAt: toIsoTimestamp(row.openedAt),
-            component: row.component as 'api' | 'database' | 'email' | 'stripe',
+            component: row.component as 'api' | 'database' | 'email' | 'stripe' | 'backup',
             status: row.status as 'degraded' | 'fail' | 'timeout' | 'misconfigured',
             severity: row.severity as 'warning' | 'critical',
             detail: row.detail,
@@ -2144,6 +2292,8 @@ const PLATFORM_AUDIT_ACTIONS = new Set<PlatformAuditAction>([
   'uptime_inspected',
   'alerts_inspected',
   'alert_acknowledged',
+  'backup_inspected',
+  'backup_verified',
 ]);
 
 function isPlatformAuditAction(value: string): value is PlatformAuditAction {

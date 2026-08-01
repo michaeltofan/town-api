@@ -322,7 +322,9 @@ export const platformAuditEvents = town.table(
         'technical_errors_inspected',
         'uptime_inspected',
         'alerts_inspected',
-        'alert_acknowledged'
+        'alert_acknowledged',
+        'backup_inspected',
+        'backup_verified'
       )`,
     ),
     index('platform_audit_events_occurred_at_idx').on(table.occurredAt),
@@ -1708,7 +1710,7 @@ export const platformAlerts = town.table(
   (table) => [
     check(
       'platform_alerts_component_valid',
-      sql`${table.component} in ('api', 'database', 'email', 'stripe')`,
+      sql`${table.component} in ('api', 'database', 'email', 'stripe', 'backup')`,
     ),
     check(
       'platform_alerts_status_valid',
@@ -1769,18 +1771,62 @@ export type PlatformAuditAction =
   | 'technical_errors_inspected'
   | 'uptime_inspected'
   | 'alerts_inspected'
-  | 'alert_acknowledged';
+  | 'alert_acknowledged'
+  | 'backup_inspected'
+  | 'backup_verified';
 
 export type PlatformTechnicalErrorRow = typeof platformTechnicalErrors.$inferSelect;
 export type PlatformUptimeSampleRow = typeof platformUptimeSamples.$inferSelect;
 export type PlatformAlertRow = typeof platformAlerts.$inferSelect;
 
+/**
+ * Operator attestations that platform-managed Postgres PITR backup is active.
+ * Does not store dumps, credentials, or restore payloads.
+ */
+export const platformBackupVerifications = town.table(
+  'platform_backup_verifications',
+  {
+    id: uuid('id').primaryKey(),
+    verifiedAt: timestamp('verified_at', { withTimezone: true, mode: 'string' }).notNull(),
+    verifiedByAccountId: uuid('verified_by_account_id').notNull(),
+    provider: text('provider').notNull(),
+    pitrEnabled: boolean('pitr_enabled').notNull(),
+    retentionDays: integer('retention_days'),
+    note: text('note'),
+    environment: text('environment').notNull(),
+    commitSha: text('commit_sha'),
+  },
+  (table) => [
+    check(
+      'platform_backup_verifications_provider_valid',
+      sql`${table.provider} in ('railway_postgres_pitr', 'none')`,
+    ),
+    check(
+      'platform_backup_verifications_retention_positive',
+      sql`${table.retentionDays} is null or (${table.retentionDays} >= 1 and ${table.retentionDays} <= 365)`,
+    ),
+    check(
+      'platform_backup_verifications_note_bounded',
+      sql`${table.note} is null or char_length(${table.note}) <= 240`,
+    ),
+    foreignKey({
+      columns: [table.verifiedByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'platform_backup_verifications_verified_by_account_id_fkey',
+    }).onDelete('restrict'),
+    index('platform_backup_verifications_verified_at_idx').on(table.verifiedAt),
+  ],
+);
+
+export type PlatformBackupVerificationRow = typeof platformBackupVerifications.$inferSelect;
+
 export type PlatformComponentStatusValue =
   'ok' | 'degraded' | 'fail' | 'timeout' | 'disabled' | 'misconfigured';
 export type PlatformOverallStatusValue = 'ok' | 'degraded' | 'fail' | 'timeout' | 'misconfigured';
-export type PlatformUptimeComponentValue = 'api' | 'database' | 'email' | 'stripe';
+export type PlatformUptimeComponentValue = 'api' | 'database' | 'email' | 'stripe' | 'backup';
 export type PlatformAlertStatusValue = 'degraded' | 'fail' | 'timeout' | 'misconfigured';
 export type PlatformAlertSeverityValue = 'warning' | 'critical';
+export type PlatformBackupProviderValue = 'railway_postgres_pitr' | 'none';
 
 export type SignalHideReason = 'immoral' | 'abusive' | 'spam' | 'off_topic' | 'illegal' | 'other';
 
