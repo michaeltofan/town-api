@@ -42,9 +42,12 @@ describe('platform operator roles', () => {
     expect(operatorHasCapability('role_admin', 'manage_restore')).toBe(true);
   });
 
-  it('allows investigators to read payments and audit', () => {
+  it('allows investigators to read payments, audit, and export investigation packs', () => {
     expect(operatorHasCapability('viewer', 'read_payments')).toBe(false);
     expect(operatorHasCapability('investigator', 'read_payments')).toBe(true);
     expect(operatorHasCapability('investigator', 'read_audit')).toBe(true);
+    expect(operatorHasCapability('viewer', 'export_investigation')).toBe(false);
+    expect(operatorHasCapability('investigator', 'export_investigation')).toBe(true);
+    expect(operatorHasCapability('role_admin', 'export_investigation')).toBe(true);
   });
 });

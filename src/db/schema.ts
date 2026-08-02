@@ -326,7 +326,8 @@ export const platformAuditEvents = town.table(
         'backup_inspected',
         'backup_verified',
         'restore_inspected',
-        'restore_drill_attested'
+        'restore_drill_attested',
+        'investigation_exported'
       )`,
     ),
     index('platform_audit_events_occurred_at_idx').on(table.occurredAt),
@@ -1777,7 +1778,8 @@ export type PlatformAuditAction =
   | 'backup_inspected'
   | 'backup_verified'
   | 'restore_inspected'
-  | 'restore_drill_attested';
+  | 'restore_drill_attested'
+  | 'investigation_exported';
 
 export type PlatformTechnicalErrorRow = typeof platformTechnicalErrors.$inferSelect;
 export type PlatformUptimeSampleRow = typeof platformUptimeSamples.$inferSelect;

@@ -1048,6 +1048,144 @@ export const PlatformAccountPaymentsResponseSchema = Type.Object(
   { additionalProperties: false, $id: 'PlatformAccountPaymentsResponse' },
 );
 
+export const PlatformInvestigationExportResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        generatedAt: Type.String({ format: 'date-time' }),
+        accountId: Type.String({ format: 'uuid' }),
+        account: Type.Object(
+          {
+            accountId: Type.String({ format: 'uuid' }),
+            status: PlatformAccountStatusSchema,
+            isOwner: Type.Boolean(),
+            email: Type.Union([Type.String(), Type.Null()]),
+            communitySlug: Type.Union([Type.String(), Type.Null()]),
+            membershipStatus: Type.Union([Type.String(), Type.Null()]),
+            suspendedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+            accountReadyAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+            closedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+            createdAt: Type.String({ format: 'date-time' }),
+            updatedAt: Type.String({ format: 'date-time' }),
+          },
+          { additionalProperties: false },
+        ),
+        emails: Type.Object(
+          {
+            emails: Type.Array(
+              Type.Object(
+                {
+                  id: Type.String({ format: 'uuid' }),
+                  emailOriginal: Type.String(),
+                  emailNormalized: Type.String(),
+                  isPrimary: Type.Boolean(),
+                  verifiedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+                  revokedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+                  createdAt: Type.String({ format: 'date-time' }),
+                },
+                { additionalProperties: false },
+              ),
+            ),
+            challenges: Type.Array(
+              Type.Object(
+                {
+                  id: Type.String({ format: 'uuid' }),
+                  emailNormalized: Type.String(),
+                  purpose: Type.String(),
+                  createdAt: Type.String({ format: 'date-time' }),
+                  expiresAt: Type.String({ format: 'date-time' }),
+                  consumedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+                  revokedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+                  attemptCount: Type.Integer({ minimum: 0 }),
+                },
+                { additionalProperties: false },
+              ),
+            ),
+          },
+          { additionalProperties: false },
+        ),
+        payments: Type.Object(
+          {
+            entitlement: Type.Union([
+              Type.Object(
+                {
+                  status: Type.String(),
+                  source: Type.String(),
+                  accessUntil: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+                  cancelAtPeriodEnd: Type.Boolean(),
+                  activatedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+                  cancellationRequestedAt: Type.Union([
+                    Type.String({ format: 'date-time' }),
+                    Type.Null(),
+                  ]),
+                  expiredAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+                  version: Type.Integer({ minimum: 0 }),
+                  updatedAt: Type.String({ format: 'date-time' }),
+                },
+                { additionalProperties: false },
+              ),
+              Type.Null(),
+            ]),
+            stripeCustomer: Type.Union([
+              Type.Object(
+                {
+                  linked: Type.Literal(true),
+                  billingReference: Type.String({ format: 'uuid' }),
+                  createdAt: Type.String({ format: 'date-time' }),
+                  updatedAt: Type.String({ format: 'date-time' }),
+                },
+                { additionalProperties: false },
+              ),
+              Type.Object(
+                {
+                  linked: Type.Literal(false),
+                },
+                { additionalProperties: false },
+              ),
+            ]),
+            checkoutAttempts: Type.Array(
+              Type.Object(
+                {
+                  id: Type.String({ format: 'uuid' }),
+                  status: Type.String(),
+                  hasStripeSession: Type.Boolean(),
+                  createdAt: Type.String({ format: 'date-time' }),
+                  expiresAt: Type.String({ format: 'date-time' }),
+                  completedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+                },
+                { additionalProperties: false },
+              ),
+            ),
+          },
+          { additionalProperties: false },
+        ),
+        platformAudit: Type.Object(
+          {
+            events: Type.Array(
+              Type.Object(
+                {
+                  id: Type.String({ format: 'uuid' }),
+                  operatorAccountId: Type.String({ format: 'uuid' }),
+                  action: Type.String(),
+                  targetAccountId: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
+                  targetSignalId: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
+                  requestId: Type.Union([Type.String(), Type.Null()]),
+                  metadata: Type.Union([Type.Record(Type.String(), Type.Unknown()), Type.Null()]),
+                  occurredAt: Type.String({ format: 'date-time' }),
+                },
+                { additionalProperties: false },
+              ),
+            ),
+          },
+          { additionalProperties: false },
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformInvestigationExportResponse' },
+);
+
 export const PlatformOperatorsResponseSchema = Type.Object(
   {
     data: Type.Object(
@@ -1101,6 +1239,9 @@ export type PlatformAlertsResponse = Static<typeof PlatformAlertsResponseSchema>
 export type PlatformAlertActionResponse = Static<typeof PlatformAlertActionResponseSchema>;
 export type PlatformBackupResponse = Static<typeof PlatformBackupResponseSchema>;
 export type PlatformBackupVerifyResponse = Static<typeof PlatformBackupVerifyResponseSchema>;
+export type PlatformInvestigationExportResponse = Static<
+  typeof PlatformInvestigationExportResponseSchema
+>;
 export type PlatformAccountsResponse = Static<typeof PlatformAccountsResponseSchema>;
 export type PlatformAccountActionResponse = Static<typeof PlatformAccountActionResponseSchema>;
 export type PlatformMembershipsResponse = Static<typeof PlatformMembershipsResponseSchema>;

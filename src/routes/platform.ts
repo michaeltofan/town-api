@@ -65,6 +65,7 @@ import {
   readPlatformRestoreDrillConfig,
   sanitizeRestoreDrillNote,
 } from '../platform/services/restore-drill.js';
+import { buildPlatformInvestigationExport } from '../platform/services/investigation-export.js';
 import { listPlatformTechnicalErrors } from '../platform/repositories/technical-errors.js';
 import {
   acknowledgePlatformAlert,
@@ -99,6 +100,7 @@ import {
   PlatformBackupResponseSchema,
   PlatformBackupVerifyBodySchema,
   PlatformBackupVerifyResponseSchema,
+  PlatformInvestigationExportResponseSchema,
   PlatformRestoreAttestBodySchema,
   PlatformRestoreAttestResponseSchema,
   PlatformRestoreResponseSchema,
@@ -2141,6 +2143,47 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
   );
 
   app.get(
+    '/v1/platform/accounts/:accountId/export',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary:
+          'Download a bounded investigation/support pack for one account (no Stripe IDs or secrets)',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformAccountIdParamsSchema,
+        response: {
+          200: PlatformInvestigationExportResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'export_investigation');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const pack = await buildPlatformInvestigationExport(app.database.db, {
+        accountId: request.params.accountId,
+        generatedAt: now(),
+      });
+      if (!pack) {
+        throw accountNotFoundError();
+      }
+
+      await audit(operator.accountId, 'investigation_exported', request.id, {
+        targetAccountId: pack.accountId,
+        metadata: {
+          sections: 'account,emails,payments,platformAudit',
+        },
+      });
+
+      return { data: pack };
+    },
+  );
+
+  app.get(
     '/v1/platform/accounts/:accountId/emails',
     {
       schema: {
@@ -2462,6 +2505,7 @@ const PLATFORM_AUDIT_ACTIONS = new Set<PlatformAuditAction>([
   'backup_verified',
   'restore_inspected',
   'restore_drill_attested',
+  'investigation_exported',
 ]);
 
 function isPlatformAuditAction(value: string): value is PlatformAuditAction {

@@ -35,6 +35,7 @@ export type PlatformCapability =
   | 'read_audit'
   | 'read_emails'
   | 'read_payments'
+  | 'export_investigation'
   | 'moderate_signals'
   | 'manage_accounts'
   | 'manage_memberships'
@@ -54,6 +55,7 @@ const CAPABILITY_MIN_ROLE: Record<PlatformCapability, PlatformOperatorRole> = {
   read_audit: 'investigator',
   read_emails: 'investigator',
   read_payments: 'investigator',
+  export_investigation: 'investigator',
   moderate_signals: 'moderator',
   manage_accounts: 'account_admin',
   manage_memberships: 'ops_admin',
