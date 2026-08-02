@@ -34,7 +34,7 @@ Historical Slice 1 boundary (deployment-readiness foundation only):
 migrate` (invoked via `npm run db:migrate`).
 
 Current repository journal (authoritative for pre-flight checks): 22 entries
-(`0000`–`0021`), derived from `drizzle/meta/_journal.json` /
+(`0000`–`0040`, 41 entries), derived from `drizzle/meta/_journal.json` /
 `EXPECTED_MIGRATION_COUNT`.
 
 ## 3. Target environments
@@ -44,12 +44,12 @@ environments:
 
 | APP_ENV      | Public URL                          | Notes                                         |
 | ------------ | ----------------------------------- | --------------------------------------------- |
-| `staging`    | `https://api-staging.towncivic.org` | Stripe test mode; live-mode expectations off. |
-| `production` | `https://api.towncivic.org`         | Stripe live mode required if billing enabled. |
+| `staging`    | `https://api-staging.towncivic.org` | **Current live target.** Stripe test mode. Public site `towncivic.org` talks to this API. |
+| `production` | `https://api.towncivic.org`         | **Not provisioned yet** (DNS/service absent). Do not run production smoke until it exists. Stripe live mode required if billing enabled. |
 
-`APP_ENV` is authoritative. `NODE_ENV` is retained for framework defaults
-(e.g. Fastify logger presets) but the runtime and fail-closed environment
-validator prefer `APP_ENV` when both are set.
+`APP_ENV` should be authoritative for environment policy. Prefer gating
+production-only rules on `APP_ENV === 'production'`; do not treat
+`NODE_ENV=production` alone as a production deploy.
 
 ## 4. Runtime build identity
 

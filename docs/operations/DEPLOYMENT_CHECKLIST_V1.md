@@ -7,7 +7,7 @@ production deployment.
 
 - [ ] Branch merged to `main`; CI green.
 - [ ] `npm run db:check` shows no drift and journal shows exactly 22
-      entries (`0000`–`0021`).
+      entries (`0000`–`0040`, 41 entries).
 - [ ] `npm run openapi:check` passes (docs match source).
 - [ ] All contract checks pass (`identity`, `auth`, `membership`, `billing`).
 - [ ] `npm run build && npm run check` succeed locally.
@@ -47,8 +47,8 @@ production deployment.
 
 - [ ] `npm run smoke:deployment -- --base-url https://api-staging.towncivic.org \
  --environment staging --expect-commit <sha> --auth-enabled false` passes.
-- [ ] `npm run smoke:deployment -- --base-url https://api.towncivic.org \
- --environment production --expect-commit <sha>` passes.
+- [ ] Production smoke (`https://api.towncivic.org`) only after that host is
+      provisioned. Skip while production DNS/service is absent.
 - [ ] Unauthorized routes still return `401` when auth is enabled, or `404`
       when `--auth-enabled false`.
 - [ ] Invalid Stripe webhook signatures on `POST /v1/billing/stripe/webhook`
