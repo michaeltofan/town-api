@@ -172,7 +172,7 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
       throw new Error('unexpected ready status literal');
     }
     // Public ready body is status-only (no component enumeration for recon).
-    if ('checks' in (parsed as object)) {
+    if ('checks' in parsed) {
       throw new Error('ready payload must not expose component checks');
     }
     if (status !== 'ready') {
