@@ -45,7 +45,29 @@ export type DatabaseComponentInput = {
 export type StatusCheckFetch = (
   input: string | URL,
   init?: { method?: string; headers?: Record<string, string>; signal?: AbortSignal },
-) => Promise<{ ok: boolean; status: number }>;
+) => Promise<{
+  ok: boolean;
+  status: number;
+  json?: () => Promise<unknown>;
+}>;
+
+async function readResendErrorName(response: {
+  json?: () => Promise<unknown>;
+}): Promise<string | null> {
+  if (typeof response.json !== 'function') {
+    return null;
+  }
+  try {
+    const body = await response.json();
+    if (body === null || typeof body !== 'object' || !('name' in body)) {
+      return null;
+    }
+    const name = body.name;
+    return typeof name === 'string' ? name : null;
+  } catch {
+    return null;
+  }
+}
 
 export type StripePriceProbe = (input: {
   secretKey: string;
@@ -131,6 +153,12 @@ export async function assessEmailComponent(
       return { status: 'ok', detail: 'resend_reachable' };
     }
     if (response.status === 401 || response.status === 403) {
+      // Send-only Resend keys are valid for delivery but cannot GET /domains.
+      // Treat that provider response as configured/reachable, not misconfigured.
+      const errorName = await readResendErrorName(response);
+      if (errorName === 'restricted_api_key') {
+        return { status: 'ok', detail: 'resend_send_only_key' };
+      }
       return { status: 'misconfigured', detail: `resend_http_${String(response.status)}` };
     }
     return { status: 'fail', detail: `resend_http_${String(response.status)}` };
@@ -239,14 +267,22 @@ export async function collectOperationalComponents(input: {
 async function defaultFetch(
   input: string | URL,
   init?: { method?: string; headers?: Record<string, string>; signal?: AbortSignal },
-): Promise<{ ok: boolean; status: number }> {
+): Promise<{
+  ok: boolean;
+  status: number;
+  json?: () => Promise<unknown>;
+}> {
   const requestInit: RequestInit = {
     method: init?.method ?? 'GET',
   };
   if (init?.headers) requestInit.headers = init.headers;
   if (init?.signal) requestInit.signal = init.signal;
   const response = await fetch(input, requestInit);
-  return { ok: response.ok, status: response.status };
+  return {
+    ok: response.ok,
+    status: response.status,
+    json: () => response.json(),
+  };
 }
 
 async function defaultStripePriceProbe(input: {

@@ -100,6 +100,30 @@ describe('platform operational status checks', () => {
         },
       ),
     ).resolves.toEqual({ status: 'misconfigured', detail: 'resend_http_401' });
+
+    await expect(
+      assessEmailComponent(
+        baseEnv({
+          EMAIL_VERIFICATION_ENABLED: true,
+          EMAIL_VERIFICATION_DELIVERY_MODE: 'resend',
+          EMAIL_VERIFICATION_RESEND_API_KEY: 're_test_key_1234567890',
+          EMAIL_VERIFICATION_FROM_ADDRESS: 'ops@example.com',
+        }),
+        {
+          fetchImpl: () =>
+            Promise.resolve({
+              ok: false,
+              status: 401,
+              json: () =>
+                Promise.resolve({
+                  statusCode: 401,
+                  name: 'restricted_api_key',
+                  message: 'This API key is restricted to only send emails',
+                }),
+            }),
+        },
+      ),
+    ).resolves.toEqual({ status: 'ok', detail: 'resend_send_only_key' });
   });
 
   it('reports stripe disabled / misconfigured / reachable outcomes', async () => {

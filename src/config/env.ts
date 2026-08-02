@@ -543,7 +543,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   );
   const nodeEnv = source.NODE_ENV ?? 'development';
   const appEnv = resolveAppEnv(source.APP_ENV, nodeEnv);
-  const runtimeIsProduction = appEnv === 'production' || nodeEnv === 'production';
+  // Production policy is APP_ENV-only. NODE_ENV=production is normal on Railway
+  // staging containers and must not force production Stripe/WebAuthn/email rules.
+  const runtimeIsProduction = appEnv === 'production';
   const runtimeIsStaging = appEnv === 'staging';
   const railwayCommitSha = parseOptionalGitCommitSha(
     source.RAILWAY_GIT_COMMIT_SHA,
@@ -706,7 +708,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
         'Invalid environment configuration: EMAIL_VERIFICATION_DELIVERY_MODE must be test, development, or resend when EMAIL_VERIFICATION_ENABLED is true',
       );
     }
-    if (nodeEnv === 'production' && deliveryMode !== 'resend') {
+    if (appEnv === 'production' && deliveryMode !== 'resend') {
       throw new Error(
         'Invalid environment configuration: EMAIL_VERIFICATION_ENABLED in production requires EMAIL_VERIFICATION_DELIVERY_MODE=resend',
       );
@@ -804,7 +806,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       nodeEnv,
       appEnv,
     });
-    if (nodeEnv === 'production') {
+    if (appEnv === 'production') {
       assertProductionWebAuthnPolicy(source.WEBAUTHN_RP_ID, allowedOrigins);
       if (source.WEBAUTHN_RP_ID === 'localhost') {
         throw new Error(
@@ -879,7 +881,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       nodeEnv,
       appEnv,
     });
-    if (nodeEnv === 'production') {
+    if (appEnv === 'production') {
       assertProductionWebAuthnPolicy(source.WEBAUTHN_RP_ID, allowedOrigins);
       if (source.WEBAUTHN_RP_ID === 'localhost') {
         throw new Error(
@@ -1014,7 +1016,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
         'Invalid environment configuration: ACCOUNT_RECOVERY_DELIVERY_MODE must be test, development, or resend when ACCOUNT_RECOVERY_ENABLED is true',
       );
     }
-    if (nodeEnv === 'production' && deliveryMode !== 'resend') {
+    if (appEnv === 'production' && deliveryMode !== 'resend') {
       throw new Error(
         'Invalid environment configuration: ACCOUNT_RECOVERY_ENABLED in production requires ACCOUNT_RECOVERY_DELIVERY_MODE=resend',
       );
@@ -1096,7 +1098,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       nodeEnv,
       appEnv,
     });
-    if (nodeEnv === 'production') {
+    if (appEnv === 'production') {
       assertProductionWebAuthnPolicy(source.WEBAUTHN_RP_ID, allowedOrigins);
       if (source.WEBAUTHN_RP_ID === 'localhost') {
         throw new Error(
@@ -1321,7 +1323,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (runtimeIsProduction) {
     if (railwayCommitSha === undefined && appCommitSha === undefined) {
       throw new Error(
-        'Invalid environment configuration: missing deployment commit identity (RAILWAY_GIT_COMMIT_SHA or APP_COMMIT_SHA required when APP_ENV or NODE_ENV is production)',
+        'Invalid environment configuration: missing deployment commit identity (RAILWAY_GIT_COMMIT_SHA or APP_COMMIT_SHA required when APP_ENV is production)',
       );
     }
     assertNoLocalDatabaseUrl(candidate.DATABASE_URL);
