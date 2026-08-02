@@ -21,6 +21,7 @@ const EXPECTED_TABLES = [
   'platform_audit_events',
   'platform_backup_verifications',
   'platform_operators',
+  'platform_restore_drill_attestations',
   'platform_technical_errors',
   'platform_uptime_samples',
   'recovery_grants',

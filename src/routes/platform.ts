@@ -60,6 +60,11 @@ import {
   readPlatformBackupConfig,
   sanitizeBackupNote,
 } from '../platform/services/backup.js';
+import {
+  assessRestoreComponent,
+  readPlatformRestoreDrillConfig,
+  sanitizeRestoreDrillNote,
+} from '../platform/services/restore-drill.js';
 import { listPlatformTechnicalErrors } from '../platform/repositories/technical-errors.js';
 import {
   acknowledgePlatformAlert,
@@ -71,6 +76,11 @@ import {
   getLatestPlatformBackupVerification,
   listPlatformBackupVerifications,
 } from '../platform/repositories/backup-verifications.js';
+import {
+  appendPlatformRestoreDrillAttestation,
+  getLatestPlatformRestoreDrillAttestation,
+  listPlatformRestoreDrillAttestations,
+} from '../platform/repositories/restore-drill-attestations.js';
 import { summarizePlatformUptimeSamples } from '../platform/repositories/uptime-samples.js';
 import { DomainErrorResponseSchema } from '../schemas/error.js';
 import {
@@ -89,6 +99,9 @@ import {
   PlatformBackupResponseSchema,
   PlatformBackupVerifyBodySchema,
   PlatformBackupVerifyResponseSchema,
+  PlatformRestoreAttestBodySchema,
+  PlatformRestoreAttestResponseSchema,
+  PlatformRestoreResponseSchema,
   PlatformAuditQuerySchema,
   PlatformAuditResponseSchema,
   PlatformCommunitiesResponseSchema,
@@ -267,12 +280,16 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
 
       const nowIso = now();
       const latestBackupVerification = await getLatestPlatformBackupVerification(app.database.db);
+      const latestRestoreDrillAttestation = await getLatestPlatformRestoreDrillAttestation(
+        app.database.db,
+      );
       const components = await collectOperationalComponents({
         env,
         shuttingDown: app.isShuttingDown,
         databaseConnection: checks.database,
         migrations: checks.migrations,
         latestBackupVerification,
+        latestRestoreDrillAttestation,
         nowIso,
       });
 
@@ -1707,7 +1724,8 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
           alerts: alerts.map((row) => ({
             id: row.id,
             openedAt: toIsoTimestamp(row.openedAt),
-            component: row.component as 'api' | 'database' | 'email' | 'stripe' | 'backup',
+            component: row.component as
+              'api' | 'database' | 'email' | 'stripe' | 'backup' | 'restore',
             status: row.status as 'degraded' | 'fail' | 'timeout' | 'misconfigured',
             severity: row.severity as 'warning' | 'critical',
             detail: row.detail,
@@ -1853,6 +1871,153 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
     },
   );
 
+  app.get(
+    '/v1/platform/restore',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Restore-drill attestation status (never executes database restore)',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: {
+          200: PlatformRestoreResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_status');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const config = readPlatformRestoreDrillConfig(env);
+      const recent = await listPlatformRestoreDrillAttestations(app.database.db, { limit: 10 });
+      const latest = recent[0] ?? null;
+      const status = assessRestoreComponent({
+        env,
+        latestAttestation: latest,
+        nowIso: now(),
+      });
+      await audit(operator.accountId, 'restore_inspected', request.id);
+
+      const toItem = (row: (typeof recent)[number]) => ({
+        id: row.id,
+        drilledAt: toIsoTimestamp(row.drilledAt),
+        drilledByAccountId: row.drilledByAccountId,
+        method: row.method as 'railway_pitr_disposable_clone' | 'railway_pitr_point_in_time',
+        outcome: row.outcome as 'passed' | 'failed',
+        restorePointAt: row.restorePointAt === null ? null : toIsoTimestamp(row.restorePointAt),
+        note: row.note,
+        environment: row.environment,
+        commitSha: row.commitSha,
+      });
+
+      return {
+        data: {
+          config: {
+            maxAgeDays: config.maxAgeDays,
+            requiresAutomatedBackup: config.requiresAutomatedBackup,
+          },
+          status,
+          latestAttestation: latest === null ? null : toItem(latest),
+          recentAttestations: recent.map(toItem),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/restore/attest',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Record that an out-of-band restore drill was performed (ops_admin+)',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        body: PlatformRestoreAttestBodySchema,
+        response: {
+          200: PlatformRestoreAttestResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'manage_restore');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+
+      const backup = readPlatformBackupConfig(env);
+      if (!backup.automated) {
+        reply.callNotFound();
+        return;
+      }
+
+      const drilledAt = now();
+      const restorePointAt =
+        typeof request.body.restorePointAt === 'string' ? request.body.restorePointAt : null;
+      if (restorePointAt !== null) {
+        const restorePointMs = Date.parse(restorePointAt);
+        const drilledMs = Date.parse(drilledAt);
+        if (
+          !Number.isFinite(restorePointMs) ||
+          !Number.isFinite(drilledMs) ||
+          restorePointMs > drilledMs
+        ) {
+          reply.callNotFound();
+          return;
+        }
+      }
+
+      const attestation = await appendPlatformRestoreDrillAttestation(app.database.db, {
+        drilledAt,
+        drilledByAccountId: operator.accountId,
+        method: request.body.method,
+        outcome: request.body.outcome,
+        restorePointAt,
+        note: sanitizeRestoreDrillNote(request.body.note),
+        environment: identity.environment,
+        commitSha: identity.commitSha,
+      });
+
+      await audit(operator.accountId, 'restore_drill_attested', request.id, {
+        metadata: {
+          method: request.body.method,
+          outcome: request.body.outcome,
+          attestationId: attestation.id,
+        },
+      });
+
+      const status = assessRestoreComponent({
+        env,
+        latestAttestation: attestation,
+        nowIso: drilledAt,
+      });
+
+      return {
+        data: {
+          attestation: {
+            id: attestation.id,
+            drilledAt: toIsoTimestamp(attestation.drilledAt),
+            drilledByAccountId: attestation.drilledByAccountId,
+            method: attestation.method as
+              'railway_pitr_disposable_clone' | 'railway_pitr_point_in_time',
+            outcome: attestation.outcome as 'passed' | 'failed',
+            restorePointAt:
+              attestation.restorePointAt === null
+                ? null
+                : toIsoTimestamp(attestation.restorePointAt),
+            note: attestation.note,
+            environment: attestation.environment,
+            commitSha: attestation.commitSha,
+          },
+          status,
+        },
+      };
+    },
+  );
+
   app.post(
     '/v1/platform/alerts/:alertId/acknowledge',
     {
@@ -1900,7 +2065,8 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
           alert: {
             id: row.id,
             openedAt: toIsoTimestamp(row.openedAt),
-            component: row.component as 'api' | 'database' | 'email' | 'stripe' | 'backup',
+            component: row.component as
+              'api' | 'database' | 'email' | 'stripe' | 'backup' | 'restore',
             status: row.status as 'degraded' | 'fail' | 'timeout' | 'misconfigured',
             severity: row.severity as 'warning' | 'critical',
             detail: row.detail,
@@ -2294,6 +2460,8 @@ const PLATFORM_AUDIT_ACTIONS = new Set<PlatformAuditAction>([
   'alert_acknowledged',
   'backup_inspected',
   'backup_verified',
+  'restore_inspected',
+  'restore_drill_attested',
 ]);
 
 function isPlatformAuditAction(value: string): value is PlatformAuditAction {

@@ -274,6 +274,13 @@
       "when": 1786560000000,
       "tag": "0038_platform_backup_verifications",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1786646400000,
+      "tag": "0039_platform_restore_drill_attestations",
+      "breakpoints": true
     }
   ]
 }

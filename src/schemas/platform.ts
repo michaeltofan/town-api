@@ -173,6 +173,7 @@ export const PlatformAlertItemSchema = Type.Object(
       Type.Literal('email'),
       Type.Literal('stripe'),
       Type.Literal('backup'),
+      Type.Literal('restore'),
     ]),
     status: Type.Union([
       Type.Literal('degraded'),
@@ -284,6 +285,73 @@ export const PlatformBackupVerifyResponseSchema = Type.Object(
   { additionalProperties: false, $id: 'PlatformBackupVerifyResponse' },
 );
 
+const PlatformRestoreDrillAttestationItemFields = {
+  id: Type.String({ format: 'uuid' }),
+  drilledAt: Type.String({ format: 'date-time' }),
+  drilledByAccountId: Type.String({ format: 'uuid' }),
+  method: Type.Union([
+    Type.Literal('railway_pitr_disposable_clone'),
+    Type.Literal('railway_pitr_point_in_time'),
+  ]),
+  outcome: Type.Union([Type.Literal('passed'), Type.Literal('failed')]),
+  restorePointAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+  note: Type.Union([Type.String(), Type.Null()]),
+  environment: Type.String(),
+  commitSha: Type.Union([Type.String(), Type.Null()]),
+} as const;
+
+export const PlatformRestoreDrillAttestationItemSchema = Type.Object(
+  PlatformRestoreDrillAttestationItemFields,
+  { additionalProperties: false },
+);
+
+export const PlatformRestoreResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        config: Type.Object(
+          {
+            maxAgeDays: Type.Integer({ minimum: 1, maximum: 365 }),
+            requiresAutomatedBackup: Type.Boolean(),
+          },
+          { additionalProperties: false },
+        ),
+        status: PlatformComponentCheckSchema,
+        latestAttestation: Type.Union([PlatformRestoreDrillAttestationItemSchema, Type.Null()]),
+        recentAttestations: Type.Array(PlatformRestoreDrillAttestationItemSchema),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformRestoreResponse' },
+);
+
+export const PlatformRestoreAttestBodySchema = Type.Object(
+  {
+    method: Type.Union([
+      Type.Literal('railway_pitr_disposable_clone'),
+      Type.Literal('railway_pitr_point_in_time'),
+    ]),
+    outcome: Type.Union([Type.Literal('passed'), Type.Literal('failed')]),
+    restorePointAt: Type.Optional(Type.String({ format: 'date-time' })),
+    note: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
+  },
+  { additionalProperties: false, $id: 'PlatformRestoreAttestBody' },
+);
+
+export const PlatformRestoreAttestResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        attestation: PlatformRestoreDrillAttestationItemSchema,
+        status: PlatformComponentCheckSchema,
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformRestoreAttestResponse' },
+);
+
 export const PlatformStatusResponseSchema = Type.Object(
   {
     data: Type.Object(
@@ -332,6 +400,7 @@ export const PlatformStatusResponseSchema = Type.Object(
             email: PlatformComponentCheckSchema,
             stripe: PlatformComponentCheckSchema,
             backup: PlatformComponentCheckSchema,
+            restore: PlatformComponentCheckSchema,
           },
           { additionalProperties: false },
         ),

@@ -40,6 +40,7 @@ export type PlatformCapability =
   | 'manage_memberships'
   | 'manage_alerts'
   | 'manage_backup'
+  | 'manage_restore'
   | 'manage_operators';
 
 const CAPABILITY_MIN_ROLE: Record<PlatformCapability, PlatformOperatorRole> = {
@@ -58,6 +59,7 @@ const CAPABILITY_MIN_ROLE: Record<PlatformCapability, PlatformOperatorRole> = {
   manage_memberships: 'ops_admin',
   manage_alerts: 'ops_admin',
   manage_backup: 'ops_admin',
+  manage_restore: 'ops_admin',
   manage_operators: 'role_admin',
 };
 

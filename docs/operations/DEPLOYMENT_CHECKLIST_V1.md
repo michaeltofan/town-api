@@ -71,6 +71,10 @@ production deployment.
 
 - [ ] Confirm PostgreSQL 18 backup / PITR status with the platform admin and
       record verification in `/platform/` Monitor → Backup (`POST /v1/platform/backup/verify`).
+- [ ] Confirm a restore drill was performed out-of-band (Railway disposable
+      clone / PITR) and record attestation in `/platform/` Monitor → Restore
+      (`POST /v1/platform/restore/attest`). Do not restore into staging/prod
+      from the console.
 - [ ] File any follow-ups from the smoke run.
 
 ## Exclusions

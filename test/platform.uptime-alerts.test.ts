@@ -20,6 +20,7 @@ function components(
     email: { status: status('email'), detail: null },
     stripe: { status: status('stripe'), detail: null },
     backup: { status: status('backup'), detail: null },
+    restore: { status: status('restore'), detail: null },
   };
 }
 

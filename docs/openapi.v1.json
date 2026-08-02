@@ -11703,6 +11703,12 @@
                                       "backup"
                                     ],
                                     "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "restore"
+                                    ],
+                                    "type": "string"
                                   }
                                 ]
                               },
@@ -11955,6 +11961,12 @@
                                 {
                                   "enum": [
                                     "backup"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "restore"
                                   ],
                                   "type": "string"
                                 }
@@ -15351,6 +15363,661 @@
         ]
       }
     },
+    "/v1/platform/restore": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "config": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "maxAgeDays": {
+                              "maximum": 365,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "requiresAutomatedBackup": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "maxAgeDays",
+                            "requiresAutomatedBackup"
+                          ],
+                          "type": "object"
+                        },
+                        "latestAttestation": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "commitSha": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "drilledAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "drilledByAccountId": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "environment": {
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "method": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "railway_pitr_disposable_clone"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "railway_pitr_point_in_time"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "note": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "outcome": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "passed"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "failed"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "restorePointAt": {
+                                  "anyOf": [
+                                    {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "drilledAt",
+                                "drilledByAccountId",
+                                "method",
+                                "outcome",
+                                "restorePointAt",
+                                "note",
+                                "environment",
+                                "commitSha"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "recentAttestations": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "commitSha": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "drilledAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "drilledByAccountId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "method": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "railway_pitr_disposable_clone"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "railway_pitr_point_in_time"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "note": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "outcome": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "passed"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "failed"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "restorePointAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "drilledAt",
+                              "drilledByAccountId",
+                              "method",
+                              "outcome",
+                              "restorePointAt",
+                              "note",
+                              "environment",
+                              "commitSha"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "status": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 160,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "ok"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "degraded"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "fail"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "timeout"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "disabled"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "misconfigured"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "detail"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "config",
+                        "status",
+                        "latestAttestation",
+                        "recentAttestations"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Restore-drill attestation status (never executes database restore)",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/restore/attest": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "method": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "railway_pitr_disposable_clone"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "railway_pitr_point_in_time"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "passed"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "failed"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "restorePointAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "method",
+                  "outcome"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "attestation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "commitSha": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "drilledAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "drilledByAccountId": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "environment": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "method": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "railway_pitr_disposable_clone"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "railway_pitr_point_in_time"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "note": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "outcome": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "passed"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "failed"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "restorePointAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "drilledAt",
+                            "drilledByAccountId",
+                            "method",
+                            "outcome",
+                            "restorePointAt",
+                            "note",
+                            "environment",
+                            "commitSha"
+                          ],
+                          "type": "object"
+                        },
+                        "status": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 160,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "ok"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "degraded"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "fail"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "timeout"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "disabled"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "misconfigured"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "detail"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "attestation",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Record that an out-of-band restore drill was performed (ops_admin+)",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
     "/v1/platform/session": {
       "get": {
         "responses": {
@@ -16218,6 +16885,67 @@
                               ],
                               "type": "object"
                             },
+                            "restore": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "detail": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 160,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "ok"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "degraded"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "fail"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "timeout"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "disabled"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "misconfigured"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "detail"
+                              ],
+                              "type": "object"
+                            },
                             "stripe": {
                               "additionalProperties": false,
                               "properties": {
@@ -16285,7 +17013,8 @@
                             "database",
                             "email",
                             "stripe",
-                            "backup"
+                            "backup",
+                            "restore"
                           ],
                           "type": "object"
                         },
@@ -20278,7 +21007,7 @@
       "name": "Billing"
     },
     {
-      "description": "Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, uptime samples, in-console component alerts, automated Postgres PITR backup attestation, account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.",
+      "description": "Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, uptime samples, in-console component alerts, automated Postgres PITR backup attestation, restore-drill attestation (never executes restore), account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.",
       "name": "Platform"
     }
   ]

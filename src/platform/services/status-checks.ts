@@ -2,14 +2,19 @@ import type { Env } from '../../config/env.js';
 import { STRIPE_API_VERSION, type StripeApiVersion } from '../../config/env.js';
 import { createOfficialStripeAdapter } from '../../billing/stripe-adapter.js';
 
-import type { PlatformBackupVerificationRow } from '../../db/schema.js';
+import type {
+  PlatformBackupVerificationRow,
+  PlatformRestoreDrillAttestationRow,
+} from '../../db/schema.js';
 import { assessBackupComponent } from './backup.js';
+import { assessRestoreComponent } from './restore-drill.js';
 
 /**
  * Distinct operational component checks for GET /v1/platform/status.
  *
  * Scope: API process, database readiness, email provider, Stripe billing,
- * and platform-managed Postgres PITR backup attestation.
+ * platform-managed Postgres PITR backup attestation, and restore-drill
+ * attestation (never executes restore).
  * No secret leakage in details. Alert/uptime persistence is handled
  * separately from these probe results.
  */
@@ -28,6 +33,7 @@ export type PlatformOperationalComponents = {
   readonly email: PlatformComponentCheck;
   readonly stripe: PlatformComponentCheck;
   readonly backup: PlatformComponentCheck;
+  readonly restore: PlatformComponentCheck;
 };
 
 export type DatabaseComponentInput = {
@@ -183,6 +189,7 @@ export async function collectOperationalComponents(input: {
   databaseConnection: 'ok' | 'fail' | 'timeout';
   migrations: 'ok' | 'fail' | 'unknown';
   latestBackupVerification?: PlatformBackupVerificationRow | null;
+  latestRestoreDrillAttestation?: PlatformRestoreDrillAttestationRow | null;
   nowIso?: string;
   fetchImpl?: StatusCheckFetch;
   probeStripePrice?: StripePriceProbe;
@@ -215,12 +222,18 @@ export async function collectOperationalComponents(input: {
     assessEmailComponent(input.env, emailOptions),
     assessStripeComponent(input.env, stripeOptions),
   ]);
+  const nowIso = input.nowIso ?? new Date().toISOString();
   const backup = assessBackupComponent({
     env: input.env,
     latestVerification: input.latestBackupVerification ?? null,
-    nowIso: input.nowIso ?? new Date().toISOString(),
+    nowIso,
   });
-  return { api, database, email, stripe, backup };
+  const restore = assessRestoreComponent({
+    env: input.env,
+    latestAttestation: input.latestRestoreDrillAttestation ?? null,
+    nowIso,
+  });
+  return { api, database, email, stripe, backup, restore };
 }
 
 async function defaultFetch(
