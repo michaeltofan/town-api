@@ -10,6 +10,10 @@ export const LiveResponseSchema = Type.Object(
   },
 );
 
+/**
+ * Internal readiness component checks. Used by the readiness route for
+ * decisions and logging; not returned on the public /health/ready body.
+ */
 export const HealthChecksSchema = Type.Object(
   {
     config: Type.Union([Type.Literal('ok'), Type.Literal('fail')]),
@@ -25,7 +29,6 @@ export const HealthChecksSchema = Type.Object(
 export const ReadyResponseSchema = Type.Object(
   {
     status: Type.Literal('ready'),
-    checks: HealthChecksSchema,
   },
   {
     additionalProperties: false,
@@ -36,7 +39,6 @@ export const ReadyResponseSchema = Type.Object(
 export const NotReadyResponseSchema = Type.Object(
   {
     status: Type.Literal('not_ready'),
-    checks: HealthChecksSchema,
   },
   {
     additionalProperties: false,
@@ -44,6 +46,7 @@ export const NotReadyResponseSchema = Type.Object(
   },
 );
 
+/** Public build identity — omits nodeVersion / migration count / timestamps. */
 export const BuildResponseSchema = Type.Object(
   {
     data: Type.Object(
@@ -57,9 +60,6 @@ export const BuildResponseSchema = Type.Object(
           Type.Literal('staging'),
           Type.Literal('production'),
         ]),
-        nodeVersion: Type.String({ minLength: 1 }),
-        buildTimestamp: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-        expectedMigrationCount: Type.Integer({ minimum: 0 }),
       },
       { additionalProperties: false },
     ),

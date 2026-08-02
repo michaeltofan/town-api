@@ -56,7 +56,6 @@ describe('database readiness with real PostgreSQL', () => {
     expect(response.headers['content-type']).toMatch(/^application\/json/);
     expect(response.json()).toEqual({
       status: 'ready',
-      checks: { config: 'ok', database: 'ok', migrations: 'ok' },
     });
   });
 

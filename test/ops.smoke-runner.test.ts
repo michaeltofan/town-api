@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import { runSmoke } from '../src/ops/smoke-runner.js';
-import { EXPECTED_MIGRATION_COUNT } from '../src/db/migration-ledger.js';
 import {
   CORS_ALLOWED_HEADERS,
   CORS_ALLOWED_METHODS,
@@ -50,11 +49,6 @@ async function buildFakeApp(state: FakeState): Promise<{
     const isReady = state.ready === 'ready';
     return reply.status(isReady ? 200 : 503).send({
       status: state.ready,
-      checks: {
-        config: 'ok',
-        database: isReady ? 'ok' : 'timeout',
-        migrations: isReady ? 'ok' : 'unknown',
-      },
     });
   });
   app.get('/health/build', () => ({
@@ -63,9 +57,6 @@ async function buildFakeApp(state: FakeState): Promise<{
       version: '9.9.9',
       commitSha: state.buildCommit,
       environment: state.buildEnvironment,
-      nodeVersion: process.version,
-      buildTimestamp: null,
-      expectedMigrationCount: EXPECTED_MIGRATION_COUNT,
     },
   }));
   app.get('/v1/account/membership', (_req, reply) =>

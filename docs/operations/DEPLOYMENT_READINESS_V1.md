@@ -53,7 +53,7 @@ production-only rules on `APP_ENV === 'production'`; do not treat
 
 ## 4. Runtime build identity
 
-`GET /health/build` returns exactly:
+`GET /health/build` returns a minimal public identity:
 
 ```json
 {
@@ -61,10 +61,7 @@ production-only rules on `APP_ENV === 'production'`; do not treat
     "service": "town-api",
     "version": "<from package.json>",
     "commitSha": "<resolved effective commit SHA or null>",
-    "environment": "development|test|staging|production",
-    "nodeVersion": "<process.version>",
-    "buildTimestamp": "<APP_BUILD_TIMESTAMP or null>",
-    "expectedMigrationCount": <integer>
+    "environment": "development|test|staging|production"
   }
 }
 ```
@@ -73,6 +70,9 @@ Contract:
 
 - Never returns secrets, connection strings, hostnames, raw environment
   variables, or per-request data.
+- Public body intentionally omits `nodeVersion`, `buildTimestamp`, and
+  `expectedMigrationCount` to reduce external recon. Full identity remains
+  available to authenticated platform operators.
 - `commitSha` is the single resolved effective immutable deployment identity:
   - `RAILWAY_GIT_COMMIT_SHA` when present and valid (authoritative for Railway
     Git deployments; consumed from the runtime environment, not baked into the
@@ -85,9 +85,6 @@ Contract:
 - This document does not claim that `RAILWAY_GIT_COMMIT_SHA` has already been
   activated or verified in live staging; removal of a manually maintained
   Railway `APP_COMMIT_SHA` is a separately approved operational action.
-- `expectedMigrationCount` is derived from the shipped
-  `drizzle/meta/_journal.json` at module load; it is a stable, non-secret
-  build-time constant.
 - Documented in OpenAPI under the `Health` tag.
 
 ## 5. Readiness (`/health/ready`)
@@ -96,34 +93,28 @@ The readiness probe returns:
 
 ```json
 {
-  "status": "ready" | "not_ready",
-  "checks": {
-    "config": "ok" | "fail",
-    "database": "ok" | "fail" | "timeout",
-    "migrations": "ok" | "fail" | "unknown"
-  }
+  "status": "ready" | "not_ready"
 }
 ```
 
-Ordering and bounded behaviour:
+Component detail (`config` / `database` / `migrations`) is evaluated server-side
+and written to structured logs plus the authenticated platform status API. It is
+intentionally omitted from the public readiness body.
+
+Ordering and bounded behaviour (evaluated server-side; not returned publicly):
 
 1. If the process is shutting down (`app.isShuttingDown === true`), respond
-   `503` immediately. `database` is set to `fail` and `migrations` to
-   `unknown` to signal that no further probing was attempted.
+   `503` immediately without further probing.
 2. Otherwise, run the PostgreSQL connectivity check bounded by
-   `READINESS_TIMEOUT_MS`. On timeout, `database: timeout`. On any other
-   error, `database: fail`. On success, `database: ok`.
-3. If `database` is not `ok`, respond `503` with `migrations: unknown`.
-4. Otherwise, run the migration ledger check bounded by the same timeout.
-   `ok` when the applied ordered `(hash, created_at)` sequence exactly matches
-   the repository journal+SQL expected sequence. `fail` on missing, extra,
-   hash mismatch, timestamp mismatch, order mismatch, or malformed ledger
-   rows. `unknown` when the `drizzle.__drizzle_migrations` table does not
-   yet exist. Same-count/different-history is detected via hash comparison.
-5. `config` is `ok` whenever the process has successfully loaded
+   `READINESS_TIMEOUT_MS`. On timeout/error, respond `503`.
+3. Otherwise, run the migration ledger check bounded by the same timeout.
+   Respond `200` only when the applied ordered `(hash, created_at)` sequence
+   exactly matches the repository journal+SQL expected sequence; otherwise
+   `503`.
+4. `config` is treated as `ok` whenever the process has successfully loaded
    configuration at boot (a fail-closed validation happens in
    `src/config/env.ts`). Any misconfiguration prevents the process from
-   starting, so a running server always reports `config: ok`.
+   starting.
 
 Never exposes: migration names, SQL, PostgreSQL error text, host, port,
 credentials, or Stripe state. The route never calls Stripe.
@@ -257,7 +248,7 @@ bounded set of read-only checks:
 - Transport must be HTTPS unless the base URL is `http://127.0.0.1`
   (loopback for local exercises).
 - `/health/live` returns `{"status":"ok"}`.
-- `/health/ready` returns `status:ready` with `checks` object.
+- `/health/ready` returns `{ "status": "ready" }` (status-only public body).
 - `/health/build` matches `--environment`; when `--expect-commit` is given,
   `commitSha` must match.
 - An unauthorized route (`GET /v1/account/membership`) returns `401` when

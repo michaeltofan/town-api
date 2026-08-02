@@ -232,8 +232,16 @@ export async function buildApp(options: BuildAppOptions) {
   }
 
   // Always echo the accepted/generated request id to the client for correlation.
+  // Production also sets anti-framing + HSTS (API is HTTPS-only in production).
   app.addHook('onSend', async (request, reply) => {
     reply.header('x-request-id', request.id);
+    if (options.env.APP_ENV === 'production') {
+      reply.header('Strict-Transport-Security', 'max-age=31536000');
+      reply.header('X-Frame-Options', 'DENY');
+      reply.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+      reply.header('X-Content-Type-Options', 'nosniff');
+      reply.header('Referrer-Policy', 'no-referrer');
+    }
   });
 
   const database = options.database ?? createDatabaseFromEnv(options.env);

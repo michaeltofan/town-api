@@ -40,7 +40,7 @@ production deployment.
       applied/expected counts match the journal (ordered hash+timestamp)
       when run from a checkout that has `tsx` / dev tooling.
 - [ ] New container rolled; `/health/live` returns `200`.
-- [ ] `/health/ready` returns `200` with all three components `ok`.
+- [ ] `/health/ready` returns `200` with `{ "status": "ready" }`.
 - [ ] `/health/build` returns the expected `environment` and `commitSha`.
 
 ## Smoke
