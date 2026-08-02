@@ -281,7 +281,7 @@ async function defaultFetch(
   return {
     ok: response.ok,
     status: response.status,
-    json: () => response.json() as Promise<unknown>,
+    json: () => response.json(),
   };
 }
 
