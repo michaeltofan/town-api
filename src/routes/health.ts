@@ -61,10 +61,7 @@ const healthRoutesPlugin = (
       if (app.isShuttingDown) {
         checks.database = 'fail';
         checks.migrations = 'unknown';
-        app.log.warn(
-          { event: 'readiness_shutting_down', checks },
-          'readiness reports shutdown',
-        );
+        app.log.warn({ event: 'readiness_shutting_down', checks }, 'readiness reports shutdown');
         return reply.status(503).send({ status: 'not_ready' as const });
       }
 
