@@ -281,6 +281,13 @@
       "when": 1786646400000,
       "tag": "0039_platform_restore_drill_attestations",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1786732800000,
+      "tag": "0040_platform_investigation_export_audit",
+      "breakpoints": true
     }
   ]
 }

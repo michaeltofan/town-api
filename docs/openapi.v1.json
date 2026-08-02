@@ -10953,6 +10953,653 @@
         ]
       }
     },
+    "/v1/platform/accounts/{accountId}/export": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "account": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "accountId": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "accountReadyAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "closedAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "communitySlug": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "email": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "isOwner": {
+                              "type": "boolean"
+                            },
+                            "membershipStatus": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "pending_email"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "pending_password"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "pending_passkey"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "active"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "suspended"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "closed"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "suspendedAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "updatedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "accountId",
+                            "status",
+                            "isOwner",
+                            "email",
+                            "communitySlug",
+                            "membershipStatus",
+                            "suspendedAt",
+                            "accountReadyAt",
+                            "closedAt",
+                            "createdAt",
+                            "updatedAt"
+                          ],
+                          "type": "object"
+                        },
+                        "accountId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "emails": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "challenges": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "attemptCount": {
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "consumedAt": {
+                                    "anyOf": [
+                                      {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "createdAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "emailNormalized": {
+                                    "type": "string"
+                                  },
+                                  "expiresAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "purpose": {
+                                    "type": "string"
+                                  },
+                                  "revokedAt": {
+                                    "anyOf": [
+                                      {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "emailNormalized",
+                                  "purpose",
+                                  "createdAt",
+                                  "expiresAt",
+                                  "consumedAt",
+                                  "revokedAt",
+                                  "attemptCount"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "emails": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "createdAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "emailNormalized": {
+                                    "type": "string"
+                                  },
+                                  "emailOriginal": {
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "isPrimary": {
+                                    "type": "boolean"
+                                  },
+                                  "revokedAt": {
+                                    "anyOf": [
+                                      {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "verifiedAt": {
+                                    "anyOf": [
+                                      {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "emailOriginal",
+                                  "emailNormalized",
+                                  "isPrimary",
+                                  "verifiedAt",
+                                  "revokedAt",
+                                  "createdAt"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "emails",
+                            "challenges"
+                          ],
+                          "type": "object"
+                        },
+                        "generatedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "payments": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "checkoutAttempts": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "completedAt": {
+                                    "anyOf": [
+                                      {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "createdAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "expiresAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "hasStripeSession": {
+                                    "type": "boolean"
+                                  },
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "status",
+                                  "hasStripeSession",
+                                  "createdAt",
+                                  "expiresAt",
+                                  "completedAt"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "entitlement": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "accessUntil": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "activatedAt": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "cancelAtPeriodEnd": {
+                                      "type": "boolean"
+                                    },
+                                    "cancellationRequestedAt": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "expiredAt": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "source": {
+                                      "type": "string"
+                                    },
+                                    "status": {
+                                      "type": "string"
+                                    },
+                                    "updatedAt": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
+                                    "version": {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "source",
+                                    "accessUntil",
+                                    "cancelAtPeriodEnd",
+                                    "activatedAt",
+                                    "cancellationRequestedAt",
+                                    "expiredAt",
+                                    "version",
+                                    "updatedAt"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "stripeCustomer": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "billingReference": {
+                                      "format": "uuid",
+                                      "type": "string"
+                                    },
+                                    "createdAt": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
+                                    "linked": {
+                                      "enum": [
+                                        true
+                                      ],
+                                      "type": "boolean"
+                                    },
+                                    "updatedAt": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "linked",
+                                    "billingReference",
+                                    "createdAt",
+                                    "updatedAt"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "linked": {
+                                      "enum": [
+                                        false
+                                      ],
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "linked"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "entitlement",
+                            "stripeCustomer",
+                            "checkoutAttempts"
+                          ],
+                          "type": "object"
+                        },
+                        "platformAudit": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "events": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "action": {
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "metadata": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": {},
+                                        "type": "object"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "occurredAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "operatorAccountId": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "requestId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "targetAccountId": {
+                                    "anyOf": [
+                                      {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "targetSignalId": {
+                                    "anyOf": [
+                                      {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "operatorAccountId",
+                                  "action",
+                                  "targetAccountId",
+                                  "targetSignalId",
+                                  "requestId",
+                                  "metadata",
+                                  "occurredAt"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "events"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "generatedAt",
+                        "accountId",
+                        "account",
+                        "emails",
+                        "payments",
+                        "platformAudit"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Download a bounded investigation/support pack for one account (no Stripe IDs or secrets)",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
     "/v1/platform/accounts/{accountId}/payments": {
       "get": {
         "parameters": [
@@ -21007,7 +21654,7 @@
       "name": "Billing"
     },
     {
-      "description": "Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, uptime samples, in-console component alerts, automated Postgres PITR backup attestation, restore-drill attestation (never executes restore), account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.",
+      "description": "Separate platform-operator administration plane under /v1/platform. Requires an active session plus an active platform_operators row (never accounts.is_owner). Surfaces status monitoring, uptime samples, in-console component alerts, automated Postgres PITR backup attestation, restore-drill attestation (never executes restore), account/membership/community inventories, signal moderation, email and payment investigation (without Stripe provider IDs), bounded investigation/support export packs, operational audit history, and role_admin operator management. Unauthorized callers receive generic 404.",
       "name": "Platform"
     }
   ]

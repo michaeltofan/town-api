@@ -25,6 +25,7 @@ import type {
   PlatformMembershipActionResponse,
   PlatformMembershipsResponse,
   PlatformSessionResponse,
+  PlatformInvestigationExportResponse,
   PlatformStatusResponse,
   PlatformSubmissionActionResponse,
   PlatformSubmissionDetailResponse,
@@ -1155,6 +1156,47 @@ describe('platform operator area', () => {
       unhideAudits.some(
         (event) =>
           (event.metadata as { contributionId?: string } | null)?.contributionId === contributionId,
+      ),
+    ).toBe(true);
+  }, 180_000);
+
+  it('exports a bounded investigation pack for investigators and gates viewers', async () => {
+    const investigator = await registerMember('PlatformExportInvestigator+setup@example.com');
+    await grantOperator(investigator.accountId, 'investigator');
+    const viewer = await registerMember('PlatformExportViewer+setup@example.com');
+    await grantOperator(viewer.accountId, 'viewer');
+    const subject = await registerMember('PlatformExportSubject+setup@example.com');
+
+    const viewerDenied = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/platform/accounts/${subject.accountId}/export`,
+      headers: { authorization: `Session ${viewer.sessionToken}` },
+    });
+    expect(viewerDenied.statusCode).toBe(404);
+
+    const exported = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/platform/accounts/${subject.accountId}/export`,
+      headers: { authorization: `Session ${investigator.sessionToken}` },
+    });
+    expect(exported.statusCode).toBe(200);
+    const body = exported.json<PlatformInvestigationExportResponse>();
+    expect(body.data.accountId).toBe(subject.accountId);
+    expect(body.data.account.accountId).toBe(subject.accountId);
+    expect(body.data.emails.emails.length).toBeGreaterThan(0);
+    expect(body.data.payments.stripeCustomer.linked).toBe(false);
+    expect(Array.isArray(body.data.platformAudit.events)).toBe(true);
+    expect(JSON.stringify(body.data)).not.toMatch(/cus_|cs_test_|sk_live_|sk_test_/);
+
+    const audits = await ctx.app.database.db
+      .select()
+      .from(platformAuditEvents)
+      .where(eq(platformAuditEvents.action, 'investigation_exported'));
+    expect(
+      audits.some(
+        (event) =>
+          event.operatorAccountId === investigator.accountId &&
+          event.targetAccountId === subject.accountId,
       ),
     ).toBe(true);
   }, 180_000);
