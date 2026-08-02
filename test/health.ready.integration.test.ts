@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AppInstance } from '../src/app.js';
 import { createTestApp } from './helpers/app.js';
 import { createFakeDatabase } from './helpers/database.js';
-import { EXPECTED_MIGRATION_COUNT } from '../src/db/migration-ledger.js';
 
 describe('/health/ready component checks', () => {
   describe('when everything is healthy', () => {
@@ -23,7 +22,6 @@ describe('/health/ready component checks', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         status: 'ready',
-        checks: { config: 'ok', database: 'ok', migrations: 'ok' },
       });
     });
   });
@@ -46,7 +44,6 @@ describe('/health/ready component checks', () => {
       expect(response.statusCode).toBe(503);
       expect(response.json()).toEqual({
         status: 'not_ready',
-        checks: { config: 'ok', database: 'timeout', migrations: 'unknown' },
       });
     });
   });
@@ -73,7 +70,6 @@ describe('/health/ready component checks', () => {
       const body: unknown = response.json();
       expect(body).toEqual({
         status: 'not_ready',
-        checks: { config: 'ok', database: 'ok', migrations: 'fail' },
       });
       const serialized = JSON.stringify(body);
       expect(serialized).not.toMatch(/drizzle|hash|__drizzle_migrations|SQL/i);
@@ -101,7 +97,6 @@ describe('/health/ready component checks', () => {
       expect(response.statusCode).toBe(503);
       expect(response.json()).toEqual({
         status: 'not_ready',
-        checks: { config: 'ok', database: 'ok', migrations: 'unknown' },
       });
     });
   });
@@ -126,7 +121,6 @@ describe('/health/ready component checks', () => {
       expect(response.statusCode).toBe(503);
       expect(response.json()).toEqual({
         status: 'not_ready',
-        checks: { config: 'ok', database: 'fail', migrations: 'unknown' },
       });
     });
   });
@@ -160,9 +154,6 @@ describe('/health/build', () => {
         version: expect.any(String) as string,
         commitSha: '1234567890abcdef1234567890abcdef12345678',
         environment: 'staging',
-        nodeVersion: process.version,
-        buildTimestamp: '2026-07-17T00:00:00Z',
-        expectedMigrationCount: EXPECTED_MIGRATION_COUNT,
       },
     });
   });
@@ -204,9 +195,6 @@ describe('/health/build with RAILWAY_GIT_COMMIT_SHA', () => {
         version: expect.any(String) as string,
         commitSha: 'abcdef0123456789abcdef0123456789abcdef01',
         environment: 'staging',
-        nodeVersion: process.version,
-        buildTimestamp: null,
-        expectedMigrationCount: EXPECTED_MIGRATION_COUNT,
       },
     });
     expect(response.body).not.toMatch(/RAILWAY_GIT_COMMIT_SHA|APP_COMMIT_SHA|DATABASE_URL/i);

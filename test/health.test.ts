@@ -46,9 +46,8 @@ describe('health endpoints', () => {
       const body: unknown = response.json();
       expect(body).toEqual({
         status: 'ready',
-        checks: { config: 'ok', database: 'ok', migrations: 'ok' },
       });
-      expect(Object.keys(body as Record<string, unknown>).sort()).toEqual(['checks', 'status']);
+      expect(Object.keys(body as Record<string, unknown>)).toEqual(['status']);
     });
   });
 
@@ -76,9 +75,8 @@ describe('health endpoints', () => {
       const body: unknown = response.json();
       expect(body).toEqual({
         status: 'not_ready',
-        checks: { config: 'ok', database: 'fail', migrations: 'unknown' },
       });
-      expect(Object.keys(body as Record<string, unknown>).sort()).toEqual(['checks', 'status']);
+      expect(Object.keys(body as Record<string, unknown>)).toEqual(['status']);
 
       const serialized = JSON.stringify(body);
       expect(serialized).not.toMatch(/postgres|DATABASE_URL|SQLSTATE|password|127\.0\.0\.1|stack/i);

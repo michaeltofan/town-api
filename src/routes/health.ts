@@ -44,7 +44,7 @@ const healthRoutesPlugin = (
         tags: ['Health'],
         summary: 'Readiness probe',
         description:
-          'Returns ready when configuration is accepted, PostgreSQL is reachable within the bounded readiness timeout, and the drizzle migration ledger matches the repository-expected ordered hash and timestamp sequence. Returns not_ready with safe component checks otherwise. Never exposes migration names, hashes, SQL, connection strings, or secrets.',
+          'Returns ready when configuration is accepted, PostgreSQL is reachable within the bounded readiness timeout, and the drizzle migration ledger matches the repository-expected ordered hash and timestamp sequence. Public body is status-only; component detail stays in server logs and the authenticated platform status API. Never exposes migration names, hashes, SQL, connection strings, or secrets.',
         response: {
           200: ReadyResponseSchema,
           503: NotReadyResponseSchema,
@@ -61,8 +61,8 @@ const healthRoutesPlugin = (
       if (app.isShuttingDown) {
         checks.database = 'fail';
         checks.migrations = 'unknown';
-        app.log.warn({ event: 'readiness_shutting_down' }, 'readiness reports shutdown');
-        return reply.status(503).send({ status: 'not_ready' as const, checks });
+        app.log.warn({ event: 'readiness_shutting_down', checks }, 'readiness reports shutdown');
+        return reply.status(503).send({ status: 'not_ready' as const });
       }
 
       const databaseStatus = await app.database.checkConnection();
@@ -71,10 +71,10 @@ const healthRoutesPlugin = (
       if (databaseStatus !== 'ok') {
         checks.migrations = 'unknown';
         app.log.warn(
-          { event: 'readiness_database_failed', databaseStatus },
+          { event: 'readiness_database_failed', databaseStatus, checks },
           'readiness database check failed',
         );
-        return reply.status(503).send({ status: 'not_ready' as const, checks });
+        return reply.status(503).send({ status: 'not_ready' as const });
       }
 
       const migrationResult = await app.database.checkMigrations();
@@ -88,13 +88,14 @@ const healthRoutesPlugin = (
             migrationDetail: migrationResult.detail,
             expected: migrationResult.expected,
             applied: migrationResult.applied,
+            checks,
           },
           'readiness migration ledger check failed',
         );
-        return reply.status(503).send({ status: 'not_ready' as const, checks });
+        return reply.status(503).send({ status: 'not_ready' as const });
       }
 
-      return reply.status(200).send({ status: 'ready' as const, checks });
+      return reply.status(200).send({ status: 'ready' as const });
     },
   );
 
@@ -105,13 +106,20 @@ const healthRoutesPlugin = (
         tags: ['Health'],
         summary: 'Runtime build identity',
         description:
-          'Returns the immutable runtime build identity: service name, semantic version from package.json, the resolved effective deployment commit SHA when present (RAILWAY_GIT_COMMIT_SHA when set, otherwise APP_COMMIT_SHA), resolved APP_ENV, Node.js runtime version, optional build timestamp, and the expected drizzle migration count derived from the shipped journal. Never returns secrets, connection strings, hostnames, raw environment variables, or request-scoped data.',
+          'Returns a minimal public build identity: service name, semantic version, resolved deployment commit SHA when present, and APP_ENV. Omits Node.js runtime version, build timestamp, and migration counts (those remain available to authenticated platform operators). Never returns secrets, connection strings, hostnames, raw environment variables, or request-scoped data.',
         response: {
           200: BuildResponseSchema,
         },
       },
     },
-    () => ({ data: identity }),
+    () => ({
+      data: {
+        service: identity.service,
+        version: identity.version,
+        commitSha: identity.commitSha,
+        environment: identity.environment,
+      },
+    }),
   );
 
   done();
@@ -121,6 +129,4 @@ export const healthRoutes = fp<HealthRoutesOptions>(healthRoutesPlugin, {
   name: 'health-routes',
 });
 
-// Re-export the plugin callback type shape for backwards compatibility with
-// existing TypeBox-typed route imports elsewhere in the codebase.
 export type HealthRoutes = FastifyPluginCallbackTypebox<HealthRoutesOptions>;

@@ -5,7 +5,7 @@
  *
  * The runner performs a fixed, safe set of checks against a running instance:
  * transport (https unless localhost), /health/live shape, /health/ready
- * component shape, /health/build identity match, an unauthorized route
+ * status-only shape, /health/build identity match, an unauthorized route
  * expecting 401 (or 404 when authEnabled=false), CORS unauthorized/authorized/
  * null/preflight/no-origin, and an invalid Stripe webhook signature on
  * POST /v1/billing/stripe/webhook. It never prints request/response
@@ -171,11 +171,9 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
     if (status !== 'ready' && status !== 'not_ready') {
       throw new Error('unexpected ready status literal');
     }
-    if (
-      typeof (parsed as { checks?: unknown }).checks !== 'object' ||
-      (parsed as { checks?: unknown }).checks === null
-    ) {
-      throw new Error('ready payload missing checks');
+    // Public ready body is status-only (no component enumeration for recon).
+    if ('checks' in parsed) {
+      throw new Error('ready payload must not expose component checks');
     }
     if (status !== 'ready') {
       throw new Error('service is not ready');
