@@ -117,7 +117,8 @@ export function generateMembershipContractDocument(): unknown {
       derivation: [
         'visitor when no session is present',
         'read_only when a session is present but participant preconditions are not all met',
-        'participant only when the account is active, the entitlement is temporally valid with status active or cancelling, a linked civic actor exists for the request community, and local eligibility is eligible',
+        'participant only when the account is active, (accounts.is_owner OR the entitlement is temporally valid with status active or cancelling), a linked civic actor exists for the request community, and a valid community commitment is recorded',
+        'technical local eligibility is reported but is not a V1 participation gate (LOCAL_ELIGIBILITY_ENABLED defaults false)',
         'paid_pending_binding never grants participant access; payment alone is insufficient without final community binding',
       ],
     },
