@@ -45,7 +45,33 @@ export type DatabaseComponentInput = {
 export type StatusCheckFetch = (
   input: string | URL,
   init?: { method?: string; headers?: Record<string, string>; signal?: AbortSignal },
-) => Promise<{ ok: boolean; status: number }>;
+) => Promise<{
+  ok: boolean;
+  status: number;
+  json?: () => Promise<unknown>;
+}>;
+
+async function readResendErrorName(response: {
+  json?: () => Promise<unknown>;
+}): Promise<string | null> {
+  if (typeof response.json !== 'function') {
+    return null;
+  }
+  try {
+    const body = await response.json();
+    if (
+      body !== null &&
+      typeof body === 'object' &&
+      'name' in body &&
+      typeof (body as { name: unknown }).name === 'string'
+    ) {
+      return (body as { name: string }).name;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 export type StripePriceProbe = (input: {
   secretKey: string;
@@ -131,6 +157,12 @@ export async function assessEmailComponent(
       return { status: 'ok', detail: 'resend_reachable' };
     }
     if (response.status === 401 || response.status === 403) {
+      // Send-only Resend keys are valid for delivery but cannot GET /domains.
+      // Treat that provider response as configured/reachable, not misconfigured.
+      const errorName = await readResendErrorName(response);
+      if (errorName === 'restricted_api_key') {
+        return { status: 'ok', detail: 'resend_send_only_key' };
+      }
       return { status: 'misconfigured', detail: `resend_http_${String(response.status)}` };
     }
     return { status: 'fail', detail: `resend_http_${String(response.status)}` };

@@ -29,8 +29,7 @@ function recoveryEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): NodeJS.Process
 function productionRecoveryResendEnv(
   overrides: Partial<NodeJS.ProcessEnv> = {},
 ): NodeJS.ProcessEnv {
-  // NODE_ENV=production still enforces production WebAuthn RP/origin policy
-  // (same gate as passkey registration/authentication), even when APP_ENV=staging.
+  // APP_ENV=staging is authoritative even when NODE_ENV=production (Railway).
   return recoveryEnv({
     NODE_ENV: 'production',
     APP_ENV: 'staging',
@@ -45,6 +44,7 @@ function productionRecoveryResendEnv(
     EMAIL_VERIFICATION_FROM_ADDRESS: RESEND_FROM,
     WEBAUTHN_RP_ID: 'towncivic.org',
     WEBAUTHN_ALLOWED_ORIGINS: 'https://towncivic.org',
+    ALLOW_PRODUCTION_WEB_ORIGIN: 'true',
     ...overrides,
   });
 }

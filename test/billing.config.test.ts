@@ -93,12 +93,31 @@ describe('loadEnv Stripe billing', () => {
       loadEnv({
         ...BASE,
         NODE_ENV: 'production',
+        APP_ENV: 'production',
+        APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+        DATABASE_URL: 'postgres://town:secret@db.example.com:5432/town',
         STRIPE_CHECKOUT_SUCCESS_URL: 'https://checkout.town.example/success',
         STRIPE_CHECKOUT_CANCEL_URL: 'https://checkout.town.example/cancel',
         STRIPE_PORTAL_RETURN_URL: 'https://checkout.town.example/portal',
         STRIPE_EXPECTED_LIVEMODE: 'false',
       }),
     ).toThrow(/STRIPE_EXPECTED_LIVEMODE/);
+  });
+
+  it('does not force live Stripe mode when NODE_ENV=production but APP_ENV=staging', () => {
+    const env = loadEnv({
+      ...BASE,
+      NODE_ENV: 'production',
+      APP_ENV: 'staging',
+      APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+      DATABASE_URL: 'postgres://town:secret@db.example.com:5432/town',
+      STRIPE_CHECKOUT_SUCCESS_URL: 'https://checkout.town.example/success',
+      STRIPE_CHECKOUT_CANCEL_URL: 'https://checkout.town.example/cancel',
+      STRIPE_PORTAL_RETURN_URL: 'https://checkout.town.example/portal',
+      STRIPE_EXPECTED_LIVEMODE: 'false',
+    });
+    expect(env.APP_ENV).toBe('staging');
+    expect(env.STRIPE_EXPECTED_LIVEMODE).toBe(false);
   });
 
   it('requires CEREMONY_RATE_LIMIT_HASH_KEY when billing is enabled', () => {
