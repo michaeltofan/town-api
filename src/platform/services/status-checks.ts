@@ -267,14 +267,22 @@ export async function collectOperationalComponents(input: {
 async function defaultFetch(
   input: string | URL,
   init?: { method?: string; headers?: Record<string, string>; signal?: AbortSignal },
-): Promise<{ ok: boolean; status: number }> {
+): Promise<{
+  ok: boolean;
+  status: number;
+  json?: () => Promise<unknown>;
+}> {
   const requestInit: RequestInit = {
     method: init?.method ?? 'GET',
   };
   if (init?.headers) requestInit.headers = init.headers;
   if (init?.signal) requestInit.signal = init.signal;
   const response = await fetch(input, requestInit);
-  return { ok: response.ok, status: response.status };
+  return {
+    ok: response.ok,
+    status: response.status,
+    json: () => response.json() as Promise<unknown>,
+  };
 }
 
 async function defaultStripePriceProbe(input: {
