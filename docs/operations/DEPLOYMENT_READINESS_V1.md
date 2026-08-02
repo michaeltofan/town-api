@@ -45,11 +45,14 @@ environments:
 | APP_ENV      | Public URL                          | Notes                                                                                                                                    |
 | ------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `staging`    | `https://api-staging.towncivic.org` | **Current live target.** Stripe test mode. Public site `towncivic.org` talks to this API.                                                |
-| `production` | `https://api.towncivic.org`         | **Not provisioned yet** (DNS/service absent). Do not run production smoke until it exists. Stripe live mode required if billing enabled. |
+| `production` | `https://api.towncivic.org`         | **Not provisioned yet** (DNS/service absent). Do not run production smoke until it exists. Stripe live mode required if billing enabled. See `PRODUCTION_CUTOVER_V1.md`. |
 
 `APP_ENV` should be authoritative for environment policy. Prefer gating
 production-only rules on `APP_ENV === 'production'`; do not treat
 `NODE_ENV=production` alone as a production deploy.
+
+Cutover runbook for the first production API + live Stripe payment:
+`docs/operations/PRODUCTION_CUTOVER_V1.md`.
 
 ## 4. Runtime build identity
 
