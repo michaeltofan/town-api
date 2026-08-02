@@ -59,18 +59,14 @@ async function readResendErrorName(response: {
   }
   try {
     const body = await response.json();
-    if (
-      body !== null &&
-      typeof body === 'object' &&
-      'name' in body &&
-      typeof (body as { name: unknown }).name === 'string'
-    ) {
-      return (body as { name: string }).name;
+    if (body === null || typeof body !== 'object' || !('name' in body)) {
+      return null;
     }
+    const name = body.name;
+    return typeof name === 'string' ? name : null;
   } catch {
     return null;
   }
-  return null;
 }
 
 export type StripePriceProbe = (input: {

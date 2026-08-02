@@ -114,11 +114,12 @@ describe('platform operational status checks', () => {
             Promise.resolve({
               ok: false,
               status: 401,
-              json: async () => ({
-                statusCode: 401,
-                name: 'restricted_api_key',
-                message: 'This API key is restricted to only send emails',
-              }),
+              json: () =>
+                Promise.resolve({
+                  statusCode: 401,
+                  name: 'restricted_api_key',
+                  message: 'This API key is restricted to only send emails',
+                }),
             }),
         },
       ),
