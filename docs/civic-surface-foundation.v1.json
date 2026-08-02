@@ -1,0 +1,340 @@
+{
+  "contractVersion": "1.0.0",
+  "status": "implemented",
+  "name": "TOWN Civic Surface Foundation V1",
+  "description": "Canonical V1 contract for the reusable civic surface: signals, confirmations, submissions, discussions, audit trails, and RBAC planes. Complements membership-foundation.v1.json, billing-foundation.v1.json, account-identity-contract.v1.json, and authentication-ceremony-foundation.v1.json. Live HTTP shapes are authoritative in docs/openapi.v1.json.",
+  "authorityOrder": [
+    "Runtime code under src/ (evaluateCivicAccess, routes, schema checks)",
+    "docs/openapi.v1.json for live HTTP request/response shapes",
+    "This contract for civic-surface domain invariants and reuse boundaries",
+    "Sibling foundation contracts for membership, billing, identity, ceremony",
+    "README narrative (non-authoritative when it conflicts with the above)"
+  ],
+  "repos": {
+    "town-api": "Authoritative backend for all civic-surface tables, routes, and RBAC",
+    "town-public": "Web consumer of the civic surface; never invents membership, confirmation, or participate authority",
+    "town-safe-space-mobile": "Outside the current web-launch critical path"
+  },
+  "domainSeparation": {
+    "accountIdentity": "accounts, verified email, passkeys — active account does not imply paid membership or civic participation",
+    "authenticatedSession": "Opaque account_sessions (web cookie or Authorization: Session) — not membership and not civic entitlement",
+    "membershipEntitlement": "town.membership_entitlements + source-event ledger — payment/access window only",
+    "civicActor": "town.actors — local civic identity linked 1:1 to an account when present; confirmations and contributions attach to actors",
+    "communityOwner": "accounts.is_owner — community moderation/payment bypass for the same participant level only; never platform access",
+    "platformOperator": "town.platform_operators — separate privilege plane with ranked roles/capabilities; never implied by is_owner",
+    "controlledTestActor": "Temporary testing-only actor + X-TOWN-Control-Key confirmation GET; never linked to a real account"
+  },
+  "canonicalCommunities": {
+    "count": 3,
+    "rows": [
+      { "slug": "milano-it", "city": "Milano", "locale": "it-IT", "signals": 3 },
+      { "slug": "munich-de", "city": "München", "locale": "de-DE", "signals": 3 },
+      { "slug": "arad-ro", "city": "Arad", "locale": "ro-RO", "signals": 3 }
+    ],
+    "signalSlugs": [
+      "milano-signal-1",
+      "milano-signal-2",
+      "milano-signal-3",
+      "munich-signal-1",
+      "munich-signal-2",
+      "munich-signal-3",
+      "arad-signal-1",
+      "arad-signal-2",
+      "arad-signal-3"
+    ],
+    "seedPolicy": [
+      "Fixed UUIDs only; seed never calls random UUID generators or Date.now()",
+      "Seeds never run at application startup",
+      "Foundation seed yields exactly 3 communities and 9 published signals",
+      "Controlled-actor seed yields exactly one Milano controlled_test actor and zero confirmation rows"
+    ]
+  },
+  "civicAccess": {
+    "levels": ["visitor", "read_only", "participant"],
+    "runtimeDerivation": [
+      "visitor when no session is present",
+      "read_only when a session is present but participant preconditions are not all met",
+      "participant only when the account is active AND (accounts.is_owner OR temporally valid entitlement status active|cancelling) AND a linked civic actor exists for the request community AND a valid community commitment is recorded",
+      "paid_pending_binding never grants participant access",
+      "technical local eligibility / GPS verification is NOT a V1 participation gate (reported field only; LOCAL_ELIGIBILITY_ENABLED defaults false → unavailable)"
+    ],
+    "publicDenialErrorCode": "CIVIC_PARTICIPATION_NOT_AUTHORIZED",
+    "denialPolicy": [
+      "Public responses never leak the specific denialReason",
+      "Bounded denialReason is recorded only in identity_security_events.civic_participation_denied metadata",
+      "Clients must never interpret a community-mismatch 403 as missing membership when membership truth already says paid/civic"
+    ],
+    "evaluator": "src/membership/civic-access.ts#evaluateCivicAccess"
+  },
+  "signals": {
+    "table": "town.signals",
+    "publicationStatus": ["published"],
+    "hideState": {
+      "visibleWhen": "hidden_at IS NULL",
+      "hiddenReasons": ["immoral", "abusive", "spam", "off_topic", "illegal", "other"],
+      "publicReadBehavior": "hidden signals return 404 SIGNAL_NOT_FOUND"
+    },
+    "memberAuthorPair": "author_actor_id and author_account_id are both null (editorial) or both set (member-authored)",
+    "liveRoutes": {
+      "list": "GET /v1/communities/:communitySlug/signals",
+      "detail": "GET /v1/signals/:signalId",
+      "memberPublish": "POST /v1/communities/:communitySlug/signals",
+      "memberMedia": "POST /v1/communities/:communitySlug/signals/media",
+      "mediaProxy": "GET /v1/signals/:signalId/media",
+      "activity": "GET /v1/account/activity"
+    },
+    "auth": {
+      "publicReads": "no auth; exclude hidden",
+      "memberPublish": "active Session + evaluateCivicAccess.canParticipate for the path community; SetupGrant/RecoveryGrant/Bearer rejected"
+    },
+    "responsePolicy": [
+      "Never expose actor or account identifiers on public civic DTOs",
+      "authorDisplayName is civic display_label / editorial metadata only",
+      "List/detail may include confirmationCount as an integer aggregate only",
+      "Image storage is imageKey + focus coordinates / private object storage — no public CDN URLs in foundation rows"
+    ],
+    "reuse": "stable",
+    "sourcePaths": [
+      "src/routes/signals.ts",
+      "src/routes/member-signals.ts",
+      "src/routes/signal-moderation.ts",
+      "src/db/repositories/signals.ts",
+      "src/schemas/signals.ts",
+      "src/membership/member-signal-schemas.ts"
+    ]
+  },
+  "confirmations": {
+    "table": "town.signal_confirmations",
+    "unique": ["signal_id", "actor_id"],
+    "semantics": "Idempotent actor↔signal confirmation (I SEE THIS TOO); no revoke route in V1",
+    "responseShape": {
+      "$id": "ConfirmationState",
+      "fields": ["signalId", "confirmed", "confirmedAt", "confirmationCount"]
+    },
+    "liveRoutes": {
+      "get": "GET /v1/signals/:signalId/confirmation",
+      "put": "PUT /v1/signals/:signalId/confirmation"
+    },
+    "auth": {
+      "put": "participant Session only; control key rejected; CSRF for web mutative",
+      "get": "participant Session OR temporary X-TOWN-Control-Key controlled-actor path"
+    },
+    "errors": [
+      "401 SESSION_NOT_AUTHORIZED",
+      "401 CONTROLLED_ACCESS_REQUIRED",
+      "403 CIVIC_PARTICIPATION_NOT_AUTHORIZED",
+      "403 ACTOR_NOT_ELIGIBLE_FOR_COMMUNITY",
+      "404 SIGNAL_NOT_FOUND"
+    ],
+    "reuse": {
+      "participantPutGet": "stable",
+      "controlKeyGet": "temporary testing-only"
+    },
+    "sourcePaths": [
+      "src/routes/confirmations.ts",
+      "src/db/repositories/confirmations.ts",
+      "src/schemas/confirmations.ts",
+      "src/plugins/controlled-access.ts"
+    ]
+  },
+  "submissions": {
+    "table": "town.signal_submissions",
+    "statuses": ["pending_review", "rejected"],
+    "distinction": "Pending-review queue path — distinct from immediate member publish POST .../signals",
+    "featureFlag": {
+      "name": "SIGNAL_SUBMISSION_ENABLED",
+      "default": false,
+      "disabledBehavior": "route returns 404"
+    },
+    "liveRoutes": {
+      "create": "POST /v1/communities/:communitySlug/signal-submissions",
+      "platformList": "GET /v1/platform/submissions",
+      "platformModerate": "POST /v1/platform/submissions/:id/{reject,restore}"
+    },
+    "auth": "participant Session + CSRF for create; platform operator capabilities for moderation",
+    "rateLimit": "5 per account per rolling 24h → 429 RATE_LIMITED",
+    "createResponse": {
+      "fields": ["id", "status", "community.slug", "createdAt"],
+      "status": "pending_review"
+    },
+    "reuse": "stable schema; product path flag-gated off by default",
+    "sourcePaths": [
+      "src/routes/signal-submissions.ts",
+      "src/membership/signal-submission-service.ts",
+      "src/db/repositories/signal-submissions.ts",
+      "src/membership/signal-submission-schemas.ts"
+    ]
+  },
+  "discussions": {
+    "tables": [
+      "town.signal_discussion_sessions",
+      "town.signal_discussion_contributions",
+      "town.signal_discussion_media_uploads"
+    ],
+    "semantics": "One session per published signal; solution-oriented contributions — not chat, comments, or social threading",
+    "intents": ["observation", "proposal", "next_step"],
+    "mediaKinds": ["image", "video"],
+    "uploadStatuses": ["pending", "attached", "abandoned"],
+    "liveRoutes": {
+      "getOrCreate": "GET /v1/signals/:signalId/discussion-session",
+      "contribute": "POST /v1/signals/:signalId/discussion-session/contributions",
+      "mediaUpload": "POST /v1/signals/:signalId/discussion-session/media",
+      "mediaProxy": "GET /v1/signals/:signalId/discussion-session/contributions/:id/media"
+    },
+    "auth": "active Session + canParticipate; denials → 403 CIVIC_PARTICIPATION_NOT_AUTHORIZED + civic_participation_denied",
+    "responsePolicy": [
+      "authorDisplayName only — never account or actor identifiers",
+      "Hidden contributions (hidden_at IS NOT NULL) are filtered from participant reads",
+      "Media lives in private object storage"
+    ],
+    "reuse": "stable",
+    "sourcePaths": [
+      "src/routes/discussion-session.ts",
+      "src/db/repositories/discussion-session.ts",
+      "src/schemas/discussion-session.ts",
+      "src/membership/discussion-media-policy.ts"
+    ]
+  },
+  "audit": {
+    "trails": {
+      "identitySecurityEvents": {
+        "table": "town.identity_security_events",
+        "purpose": "Account-scoped security, ceremony, membership, and civic-denial events",
+        "selectedEventTypes": [
+          "civic_participation_denied",
+          "membership_created",
+          "membership_activated",
+          "membership_paid_pending_binding_provisioned",
+          "signal_hidden",
+          "signal_unhidden"
+        ],
+        "metadataPolicy": [
+          "Bounded scalar categories only",
+          "Never raw provider payloads",
+          "Never raw session tokens, cookies, or Authorization headers"
+        ],
+        "sourcePaths": ["src/identity/repositories/security-events.ts", "src/db/schema.ts"]
+      },
+      "platformAuditEvents": {
+        "table": "town.platform_audit_events",
+        "purpose": "Operator actions with first-class operator identity — separate from identity_security_events",
+        "selectedActions": [
+          "signal hide/unhide",
+          "discussion/contribution moderation",
+          "submission reject/restore",
+          "account suspend/reactivate",
+          "membership grant/revoke",
+          "investigation_exported",
+          "backup/restore attestations"
+        ],
+        "sourcePaths": [
+          "src/platform/repositories/audit.ts",
+          "src/platform/services/investigation-export.ts"
+        ]
+      }
+    },
+    "investigationExport": {
+      "route": "GET /v1/platform/accounts/:accountId/export",
+      "capability": "export_investigation",
+      "invariants": [
+        "Bounded pack",
+        "Stripe provider IDs omitted",
+        "Audit limit 50",
+        "Fail-closed for non-operators (generic 404)"
+      ]
+    },
+    "clientVisibility": {
+      "town-public-member": "none",
+      "town-public-platform": "GET /v1/platform/audit?limit=50 for operators with read_audit+"
+    },
+    "reuse": "stable"
+  },
+  "rbac": {
+    "planes": {
+      "communityOwner": {
+        "source": "accounts.is_owner",
+        "grants": [
+          "Same participant civic level without paid entitlement (session/actor/commitment still required)",
+          "Owner moderation routes for signals/accounts in community scope"
+        ],
+        "doesNotGrant": ["platform operator access", "cross-community participation"]
+      },
+      "platformOperator": {
+        "table": "town.platform_operators",
+        "rolesAscending": [
+          "viewer",
+          "investigator",
+          "moderator",
+          "account_admin",
+          "ops_admin",
+          "role_admin"
+        ],
+        "capabilities": {
+          "viewer": [
+            "read_status",
+            "read_accounts",
+            "read_memberships",
+            "read_communities",
+            "read_signals",
+            "read_discussions",
+            "read_submissions"
+          ],
+          "investigator": ["read_audit", "read_emails", "read_payments", "export_investigation"],
+          "moderator": ["moderate_signals"],
+          "account_admin": ["manage_accounts"],
+          "ops_admin": ["manage_memberships", "manage_alerts", "manage_backup", "manage_restore"],
+          "role_admin": ["manage_operators"]
+        },
+        "authFailure": "generic 404 fail-closed — never advertise the platform plane",
+        "sourcePaths": ["src/platform/roles.ts", "src/platform/auth.ts", "src/routes/platform.ts"]
+      },
+      "sessionAndGrants": {
+        "session": "Normal APIs, civic participation, membership self-read, platform",
+        "setupGrant": "Ceremony only — rejected on civic/membership/platform",
+        "recoveryGrant": "Ceremony only — rejected on civic/membership/platform",
+        "bearer": "Always rejected on civic/membership/platform surfaces",
+        "townControlKey": "Temporary confirmation GET only"
+      }
+    }
+  },
+  "townPublicConsumerRules": {
+    "home": "After login with recorded community commitment, HOME shows the member community first",
+    "exploreZone": "Other-city signals appear only after a dedicated explore divider; participation remains local",
+    "exploreCopy": "Poți explora, dar participarea este rezervată comunității locale.",
+    "membershipInvite": "Visitor membership invite only when shouldOfferMembershipInvite is true — never for paid, paid_pending_binding, or civic-capable accounts",
+    "communityMismatch403": "Never interpret as missing membership when authoritative membership/civic truth already exists",
+    "sourcePaths": [
+      "town-public/script.js",
+      "town-public/membership-recovery.js",
+      "town-public/city-discovery.js",
+      "town-public/community-commitment.js"
+    ]
+  },
+  "errorEnvelope": {
+    "shape": { "error": { "code": "string", "message": "string", "requestId": "string" } },
+    "source": "src/schemas/error.ts"
+  },
+  "flagGatedOrTemporary": [
+    "SIGNAL_SUBMISSION_ENABLED (default false)",
+    "LOCAL_ELIGIBILITY_ENABLED (default false; not a V1 participation gate)",
+    "STRIPE_BILLING_ENABLED (billing routes 404 when false)",
+    "GOOGLE_PLAY_BILLING_ENABLED (default false; outside web-launch critical path)",
+    "X-TOWN-Control-Key / controlled_test actor (temporary testing-only)"
+  ],
+  "explicitExclusions": [
+    "Flutter / native app-store launch as current critical path",
+    "Apple In-App Purchase / StoreKit",
+    "Chat product surface (town-public CHAT is honest unavailable)",
+    "Public Swagger UI",
+    "Client-side simulated membership or participate unlocks",
+    "Redis as a required runtime dependency"
+  ],
+  "relatedContracts": [
+    "docs/openapi.v1.json",
+    "docs/membership-foundation.v1.json",
+    "docs/billing-foundation.v1.json",
+    "docs/account-identity-contract.v1.json",
+    "docs/authentication-ceremony-foundation.v1.json",
+    "docs/operations/DEPLOYMENT_READINESS_V1.md"
+  ]
+}

@@ -17,6 +17,7 @@ TOWN API shared backend foundation: Fastify 5, strict TypeScript, TypeBox, Postg
 - Identity fixtures: explicit test-only `identity:fixtures:load` (never on server startup)
 - Ceremony fixtures: explicit test-only `auth:fixtures:load` (never on server startup)
 - OpenAPI 3.1: deterministic generation into `docs/openapi.v1.json` (implemented routes only; no Swagger UI)
+- Canonical civic surface V1: `docs/TOWN_CANONICAL_V1.md` + `docs/civic-surface-foundation.v1.json` (signals, confirmations, submissions, discussions, audit, RBAC)
 - Identity architecture contract: `docs/account-identity-contract.v1.json` (not live routes)
 - Ceremony architecture contract: `docs/authentication-ceremony-foundation.v1.json` (not live routes)
 
