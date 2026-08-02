@@ -2175,7 +2175,7 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
       await audit(operator.accountId, 'investigation_exported', request.id, {
         targetAccountId: pack.accountId,
         metadata: {
-          sections: ['account', 'emails', 'payments', 'platformAudit'],
+          sections: 'account,emails,payments,platformAudit',
         },
       });
 
