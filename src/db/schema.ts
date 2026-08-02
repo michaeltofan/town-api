@@ -324,7 +324,9 @@ export const platformAuditEvents = town.table(
         'alerts_inspected',
         'alert_acknowledged',
         'backup_inspected',
-        'backup_verified'
+        'backup_verified',
+        'restore_inspected',
+        'restore_drill_attested'
       )`,
     ),
     index('platform_audit_events_occurred_at_idx').on(table.occurredAt),
@@ -1710,7 +1712,7 @@ export const platformAlerts = town.table(
   (table) => [
     check(
       'platform_alerts_component_valid',
-      sql`${table.component} in ('api', 'database', 'email', 'stripe', 'backup')`,
+      sql`${table.component} in ('api', 'database', 'email', 'stripe', 'backup', 'restore')`,
     ),
     check(
       'platform_alerts_status_valid',
@@ -1773,7 +1775,9 @@ export type PlatformAuditAction =
   | 'alerts_inspected'
   | 'alert_acknowledged'
   | 'backup_inspected'
-  | 'backup_verified';
+  | 'backup_verified'
+  | 'restore_inspected'
+  | 'restore_drill_attested';
 
 export type PlatformTechnicalErrorRow = typeof platformTechnicalErrors.$inferSelect;
 export type PlatformUptimeSampleRow = typeof platformUptimeSamples.$inferSelect;
@@ -1820,10 +1824,60 @@ export const platformBackupVerifications = town.table(
 
 export type PlatformBackupVerificationRow = typeof platformBackupVerifications.$inferSelect;
 
+/**
+ * Operator attestations that a restore drill was performed out-of-band
+ * (Railway disposable clone / PITR). The API never executes restore.
+ */
+export const platformRestoreDrillAttestations = town.table(
+  'platform_restore_drill_attestations',
+  {
+    id: uuid('id').primaryKey(),
+    drilledAt: timestamp('drilled_at', { withTimezone: true, mode: 'string' }).notNull(),
+    drilledByAccountId: uuid('drilled_by_account_id').notNull(),
+    method: text('method').notNull(),
+    outcome: text('outcome').notNull(),
+    restorePointAt: timestamp('restore_point_at', { withTimezone: true, mode: 'string' }),
+    note: text('note'),
+    environment: text('environment').notNull(),
+    commitSha: text('commit_sha'),
+  },
+  (table) => [
+    check(
+      'platform_restore_drill_attestations_method_valid',
+      sql`${table.method} in ('railway_pitr_disposable_clone', 'railway_pitr_point_in_time')`,
+    ),
+    check(
+      'platform_restore_drill_attestations_outcome_valid',
+      sql`${table.outcome} in ('passed', 'failed')`,
+    ),
+    check(
+      'platform_restore_drill_attestations_note_bounded',
+      sql`${table.note} is null or char_length(${table.note}) <= 240`,
+    ),
+    check(
+      'platform_restore_drill_attestations_restore_point_not_after_drilled',
+      sql`${table.restorePointAt} is null or ${table.restorePointAt} <= ${table.drilledAt}`,
+    ),
+    foreignKey({
+      columns: [table.drilledByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'platform_restore_drill_attestations_drilled_by_account_id_fkey',
+    }).onDelete('restrict'),
+    index('platform_restore_drill_attestations_drilled_at_idx').on(table.drilledAt),
+  ],
+);
+
+export type PlatformRestoreDrillAttestationRow =
+  typeof platformRestoreDrillAttestations.$inferSelect;
+export type PlatformRestoreDrillMethodValue =
+  'railway_pitr_disposable_clone' | 'railway_pitr_point_in_time';
+export type PlatformRestoreDrillOutcomeValue = 'passed' | 'failed';
+
 export type PlatformComponentStatusValue =
   'ok' | 'degraded' | 'fail' | 'timeout' | 'disabled' | 'misconfigured';
 export type PlatformOverallStatusValue = 'ok' | 'degraded' | 'fail' | 'timeout' | 'misconfigured';
-export type PlatformUptimeComponentValue = 'api' | 'database' | 'email' | 'stripe' | 'backup';
+export type PlatformUptimeComponentValue =
+  'api' | 'database' | 'email' | 'stripe' | 'backup' | 'restore';
 export type PlatformAlertStatusValue = 'degraded' | 'fail' | 'timeout' | 'misconfigured';
 export type PlatformAlertSeverityValue = 'warning' | 'critical';
 export type PlatformBackupProviderValue = 'railway_postgres_pitr' | 'none';

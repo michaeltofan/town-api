@@ -313,6 +313,10 @@ Backups:
 - The API does not run dump jobs or workers. Operator console Monitor exposes
   automated PITR configuration via `DATABASE_BACKUP_*` env vars and records
   ops_admin verifications at `GET/POST /v1/platform/backup`.
+- Restore is attestation-only: operators record out-of-band Railway restore
+  drills at `GET/POST /v1/platform/restore` (`/attest`). The API never executes
+  `pg_restore` or clones against staging/production. Keep the latest passed
+  drill fresher than `DATABASE_RESTORE_DRILL_MAX_AGE_DAYS` (default 90).
 - Configure staging/production with:
   `DATABASE_BACKUP_PROVIDER=railway_postgres_pitr`,
   `DATABASE_BACKUP_PITR_ENABLED=true`,

@@ -164,6 +164,9 @@ describe('platform operator area', () => {
     expect(['ok', 'disabled', 'misconfigured', 'fail', 'timeout', 'degraded']).toContain(
       body.data.components.backup.status,
     );
+    expect(['ok', 'disabled', 'misconfigured', 'fail', 'timeout', 'degraded']).toContain(
+      body.data.components.restore.status,
+    );
     expect(body.data.counts.accounts.total).toBeGreaterThan(0);
 
     const audits = await ctx.app.database.db
@@ -188,6 +191,7 @@ describe('platform operator area', () => {
         email: { status: 'disabled', detail: 'email_verification_disabled' },
         stripe: { status: 'disabled', detail: 'stripe_billing_disabled' },
         backup: { status: 'disabled', detail: 'backup_disabled' },
+        restore: { status: 'disabled', detail: 'restore_drill_disabled' },
       },
       environment: 'test',
       service: 'town-api',
@@ -250,6 +254,7 @@ describe('platform operator area', () => {
         email: { status: 'disabled', detail: null },
         stripe: { status: 'disabled', detail: null },
         backup: { status: 'disabled', detail: null },
+        restore: { status: 'disabled', detail: null },
       },
       environment: 'test',
       service: 'town-api',

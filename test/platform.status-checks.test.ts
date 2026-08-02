@@ -166,5 +166,6 @@ describe('platform operational status checks', () => {
     expect(components.email).toEqual({ status: 'ok', detail: 'delivery_mode=test' });
     expect(components.stripe).toEqual({ status: 'disabled', detail: 'stripe_billing_disabled' });
     expect(components.backup).toEqual({ status: 'misconfigured', detail: 'pitr_not_configured' });
+    expect(components.restore).toEqual({ status: 'misconfigured', detail: 'backup_pitr_required' });
   });
 });

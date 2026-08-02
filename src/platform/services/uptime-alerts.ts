@@ -12,8 +12,15 @@ import type {
 /** Components persisted into uptime sample rows. */
 export const PLATFORM_UPTIME_COMPONENTS = ['api', 'database', 'email', 'stripe'] as const;
 
-/** Components that open/resolve in-console alerts (includes backup attestation). */
-export const PLATFORM_ALERT_COMPONENTS = ['api', 'database', 'email', 'stripe', 'backup'] as const;
+/** Components that open/resolve in-console alerts (includes backup + restore attestation). */
+export const PLATFORM_ALERT_COMPONENTS = [
+  'api',
+  'database',
+  'email',
+  'stripe',
+  'backup',
+  'restore',
+] as const;
 
 export type PlatformUptimeComponent = (typeof PLATFORM_UPTIME_COMPONENTS)[number];
 export type PlatformAlertComponent = (typeof PLATFORM_ALERT_COMPONENTS)[number];
@@ -54,7 +61,7 @@ export function deriveOverallStatus(
 ): PlatformOverallStatus {
   let worst: PlatformOverallStatus = 'ok';
   let worstRank = 0;
-  // Overall health includes backup attestation, but sample rows still store only uptime comps.
+  // Overall health includes backup/restore attestation; sample rows store only uptime comps.
   for (const name of PLATFORM_ALERT_COMPONENTS) {
     const status = components[name].status;
     if (status === 'disabled' || status === 'ok') continue;
@@ -99,7 +106,8 @@ export function componentStatusesFromSample(row: {
     database: wrap(row.databaseStatus),
     email: wrap(row.emailStatus),
     stripe: wrap(row.stripeStatus),
-    // Samples do not store backup; treat as disabled for reconstruction helpers.
+    // Samples do not store backup/restore; treat as disabled for reconstruction helpers.
     backup: wrap('disabled'),
+    restore: wrap('disabled'),
   };
 }

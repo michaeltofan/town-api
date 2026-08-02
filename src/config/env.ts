@@ -88,6 +88,11 @@ const EnvSchema = Type.Object(
     DATABASE_BACKUP_RETENTION_DAYS: Type.Optional(Type.Integer({ minimum: 1, maximum: 365 })),
     /** Max age of the latest operator verification before backup status is degraded. */
     DATABASE_BACKUP_VERIFY_MAX_AGE_DAYS: Type.Integer({ minimum: 1, maximum: 365, default: 30 }),
+    /**
+     * Max age of the latest passed restore-drill attestation before restore status
+     * is degraded. Attestation only — the API never executes database restore.
+     */
+    DATABASE_RESTORE_DRILL_MAX_AGE_DAYS: Type.Integer({ minimum: 1, maximum: 365, default: 90 }),
     CONTROLLED_CONFIRMATION_ENABLED: Type.Boolean({ default: false }),
     CONTROLLED_CONFIRMATION_KEY: Type.Optional(Type.String({ minLength: 1 })),
     // UUID format is validated explicitly below; TypeBox FormatRegistry is not required here.
@@ -604,6 +609,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       source.DATABASE_BACKUP_VERIFY_MAX_AGE_DAYS === ''
         ? 30
         : parseInteger(source.DATABASE_BACKUP_VERIFY_MAX_AGE_DAYS),
+    DATABASE_RESTORE_DRILL_MAX_AGE_DAYS:
+      source.DATABASE_RESTORE_DRILL_MAX_AGE_DAYS === undefined ||
+      source.DATABASE_RESTORE_DRILL_MAX_AGE_DAYS === ''
+        ? 90
+        : parseInteger(source.DATABASE_RESTORE_DRILL_MAX_AGE_DAYS),
     CONTROLLED_CONFIRMATION_ENABLED: controlledEnabled,
     ALLOW_PRODUCTION_WEB_ORIGIN: allowProductionWebOrigin,
     EMAIL_VERIFICATION_ENABLED: emailVerificationEnabled,
