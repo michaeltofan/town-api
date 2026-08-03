@@ -243,10 +243,24 @@ describe('staging seed runner integration', () => {
       idleTimeoutMs: 1000,
     });
     try {
-      // Replace one canonical signal id while keeping total count at 9.
-      await database.pool.query(`DELETE FROM town.signals WHERE id = $1`, [
-        FOUNDATION_SIGNAL_IDS.milanoSignal1,
-      ]);
+      // Test-only corruption fixture: remove the immutable civic ledger before replacing
+      // one canonical signal id while keeping the signal total at 9.
+      await database.pool.query(`SET session_replication_role = 'replica'`);
+      try {
+        await database.pool.query(
+          `DELETE FROM town.civic_process_events
+           WHERE process_id IN (SELECT id FROM town.civic_processes WHERE signal_id = $1)`,
+          [FOUNDATION_SIGNAL_IDS.milanoSignal1],
+        );
+        await database.pool.query(`DELETE FROM town.civic_processes WHERE signal_id = $1`, [
+          FOUNDATION_SIGNAL_IDS.milanoSignal1,
+        ]);
+        await database.pool.query(`DELETE FROM town.signals WHERE id = $1`, [
+          FOUNDATION_SIGNAL_IDS.milanoSignal1,
+        ]);
+      } finally {
+        await database.pool.query(`SET session_replication_role = 'origin'`);
+      }
       await database.pool.query(
         `INSERT INTO town.signals (
            id, community_id, slug, position, locale, category, area, headline, summary,

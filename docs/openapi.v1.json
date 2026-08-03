@@ -19452,6 +19452,217 @@
         ]
       }
     },
+    "/v1/signals/{signalId}/civic-process": {
+      "get": {
+        "description": "Public, bounded civic-process state. An optional active session derives only the caller's own confirmation capability; visitors and read-only accounts receive false without private denial reasons.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "canConfirm": {
+                          "type": "boolean"
+                        },
+                        "closingAt": {
+                          "type": "null"
+                        },
+                        "communitySlug": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "confirmationCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "currentStage": {
+                          "enum": [
+                            "confirmation"
+                          ],
+                          "type": "string"
+                        },
+                        "hasConfirmed": {
+                          "type": "boolean"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "nextStage": {
+                          "enum": [
+                            "proposals"
+                          ],
+                          "type": "string"
+                        },
+                        "signalId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "stageLabelKey": {
+                          "enum": [
+                            "civic_process.stage.confirmation"
+                          ],
+                          "type": "string"
+                        },
+                        "timeline": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "occurredAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "type": {
+                                "enum": [
+                                  "process_created"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "occurredAt"
+                            ],
+                            "title": "CivicProcessTimelineEvent",
+                            "type": "object"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "transitionRule": {
+                          "type": "null"
+                        },
+                        "updatedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "signalId",
+                        "communitySlug",
+                        "currentStage",
+                        "stageLabelKey",
+                        "confirmationCount",
+                        "hasConfirmed",
+                        "canConfirm",
+                        "nextStage",
+                        "closingAt",
+                        "transitionRule",
+                        "timeline",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Read the canonical civic process for a visible signal",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
     "/v1/signals/{signalId}/confirmation": {
       "get": {
         "description": "Session-authenticated participants receive their own confirmation state plus the aggregate confirmationCount for the signal. When X-TOWN-Control-Key is supplied instead, returns the historical controlled-test-actor state (temporary testing mechanism, not public authentication). Never exposes actor identifiers or confirmer lists — only a boolean personal state and an integer aggregate total.",

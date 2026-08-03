@@ -30,6 +30,7 @@ describe('OpenAPI contract', () => {
     expect(document.paths).toHaveProperty('/v1/communities/{communitySlug}/signals');
     expect(document.paths).toHaveProperty('/v1/signals/{signalId}');
     expect(document.paths).toHaveProperty('/v1/signals/{signalId}/confirmation');
+    expect(document.paths).toHaveProperty('/v1/signals/{signalId}/civic-process');
     expect(document.paths).toHaveProperty('/v1/signals/{signalId}/discussion-session');
     expect(document.paths).toHaveProperty(
       '/v1/signals/{signalId}/discussion-session/contributions',
@@ -76,6 +77,15 @@ describe('OpenAPI contract', () => {
     expect(confirmationPath.put.responses).toHaveProperty('401');
     expect(confirmationPath.put.responses).toHaveProperty('403');
     expect(confirmationPath.put.responses).toHaveProperty('404');
+
+    const civicProcessPath = document.paths['/v1/signals/{signalId}/civic-process'] as {
+      get: { responses: Record<string, unknown>; security?: unknown[] };
+    };
+    expect(civicProcessPath.get.responses).toHaveProperty('200');
+    expect(civicProcessPath.get.responses).toHaveProperty('400');
+    expect(civicProcessPath.get.responses).toHaveProperty('404');
+    expect(civicProcessPath.get.responses).not.toHaveProperty('401');
+    expect(civicProcessPath.get.security).toBeUndefined();
 
     const scheme = document.components?.securitySchemes?.TownControlKey;
     expect(scheme?.type).toBe('apiKey');

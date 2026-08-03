@@ -227,6 +227,7 @@ export const signals = town.table(
     }).onDelete('restrict'),
     unique('signals_community_slug_unique').on(table.communityId, table.slug),
     unique('signals_community_position_unique').on(table.communityId, table.position),
+    unique('signals_id_community_id_unique').on(table.id, table.communityId),
     unique('signals_media_upload_id_unique').on(table.mediaUploadId),
     check('signals_position_positive', sql`${table.position} > 0`),
     check('signals_publication_status_published', sql`${table.publicationStatus} = 'published'`),
@@ -2014,3 +2015,70 @@ export type LocalParticipationEligibility =
   'eligible' | 'not_verified' | 'expired' | 'mismatched_community' | 'unavailable';
 export type SignalSubmissionStatus = 'pending_review' | 'rejected';
 export type StripeCheckoutAttemptStatus = 'creating' | 'open' | 'completed' | 'expired' | 'failed';
+
+export const civicProcesses = town.table(
+  'civic_processes',
+  {
+    id: uuid('id').primaryKey(),
+    signalId: uuid('signal_id').notNull(),
+    communityId: uuid('community_id').notNull(),
+    currentStage: text('current_stage').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    unique('civic_processes_signal_id_unique').on(table.signalId),
+    foreignKey({
+      columns: [table.signalId, table.communityId],
+      foreignColumns: [signals.id, signals.communityId],
+      name: 'civic_processes_signal_community_fkey',
+    }).onDelete('restrict'),
+    check('civic_processes_stage_confirmation', sql`${table.currentStage} = 'confirmation'`),
+    index('civic_processes_community_created_idx').on(table.communityId, table.createdAt),
+  ],
+);
+
+export const civicProcessTransitions = town.table(
+  'civic_process_transitions',
+  {
+    id: uuid('id').primaryKey(),
+    processId: uuid('process_id').notNull(),
+    fromStage: text('from_stage').notNull(),
+    toStage: text('to_stage').notNull(),
+    reasonKey: text('reason_key').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_process_transitions_process_id_fkey',
+    }).onDelete('restrict'),
+    check('civic_process_transitions_stage_changed', sql`${table.fromStage} <> ${table.toStage}`),
+    index('civic_process_transitions_process_occurred_idx').on(table.processId, table.occurredAt),
+  ],
+);
+
+export const civicProcessEvents = town.table(
+  'civic_process_events',
+  {
+    id: uuid('id').primaryKey(),
+    processId: uuid('process_id').notNull(),
+    eventType: text('event_type').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_process_events_process_id_fkey',
+    }).onDelete('restrict'),
+    check('civic_process_events_type_process_created', sql`${table.eventType} = 'process_created'`),
+    unique('civic_process_events_process_type_unique').on(table.processId, table.eventType),
+    index('civic_process_events_process_occurred_idx').on(table.processId, table.occurredAt),
+  ],
+);
+
+export type CivicProcessRow = typeof civicProcesses.$inferSelect;
+export type CivicProcessTransitionRow = typeof civicProcessTransitions.$inferSelect;
+export type CivicProcessEventRow = typeof civicProcessEvents.$inferSelect;
