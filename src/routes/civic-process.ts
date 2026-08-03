@@ -11,8 +11,10 @@ import {
   findActiveCivicActorByAccountId,
   findConfirmationByActorAndSignal,
 } from '../db/repositories/confirmations.js';
+import { countCivicProposalsForProcess } from '../db/repositories/civic-proposals.js';
 import {
   CIVIC_CONFIRMATION_THRESHOLD,
+  CIVIC_PROPOSAL_THRESHOLD,
   findCivicProcessBySignalId,
   listPublicCivicProcessEvents,
 } from '../db/repositories/civic-processes.js';
@@ -99,8 +101,9 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
         throw new Error('Visible signal is missing its canonical civic process');
       }
 
-      const [confirmationCount, timeline, accountId] = await Promise.all([
+      const [confirmationCount, proposalCount, timeline, accountId] = await Promise.all([
         countConfirmationsForSignal(app.database.db, published.signal.id),
+        countCivicProposalsForProcess(app.database.db, process.id),
         listPublicCivicProcessEvents(app.database.db, process.id),
         resolveOptionalSessionAccountId(request),
       ]);
@@ -154,17 +157,34 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
           stageLabelKey:
             process.currentStage === 'confirmation'
               ? 'civic_process.stage.confirmation'
-              : 'civic_process.stage.proposals',
+              : process.currentStage === 'proposals'
+                ? 'civic_process.stage.proposals'
+                : 'civic_process.stage.deliberation',
           confirmationCount,
+          proposalCount,
           hasConfirmed,
           canConfirm,
-          nextStage: process.currentStage === 'confirmation' ? 'proposals' : 'deliberation',
+          nextStage:
+            process.currentStage === 'confirmation'
+              ? 'proposals'
+              : process.currentStage === 'proposals'
+                ? 'deliberation'
+                : 'ballot_preparation',
           closingAt: null,
-          transitionRule: {
-            type: 'confirmation_count',
-            requiredConfirmations: CIVIC_CONFIRMATION_THRESHOLD,
-            reached: confirmationCount >= CIVIC_CONFIRMATION_THRESHOLD,
-          },
+          transitionRule:
+            process.currentStage === 'confirmation'
+              ? {
+                  type: 'confirmation_count',
+                  requiredConfirmations: CIVIC_CONFIRMATION_THRESHOLD,
+                  reached: confirmationCount >= CIVIC_CONFIRMATION_THRESHOLD,
+                }
+              : process.currentStage === 'proposals'
+                ? {
+                    type: 'proposal_count',
+                    requiredProposals: CIVIC_PROPOSAL_THRESHOLD,
+                    reached: proposalCount >= CIVIC_PROPOSAL_THRESHOLD,
+                  }
+                : null,
           timeline: timeline.map((event) => ({
             type: event.eventType,
             occurredAt: toIsoTimestamp(event.occurredAt),

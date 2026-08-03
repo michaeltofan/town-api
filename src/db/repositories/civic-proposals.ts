@@ -13,6 +13,15 @@ export type CivicProposalView = {
   createdAt: string;
 };
 
+export async function countCivicProposalsForProcess(db: Db, processId: string): Promise<number> {
+  const result = await db.execute<{ count: string }>(sql`
+    SELECT count(*)::text AS count
+    FROM town.civic_proposals
+    WHERE process_id = ${processId}
+  `);
+  return Number(result.rows[0]?.count ?? 0);
+}
+
 export async function listCivicProposals(
   db: Db,
   processId: string,

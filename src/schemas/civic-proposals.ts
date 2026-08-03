@@ -26,7 +26,11 @@ export const CivicProposalListResponseSchema = Type.Object(
     data: Type.Object(
       {
         processId: Type.String({ format: 'uuid' }),
-        currentStage: Type.Union([Type.Literal('confirmation'), Type.Literal('proposals')]),
+        currentStage: Type.Union([
+          Type.Literal('confirmation'),
+          Type.Literal('proposals'),
+          Type.Literal('deliberation'),
+        ]),
         canPropose: Type.Boolean(),
         proposals: Type.Array(CivicProposalSchema, { maxItems: 100 }),
       },
