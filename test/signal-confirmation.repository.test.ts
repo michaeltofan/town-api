@@ -159,9 +159,23 @@ describe('confirmation repository', () => {
       ),
     ).rejects.toMatchObject({ code: 'SIGNAL_NOT_FOUND' } satisfies Partial<AppError>);
 
-    await pool.query(`DELETE FROM town.signals WHERE id = $1`, [
-      '00000000-0000-4000-8000-000000000198',
-    ]);
+    // Test-only cleanup of the deliberately invalid draft signal and its immutable ledger.
+    await pool.query(`SET session_replication_role = 'replica'`);
+    try {
+      await pool.query(
+        `DELETE FROM town.civic_process_events
+         WHERE process_id IN (SELECT id FROM town.civic_processes WHERE signal_id = $1)`,
+        ['00000000-0000-4000-8000-000000000198'],
+      );
+      await pool.query(`DELETE FROM town.civic_processes WHERE signal_id = $1`, [
+        '00000000-0000-4000-8000-000000000198',
+      ]);
+      await pool.query(`DELETE FROM town.signals WHERE id = $1`, [
+        '00000000-0000-4000-8000-000000000198',
+      ]);
+    } finally {
+      await pool.query(`SET session_replication_role = 'origin'`);
+    }
     await pool.query(
       `ALTER TABLE town.signals ADD CONSTRAINT signals_publication_status_published CHECK (publication_status = 'published')`,
     );
