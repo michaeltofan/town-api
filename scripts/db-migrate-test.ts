@@ -23,6 +23,7 @@ const EXPECTED_TOWN_TABLES = [
   'civic_process_events',
   'civic_process_transitions',
   'civic_processes',
+  'civic_proposals',
   'communities',
   'email_challenges',
   'google_play_purchase_links',

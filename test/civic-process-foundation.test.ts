@@ -6,6 +6,11 @@ const thresholdMigrationPath = new URL(
   '../drizzle/0042_civic_process_confirmation_threshold.sql',
   import.meta.url,
 );
+const proposalMigrationPath = new URL(
+  '../drizzle/0043_civic_process_proposals.sql',
+  import.meta.url,
+);
+const proposalRoutePath = new URL('../src/routes/civic-proposals.ts', import.meta.url);
 const routePath = new URL('../src/routes/civic-process.ts', import.meta.url);
 
 describe('civic process confirmation foundation', () => {
@@ -39,6 +44,18 @@ describe('civic process confirmation foundation', () => {
     expect(migration).toContain('BEFORE INSERT ON "town"."signal_confirmations"');
     expect(migration).toContain('AFTER INSERT ON "town"."signal_confirmations"');
     expect(migration).not.toMatch(/operator|manual_transition/i);
+  });
+
+  it('enforces structured proposals only in the proposals stage and community', async () => {
+    const migration = await readFile(proposalMigrationPath, 'utf8');
+    const route = await readFile(proposalRoutePath, 'utf8');
+
+    expect(migration).toContain('"civic_proposals_process_actor_unique"');
+    expect(migration).toContain("'proposals'");
+    expect(migration).toContain('actor_community_id IS DISTINCT FROM process_community_id');
+    expect(route).toContain("app.get(\n    '/v1/signals/:signalId/civic-process/proposals'");
+    expect(route).toContain("app.post(\n    '/v1/signals/:signalId/civic-process/proposals'");
+    expect(route).not.toMatch(/voting|ballot|deliberation.*transition/i);
   });
 
   it('exposes a read-only bounded endpoint without a state mutation surface', async () => {
