@@ -3,17 +3,21 @@ import type { Database } from '../client.js';
 
 type Db = Database['db'];
 
+export const CIVIC_CONFIRMATION_THRESHOLD = 5;
+
+export type PublicCivicProcessStage = 'confirmation' | 'proposals';
+
 export type CivicProcessReadRow = {
   id: string;
   signalId: string;
   communityId: string;
-  currentStage: 'confirmation';
+  currentStage: PublicCivicProcessStage;
   createdAt: string;
   updatedAt: string;
 };
 
 export type PublicCivicProcessEvent = {
-  eventType: 'process_created';
+  eventType: 'process_created' | 'stage_transitioned_to_proposals';
   occurredAt: string;
 };
 
@@ -38,7 +42,7 @@ export async function findCivicProcessBySignalId(
   if (!row) {
     return null;
   }
-  if (row.current_stage !== 'confirmation') {
+  if (row.current_stage !== 'confirmation' && row.current_stage !== 'proposals') {
     throw new Error('Unsupported civic process stage');
   }
   return {
@@ -69,7 +73,10 @@ export async function listPublicCivicProcessEvents(
     ORDER BY occurred_at ASC
   `);
   return result.rows.map((row) => {
-    if (row.event_type !== 'process_created') {
+    if (
+      row.event_type !== 'process_created' &&
+      row.event_type !== 'stage_transitioned_to_proposals'
+    ) {
       throw new Error('Unsupported public civic process event');
     }
     return { eventType: row.event_type, occurredAt: row.occurred_at };

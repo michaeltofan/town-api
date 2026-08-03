@@ -35,11 +35,13 @@ describe('civic process confirmation integration', () => {
       transitions: '0',
     });
 
-    const invalid = await pool.query<{ count: string }>(`SELECT count(*)::text AS count
+    const invalid = await pool.query<{
+      count: string;
+    }>(`SELECT count(*)::text AS count
       FROM town.civic_processes p
       JOIN town.signals s ON s.id = p.signal_id
       WHERE p.community_id <> s.community_id
-         OR p.current_stage <> 'confirmation'`);
+         OR p.current_stage NOT IN ('confirmation', 'proposals')`);
     expect(invalid.rows[0]?.count).toBe('0');
   });
 
@@ -78,7 +80,11 @@ describe('civic process confirmation integration', () => {
       [signalId],
     );
     expect(rows.rows).toEqual([
-      { stage: 'confirmation', event_type: 'process_created', event_count: '1' },
+      {
+        stage: 'confirmation',
+        event_type: 'process_created',
+        event_count: '1',
+      },
     ]);
   });
 
@@ -129,11 +135,118 @@ describe('civic process confirmation integration', () => {
         canConfirm: false,
         nextStage: 'proposals',
         closingAt: null,
-        transitionRule: null,
+        transitionRule: {
+          type: 'confirmation_count',
+          requiredConfirmations: 5,
+          reached: false,
+        },
         timeline: [{ type: 'process_created' }],
       },
     });
     expect(response.body).not.toMatch(/accountId|actorId|email|providerId|denialReason/);
+  });
+
+  it('advances once when five confirmations arrive concurrently and closes confirmation', async () => {
+    const signalId = randomUUID();
+    const actorIds = Array.from({ length: 6 }, () => randomUUID());
+
+    await pool.query(
+      `INSERT INTO town.signals
+       SELECT (jsonb_populate_record(
+         NULL::town.signals,
+         to_jsonb(source) || jsonb_build_object(
+           'id', $1::uuid,
+           'slug', 'civic-process-threshold-test',
+           'position', 32001,
+           'created_at', now(),
+           'updated_at', now(),
+           'published_at', now()
+         )
+       )).*
+       FROM town.signals source
+       ORDER BY position
+       LIMIT 1`,
+      [signalId],
+    );
+
+    for (const actorId of actorIds) {
+      await pool.query(
+        `INSERT INTO town.actors (
+           id, kind, status, display_label, community_id, account_id,
+           local_eligibility_verified_at, community_commitment_accepted_at,
+           community_commitment_version, created_at, updated_at
+         )
+         SELECT
+           $1::uuid, 'controlled_test', 'active', $1::text, community_id, NULL,
+           NULL, NULL, NULL, now(), now()
+         FROM town.signals
+         WHERE id = $2`,
+        [actorId, signalId],
+      );
+    }
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId) =>
+        pool.query(
+          `INSERT INTO town.signal_confirmations
+             (id, signal_id, actor_id, confirmed_at, created_at)
+           VALUES (gen_random_uuid(), $1, $2, now(), now())`,
+          [signalId, actorId],
+        ),
+      ),
+    );
+
+    const state = await pool.query<{
+      current_stage: string;
+      transitions: string;
+      transition_events: string;
+    }>(
+      `SELECT
+         process.current_stage,
+         (SELECT count(*)::text
+          FROM town.civic_process_transitions transition
+          WHERE transition.process_id = process.id) AS transitions,
+         (SELECT count(*)::text
+          FROM town.civic_process_events event
+          WHERE event.process_id = process.id
+            AND event.event_type = 'stage_transitioned_to_proposals') AS transition_events
+       FROM town.civic_processes process
+       WHERE process.signal_id = $1`,
+      [signalId],
+    );
+    expect(state.rows).toEqual([
+      { current_stage: 'proposals', transitions: '1', transition_events: '1' },
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: {
+        currentStage: 'proposals',
+        stageLabelKey: 'civic_process.stage.proposals',
+        confirmationCount: 5,
+        canConfirm: false,
+        nextStage: 'deliberation',
+        transitionRule: {
+          type: 'confirmation_count',
+          requiredConfirmations: 5,
+          reached: true,
+        },
+        timeline: [{ type: 'process_created' }, { type: 'stage_transitioned_to_proposals' }],
+      },
+    });
+
+    await expect(
+      pool.query(
+        `INSERT INTO town.signal_confirmations
+           (id, signal_id, actor_id, confirmed_at, created_at)
+         VALUES (gen_random_uuid(), $1, $2, now(), now())`,
+        [signalId, actorIds[5]],
+      ),
+    ).rejects.toThrow(/civic confirmation stage is closed/);
   });
 
   it('preserves fail-closed missing and invalid signal behavior', async () => {
@@ -142,7 +255,9 @@ describe('civic process confirmation integration', () => {
       url: '/v1/signals/00000000-0000-4000-8000-000000000999/civic-process',
     });
     expect(missing.statusCode).toBe(404);
-    expect(missing.json()).toMatchObject({ error: { code: 'SIGNAL_NOT_FOUND' } });
+    expect(missing.json()).toMatchObject({
+      error: { code: 'SIGNAL_NOT_FOUND' },
+    });
 
     const invalid = await app.inject({
       method: 'GET',

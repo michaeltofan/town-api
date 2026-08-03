@@ -12,6 +12,7 @@ import {
   findConfirmationByActorAndSignal,
 } from '../db/repositories/confirmations.js';
 import {
+  CIVIC_CONFIRMATION_THRESHOLD,
   findCivicProcessBySignalId,
   listPublicCivicProcessEvents,
 } from '../db/repositories/civic-processes.js';
@@ -140,7 +141,7 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
             published.signal.id,
           );
           hasConfirmed = confirmation !== null;
-          canConfirm = confirmation === null;
+          canConfirm = process.currentStage === 'confirmation' && confirmation === null;
         }
       }
 
@@ -149,14 +150,21 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
           id: process.id,
           signalId: process.signalId,
           communitySlug: published.community.slug,
-          currentStage: 'confirmation',
-          stageLabelKey: 'civic_process.stage.confirmation',
+          currentStage: process.currentStage,
+          stageLabelKey:
+            process.currentStage === 'confirmation'
+              ? 'civic_process.stage.confirmation'
+              : 'civic_process.stage.proposals',
           confirmationCount,
           hasConfirmed,
           canConfirm,
-          nextStage: 'proposals',
+          nextStage: process.currentStage === 'confirmation' ? 'proposals' : 'deliberation',
           closingAt: null,
-          transitionRule: null,
+          transitionRule: {
+            type: 'confirmation_count',
+            requiredConfirmations: CIVIC_CONFIRMATION_THRESHOLD,
+            reached: confirmationCount >= CIVIC_CONFIRMATION_THRESHOLD,
+          },
           timeline: timeline.map((event) => ({
             type: event.eventType,
             occurredAt: toIsoTimestamp(event.occurredAt),

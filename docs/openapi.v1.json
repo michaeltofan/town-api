@@ -19496,7 +19496,8 @@
                         },
                         "currentStage": {
                           "enum": [
-                            "confirmation"
+                            "confirmation",
+                            "proposals"
                           ],
                           "type": "string"
                         },
@@ -19509,7 +19510,8 @@
                         },
                         "nextStage": {
                           "enum": [
-                            "proposals"
+                            "proposals",
+                            "deliberation"
                           ],
                           "type": "string"
                         },
@@ -19519,7 +19521,8 @@
                         },
                         "stageLabelKey": {
                           "enum": [
-                            "civic_process.stage.confirmation"
+                            "civic_process.stage.confirmation",
+                            "civic_process.stage.proposals"
                           ],
                           "type": "string"
                         },
@@ -19533,7 +19536,8 @@
                               },
                               "type": {
                                 "enum": [
-                                  "process_created"
+                                  "process_created",
+                                  "stage_transitioned_to_proposals"
                                 ],
                                 "type": "string"
                               }
@@ -19549,7 +19553,30 @@
                           "type": "array"
                         },
                         "transitionRule": {
-                          "type": "null"
+                          "additionalProperties": false,
+                          "properties": {
+                            "reached": {
+                              "type": "boolean"
+                            },
+                            "requiredConfirmations": {
+                              "maximum": 5,
+                              "minimum": 5,
+                              "type": "integer"
+                            },
+                            "type": {
+                              "enum": [
+                                "confirmation_count"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "requiredConfirmations",
+                            "reached"
+                          ],
+                          "title": "CivicProcessTransitionRule",
+                          "type": "object"
                         },
                         "updatedAt": {
                           "format": "date-time",
