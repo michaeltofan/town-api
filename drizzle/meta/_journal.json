@@ -302,6 +302,13 @@
       "when": 1786905600000,
       "tag": "0042_civic_process_confirmation_threshold",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1786992000000,
+      "tag": "0043_civic_process_proposals",
+      "breakpoints": true
     }
   ]
 }

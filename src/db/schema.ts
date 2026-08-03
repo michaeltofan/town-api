@@ -2041,6 +2041,34 @@ export const civicProcesses = town.table(
   ],
 );
 
+export const civicProposals = town.table(
+  'civic_proposals',
+  {
+    id: uuid('id').primaryKey(),
+    processId: uuid('process_id').notNull(),
+    authorActorId: uuid('author_actor_id').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_proposals_process_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.authorActorId],
+      foreignColumns: [actors.id],
+      name: 'civic_proposals_author_actor_id_fkey',
+    }).onDelete('restrict'),
+    unique('civic_proposals_process_actor_unique').on(table.processId, table.authorActorId),
+    check('civic_proposals_title_valid', sql`char_length(btrim(${table.title})) between 1 and 160`),
+    check('civic_proposals_body_valid', sql`char_length(btrim(${table.body})) between 1 and 2000`),
+    index('civic_proposals_process_created_idx').on(table.processId, table.createdAt, table.id),
+  ],
+);
+
 export const civicProcessTransitions = town.table(
   'civic_process_transitions',
   {
@@ -2096,5 +2124,6 @@ export const civicProcessEvents = town.table(
 );
 
 export type CivicProcessRow = typeof civicProcesses.$inferSelect;
+export type CivicProposalRow = typeof civicProposals.$inferSelect;
 export type CivicProcessTransitionRow = typeof civicProcessTransitions.$inferSelect;
 export type CivicProcessEventRow = typeof civicProcessEvents.$inferSelect;
