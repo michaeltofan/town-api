@@ -4,8 +4,9 @@ import type { Database } from '../client.js';
 type Db = Database['db'];
 
 export const CIVIC_CONFIRMATION_THRESHOLD = 5;
+export const CIVIC_PROPOSAL_THRESHOLD = 5;
 
-export type PublicCivicProcessStage = 'confirmation' | 'proposals';
+export type PublicCivicProcessStage = 'confirmation' | 'proposals' | 'deliberation';
 
 export type CivicProcessReadRow = {
   id: string;
@@ -17,7 +18,8 @@ export type CivicProcessReadRow = {
 };
 
 export type PublicCivicProcessEvent = {
-  eventType: 'process_created' | 'stage_transitioned_to_proposals';
+  eventType:
+    'process_created' | 'stage_transitioned_to_proposals' | 'stage_transitioned_to_deliberation';
   occurredAt: string;
 };
 
@@ -42,7 +44,11 @@ export async function findCivicProcessBySignalId(
   if (!row) {
     return null;
   }
-  if (row.current_stage !== 'confirmation' && row.current_stage !== 'proposals') {
+  if (
+    row.current_stage !== 'confirmation' &&
+    row.current_stage !== 'proposals' &&
+    row.current_stage !== 'deliberation'
+  ) {
     throw new Error('Unsupported civic process stage');
   }
   return {
@@ -75,7 +81,8 @@ export async function listPublicCivicProcessEvents(
   return result.rows.map((row) => {
     if (
       row.event_type !== 'process_created' &&
-      row.event_type !== 'stage_transitioned_to_proposals'
+      row.event_type !== 'stage_transitioned_to_proposals' &&
+      row.event_type !== 'stage_transitioned_to_deliberation'
     ) {
       throw new Error('Unsupported public civic process event');
     }

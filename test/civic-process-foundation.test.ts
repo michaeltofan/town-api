@@ -10,6 +10,10 @@ const proposalMigrationPath = new URL(
   '../drizzle/0043_civic_process_proposals.sql',
   import.meta.url,
 );
+const proposalThresholdMigrationPath = new URL(
+  '../drizzle/0044_civic_process_proposal_threshold.sql',
+  import.meta.url,
+);
 const proposalRoutePath = new URL('../src/routes/civic-proposals.ts', import.meta.url);
 const routePath = new URL('../src/routes/civic-process.ts', import.meta.url);
 
@@ -56,6 +60,19 @@ describe('civic process confirmation foundation', () => {
     expect(route).toContain("app.get(\n    '/v1/signals/:signalId/civic-process/proposals'");
     expect(route).toContain("app.post(\n    '/v1/signals/:signalId/civic-process/proposals'");
     expect(route).not.toMatch(/voting|ballot|deliberation.*transition/i);
+  });
+
+  it('advances exactly once at five proposals through an audited database transition', async () => {
+    const migration = await readFile(proposalThresholdMigrationPath, 'utf8');
+
+    expect(migration).toContain('proposal_count < 5');
+    expect(migration).toContain("'proposal_threshold_reached'");
+    expect(migration).toContain("'stage_transitioned_to_deliberation'");
+    expect(migration).toContain('FOR UPDATE');
+    expect(migration).toContain('AFTER INSERT ON "town"."civic_proposals"');
+    expect(migration).toContain("'proposal_threshold'");
+    expect(migration).not.toMatch(/operator|manual_transition/i);
+    expect(migration).not.toMatch(/voting|ballot/i);
   });
 
   it('exposes a read-only bounded endpoint without a state mutation surface', async () => {

@@ -2035,7 +2035,7 @@ export const civicProcesses = town.table(
     }).onDelete('restrict'),
     check(
       'civic_processes_stage_supported',
-      sql`${table.currentStage} in ('confirmation', 'proposals')`,
+      sql`${table.currentStage} in ('confirmation', 'proposals', 'deliberation')`,
     ),
     index('civic_processes_community_created_idx').on(table.communityId, table.createdAt),
   ],
@@ -2091,10 +2091,16 @@ export const civicProcessTransitions = town.table(
       table.toStage,
     ),
     check(
-      'civic_process_transitions_confirmation_to_proposals',
-      sql`${table.fromStage} = 'confirmation'
+      'civic_process_transitions_supported_paths',
+      sql`(
+        ${table.fromStage} = 'confirmation'
         and ${table.toStage} = 'proposals'
-        and ${table.reasonKey} = 'confirmation_threshold_reached'`,
+        and ${table.reasonKey} = 'confirmation_threshold_reached'
+      ) or (
+        ${table.fromStage} = 'proposals'
+        and ${table.toStage} = 'deliberation'
+        and ${table.reasonKey} = 'proposal_threshold_reached'
+      )`,
     ),
     index('civic_process_transitions_process_occurred_idx').on(table.processId, table.occurredAt),
   ],
@@ -2116,7 +2122,11 @@ export const civicProcessEvents = town.table(
     }).onDelete('restrict'),
     check(
       'civic_process_events_type_supported',
-      sql`${table.eventType} in ('process_created', 'stage_transitioned_to_proposals')`,
+      sql`${table.eventType} in (
+        'process_created',
+        'stage_transitioned_to_proposals',
+        'stage_transitioned_to_deliberation'
+      )`,
     ),
     unique('civic_process_events_process_type_unique').on(table.processId, table.eventType),
     index('civic_process_events_process_occurred_idx').on(table.processId, table.occurredAt),

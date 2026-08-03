@@ -19497,7 +19497,8 @@
                         "currentStage": {
                           "enum": [
                             "confirmation",
-                            "proposals"
+                            "proposals",
+                            "deliberation"
                           ],
                           "type": "string"
                         },
@@ -19511,9 +19512,14 @@
                         "nextStage": {
                           "enum": [
                             "proposals",
-                            "deliberation"
+                            "deliberation",
+                            "ballot_preparation"
                           ],
                           "type": "string"
+                        },
+                        "proposalCount": {
+                          "minimum": 0,
+                          "type": "integer"
                         },
                         "signalId": {
                           "format": "uuid",
@@ -19522,7 +19528,8 @@
                         "stageLabelKey": {
                           "enum": [
                             "civic_process.stage.confirmation",
-                            "civic_process.stage.proposals"
+                            "civic_process.stage.proposals",
+                            "civic_process.stage.deliberation"
                           ],
                           "type": "string"
                         },
@@ -19537,7 +19544,8 @@
                               "type": {
                                 "enum": [
                                   "process_created",
-                                  "stage_transitioned_to_proposals"
+                                  "stage_transitioned_to_proposals",
+                                  "stage_transitioned_to_deliberation"
                                 ],
                                 "type": "string"
                               }
@@ -19553,30 +19561,62 @@
                           "type": "array"
                         },
                         "transitionRule": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "reached": {
-                              "type": "boolean"
-                            },
-                            "requiredConfirmations": {
-                              "maximum": 5,
-                              "minimum": 5,
-                              "type": "integer"
-                            },
-                            "type": {
-                              "enum": [
-                                "confirmation_count"
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "reached": {
+                                  "type": "boolean"
+                                },
+                                "requiredConfirmations": {
+                                  "maximum": 5,
+                                  "minimum": 5,
+                                  "type": "integer"
+                                },
+                                "type": {
+                                  "enum": [
+                                    "confirmation_count"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "requiredConfirmations",
+                                "reached"
                               ],
-                              "type": "string"
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "reached": {
+                                  "type": "boolean"
+                                },
+                                "requiredProposals": {
+                                  "maximum": 5,
+                                  "minimum": 5,
+                                  "type": "integer"
+                                },
+                                "type": {
+                                  "enum": [
+                                    "proposal_count"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "requiredProposals",
+                                "reached"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
                             }
-                          },
-                          "required": [
-                            "type",
-                            "requiredConfirmations",
-                            "reached"
                           ],
-                          "title": "CivicProcessTransitionRule",
-                          "type": "object"
+                          "title": "CivicProcessTransitionRule"
                         },
                         "updatedAt": {
                           "format": "date-time",
@@ -19590,6 +19630,7 @@
                         "currentStage",
                         "stageLabelKey",
                         "confirmationCount",
+                        "proposalCount",
                         "hasConfirmed",
                         "canConfirm",
                         "nextStage",
@@ -19728,6 +19769,12 @@
                             {
                               "enum": [
                                 "proposals"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "deliberation"
                               ],
                               "type": "string"
                             }
