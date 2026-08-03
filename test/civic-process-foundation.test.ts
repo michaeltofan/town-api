@@ -2,6 +2,10 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 const migrationPath = new URL('../drizzle/0041_civic_process_confirmation.sql', import.meta.url);
+const thresholdMigrationPath = new URL(
+  '../drizzle/0042_civic_process_confirmation_threshold.sql',
+  import.meta.url,
+);
 const routePath = new URL('../src/routes/civic-process.ts', import.meta.url);
 
 describe('civic process confirmation foundation', () => {
@@ -23,6 +27,18 @@ describe('civic process confirmation foundation', () => {
     expect(migration).toContain('"civic_process_events_append_only"');
     expect(migration).toContain('"civic_process_transitions_append_only"');
     expect(migration).toContain('"civic_processes_no_direct_stage_change"');
+  });
+
+  it('advances exactly once at five confirmations through an audited database transition', async () => {
+    const migration = await readFile(thresholdMigrationPath, 'utf8');
+
+    expect(migration).toContain('confirmation_count < 5');
+    expect(migration).toContain("'confirmation_threshold_reached'");
+    expect(migration).toContain("'stage_transitioned_to_proposals'");
+    expect(migration).toContain('pg_advisory_xact_lock');
+    expect(migration).toContain('BEFORE INSERT ON "town"."signal_confirmations"');
+    expect(migration).toContain('AFTER INSERT ON "town"."signal_confirmations"');
+    expect(migration).not.toMatch(/operator|manual_transition/i);
   });
 
   it('exposes a read-only bounded endpoint without a state mutation surface', async () => {

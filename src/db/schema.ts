@@ -2033,7 +2033,10 @@ export const civicProcesses = town.table(
       foreignColumns: [signals.id, signals.communityId],
       name: 'civic_processes_signal_community_fkey',
     }).onDelete('restrict'),
-    check('civic_processes_stage_confirmation', sql`${table.currentStage} = 'confirmation'`),
+    check(
+      'civic_processes_stage_supported',
+      sql`${table.currentStage} in ('confirmation', 'proposals')`,
+    ),
     index('civic_processes_community_created_idx').on(table.communityId, table.createdAt),
   ],
 );
@@ -2054,7 +2057,17 @@ export const civicProcessTransitions = town.table(
       foreignColumns: [civicProcesses.id],
       name: 'civic_process_transitions_process_id_fkey',
     }).onDelete('restrict'),
-    check('civic_process_transitions_stage_changed', sql`${table.fromStage} <> ${table.toStage}`),
+    unique('civic_process_transitions_process_path_unique').on(
+      table.processId,
+      table.fromStage,
+      table.toStage,
+    ),
+    check(
+      'civic_process_transitions_confirmation_to_proposals',
+      sql`${table.fromStage} = 'confirmation'
+        and ${table.toStage} = 'proposals'
+        and ${table.reasonKey} = 'confirmation_threshold_reached'`,
+    ),
     index('civic_process_transitions_process_occurred_idx').on(table.processId, table.occurredAt),
   ],
 );
@@ -2073,7 +2086,10 @@ export const civicProcessEvents = town.table(
       foreignColumns: [civicProcesses.id],
       name: 'civic_process_events_process_id_fkey',
     }).onDelete('restrict'),
-    check('civic_process_events_type_process_created', sql`${table.eventType} = 'process_created'`),
+    check(
+      'civic_process_events_type_supported',
+      sql`${table.eventType} in ('process_created', 'stage_transitioned_to_proposals')`,
+    ),
     unique('civic_process_events_process_type_unique').on(table.processId, table.eventType),
     index('civic_process_events_process_occurred_idx').on(table.processId, table.occurredAt),
   ],
