@@ -103,6 +103,46 @@ export async function findCivicProposalByProcessAndActor(
     : null;
 }
 
+export async function findCivicProposalById(
+  db: Db,
+  proposalId: string,
+): Promise<CivicProposalView | null> {
+  const proposals = await db.execute<{
+    id: string;
+    process_id: string;
+    author_actor_id: string;
+    author_display_name: string;
+    title: string;
+    body: string;
+    created_at: string;
+  }>(sql`
+    SELECT
+      proposal.id,
+      proposal.process_id,
+      proposal.author_actor_id,
+      actor.display_label AS author_display_name,
+      proposal.title,
+      proposal.body,
+      proposal.created_at
+    FROM town.civic_proposals proposal
+    JOIN town.actors actor ON actor.id = proposal.author_actor_id
+    WHERE proposal.id = ${proposalId}
+    LIMIT 1
+  `);
+  const row = proposals.rows[0];
+  return row
+    ? {
+        id: row.id,
+        processId: row.process_id,
+        authorActorId: row.author_actor_id,
+        authorDisplayName: row.author_display_name,
+        title: row.title,
+        body: row.body,
+        createdAt: row.created_at,
+      }
+    : null;
+}
+
 export async function insertCivicProposal(
   db: Db,
   input: {

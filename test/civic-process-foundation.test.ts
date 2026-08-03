@@ -14,7 +14,12 @@ const proposalThresholdMigrationPath = new URL(
   '../drizzle/0044_civic_process_proposal_threshold.sql',
   import.meta.url,
 );
+const deliberationMigrationPath = new URL(
+  '../drizzle/0045_civic_deliberation.sql',
+  import.meta.url,
+);
 const proposalRoutePath = new URL('../src/routes/civic-proposals.ts', import.meta.url);
+const deliberationRoutePath = new URL('../src/routes/civic-deliberation.ts', import.meta.url);
 const routePath = new URL('../src/routes/civic-process.ts', import.meta.url);
 
 describe('civic process confirmation foundation', () => {
@@ -73,6 +78,36 @@ describe('civic process confirmation foundation', () => {
     expect(migration).toContain("'proposal_threshold'");
     expect(migration).not.toMatch(/operator|manual_transition/i);
     expect(migration).not.toMatch(/voting|ballot/i);
+  });
+
+  it('scopes deliberation contributions to a proposal in the deliberation stage and community', async () => {
+    const migration = await readFile(deliberationMigrationPath, 'utf8');
+    const route = await readFile(deliberationRoutePath, 'utf8');
+
+    expect(migration).toContain('"civic_deliberation_contributions_process_id_fkey"');
+    expect(migration).toContain('"civic_deliberation_contributions_proposal_id_fkey"');
+    expect(migration).toContain("'deliberation'");
+    expect(migration).toContain('proposal_process_id IS DISTINCT FROM NEW."process_id"');
+    expect(migration).toContain('actor_community_id IS DISTINCT FROM process_community_id');
+    expect(route).toContain("app.get(\n    '/v1/signals/:signalId/civic-process/deliberation'");
+    expect(route).toContain(
+      "app.post(\n    '/v1/signals/:signalId/civic-process/deliberation/proposals/:proposalId/contributions'",
+    );
+    expect(route).not.toMatch(/voting|ballot.*(select|winner|advance)/i);
+  });
+
+  it('advances exactly once at five distinct deliberation participants through an audited database transition', async () => {
+    const migration = await readFile(deliberationMigrationPath, 'utf8');
+
+    expect(migration).toContain('participant_count < 5');
+    expect(migration).toContain("'deliberation_threshold_reached'");
+    expect(migration).toContain("'stage_transitioned_to_ballot_preparation'");
+    expect(migration).toContain('FOR UPDATE');
+    expect(migration).toContain('count(DISTINCT "author_actor_id")');
+    expect(migration).toContain('AFTER INSERT ON "town"."civic_deliberation_contributions"');
+    expect(migration).toContain("'deliberation_threshold'");
+    expect(migration).not.toMatch(/operator|manual_transition/i);
+    expect(migration).not.toMatch(/voting|ballot.*(select|winner)/i);
   });
 
   it('exposes a read-only bounded endpoint without a state mutation surface', async () => {
