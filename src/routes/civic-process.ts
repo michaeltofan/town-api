@@ -1,9 +1,12 @@
 import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
+import { randomUUID } from 'node:crypto';
 import type { Env } from '../config/env.js';
 import { requirePasskeyManagementConfig } from '../ceremony/passkey-management/config.js';
+import { assertWebCookieCsrf } from '../ceremony/passkey-authentication/csrf.js';
 import {
   parseSessionAuthorizationHeader,
   parseWebSessionCookie,
+  type SessionTransportExtraction,
 } from '../ceremony/passkey-authentication/session-transport.js';
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
 import {
@@ -12,6 +15,7 @@ import {
   findConfirmationByActorAndSignal,
 } from '../db/repositories/confirmations.js';
 import { countDistinctCivicDeliberationParticipants } from '../db/repositories/civic-deliberation.js';
+import { markCivicProcessViewed } from '../db/repositories/civic-inbox.js';
 import { closeVotingWindowIfElapsed } from '../db/repositories/civic-mandates.js';
 import { countCivicProposalsForProcess } from '../db/repositories/civic-proposals.js';
 import { countCivicVotesForProcess } from '../db/repositories/civic-votes.js';
@@ -23,7 +27,11 @@ import {
   listPublicCivicProcessEvents,
 } from '../db/repositories/civic-processes.js';
 import { findPublishedSignalById } from '../db/repositories/signals.js';
-import { signalNotFoundError } from '../errors/app-error.js';
+import {
+  AppError,
+  civicParticipationNotAuthorizedError,
+  signalNotFoundError,
+} from '../errors/app-error.js';
 import { findAccountById } from '../identity/repositories/accounts.js';
 import { toIsoTimestamp } from '../lib/timestamps.js';
 import { evaluateCivicAccess } from '../membership/civic-access.js';
@@ -32,15 +40,47 @@ import {
   type LocalParticipationEligibilityResolver,
 } from '../membership/local-eligibility.js';
 import { findEntitlementByAccountId } from '../membership/repositories/entitlements.js';
-import { CivicProcessResponseSchema } from '../schemas/civic-process.js';
+import {
+  CivicProcessResponseSchema,
+  CivicProcessViewedResponseSchema,
+} from '../schemas/civic-process.js';
 import { DomainErrorResponseSchema } from '../schemas/error.js';
 import { SignalIdParamsSchema } from '../schemas/signals.js';
 
 export type CivicProcessRoutesOptions = {
   env: Env;
   now?: () => string;
+  generateId?: () => string;
   localEligibilityResolver?: LocalParticipationEligibilityResolver;
 };
+
+function sessionNotAuthorizedError(): AppError {
+  return new AppError(401, 'SESSION_NOT_AUTHORIZED', 'Session is not authorized.');
+}
+
+function singleHeader(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function extractSessionTransport(input: {
+  authorization: string | string[] | undefined;
+  cookieName: string;
+  cookies: Record<string, string | undefined> | undefined;
+}): SessionTransportExtraction {
+  const web = parseWebSessionCookie({ cookieName: input.cookieName, cookies: input.cookies });
+  return web.ok ? web : parseSessionAuthorizationHeader(input.authorization);
+}
+
+function rejectNonSessionSchemes(authorization: string | string[] | undefined): void {
+  const raw = Array.isArray(authorization) ? authorization[0] : authorization;
+  if (!raw) return;
+  const space = raw.indexOf(' ');
+  if (space <= 0) return;
+  const scheme = raw.slice(0, space);
+  if (scheme === 'SetupGrant' || scheme === 'RecoveryGrant' || scheme === 'Bearer') {
+    throw sessionNotAuthorizedError();
+  }
+}
 
 export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutesOptions> = (
   app,
@@ -76,6 +116,41 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
       { clientType: extracted.clientType, token: extracted.token },
     );
     return session?.accountId ?? null;
+  }
+
+  const generateId = options.generateId ?? (() => randomUUID());
+
+  async function resolveRequiredSession(request: {
+    headers: {
+      authorization?: string | string[] | undefined;
+      origin?: string | string[] | undefined;
+      'sec-fetch-site'?: string | string[] | undefined;
+    };
+    cookies?: Record<string, string | undefined>;
+  }) {
+    rejectNonSessionSchemes(request.headers.authorization);
+    const config = requirePasskeyManagementConfig(options.env);
+    const extracted = extractSessionTransport({
+      authorization: request.headers.authorization,
+      cookieName: config.webSessionCookieName,
+      cookies: request.cookies,
+    });
+    if (!extracted.ok) throw sessionNotAuthorizedError();
+    if (extracted.clientType === 'web') {
+      const csrf = assertWebCookieCsrf({
+        originHeader: singleHeader(request.headers.origin),
+        secFetchSite: singleHeader(request.headers['sec-fetch-site']),
+        allowedOrigins: config.allowedOrigins,
+      });
+      if (!csrf.ok) throw sessionNotAuthorizedError();
+    }
+    const session = await resolveActiveSession(
+      app.database.db,
+      { env: options.env, now },
+      { clientType: extracted.clientType, token: extracted.token },
+    );
+    if (!session) throw sessionNotAuthorizedError();
+    return session;
   }
 
   app.get(
@@ -249,6 +324,51 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
           })),
           createdAt: toIsoTimestamp(process.createdAt),
           updatedAt: toIsoTimestamp(process.updatedAt),
+        },
+      });
+    },
+  );
+
+  app.post(
+    '/v1/signals/:signalId/civic-process/viewed',
+    {
+      schema: {
+        tags: ['Civic Process'],
+        summary: 'Mark a civic process as viewed by the authenticated member',
+        description:
+          'Records when the authenticated member last viewed this civic process, so their Civic Inbox can show what changed since. Private per-account bookkeeping only — never exposed publicly and never affects the process itself.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: SignalIdParamsSchema,
+        response: {
+          200: CivicProcessViewedResponseSchema,
+          400: DomainErrorResponseSchema,
+          401: DomainErrorResponseSchema,
+          403: DomainErrorResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const published = await findPublishedSignalById(app.database.db, request.params.signalId);
+      if (!published) throw signalNotFoundError();
+      const process = await findCivicProcessBySignalId(app.database.db, published.signal.id);
+      if (process?.communityId !== published.signal.communityId) {
+        throw new Error('Visible signal is missing its canonical civic process');
+      }
+      const session = await resolveRequiredSession(request);
+      const actor = await findActiveCivicActorByAccountId(app.database.db, session.accountId);
+      if (!actor) throw civicParticipationNotAuthorizedError();
+      const viewedAt = now();
+      await markCivicProcessViewed(app.database.db, {
+        id: generateId(),
+        actorId: actor.id,
+        processId: process.id,
+        viewedAt,
+      });
+      return await reply.status(200).send({
+        data: {
+          processId: process.id,
+          viewedAt: toIsoTimestamp(viewedAt),
         },
       });
     },

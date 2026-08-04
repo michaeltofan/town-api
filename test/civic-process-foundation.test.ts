@@ -36,6 +36,15 @@ const verificationRepositoryPath = new URL(
   '../src/db/repositories/civic-verification.ts',
   import.meta.url,
 );
+const civicProcessViewsMigrationPath = new URL(
+  '../drizzle/0050_civic_process_views.sql',
+  import.meta.url,
+);
+const civicInboxRepositoryPath = new URL('../src/db/repositories/civic-inbox.ts', import.meta.url);
+const memberActivityServicePath = new URL(
+  '../src/membership/member-activity-service.ts',
+  import.meta.url,
+);
 const routePath = new URL('../src/routes/civic-process.ts', import.meta.url);
 
 describe('civic process confirmation foundation', () => {
@@ -300,12 +309,41 @@ describe('civic process confirmation foundation', () => {
     expect(route).toContain("'civic_process.stage.archived'");
   });
 
-  it('exposes a read-only bounded endpoint without a state mutation surface', async () => {
+  it('records a private per-account view marker, never affecting the process itself', async () => {
+    const migration = await readFile(civicProcessViewsMigrationPath, 'utf8');
+    const route = await readFile(routePath, 'utf8');
+
+    expect(migration).toContain('CREATE TABLE "town"."civic_process_views"');
+    expect(migration).toContain('"civic_process_views_actor_process_unique"');
+    expect(migration).not.toMatch(/stage_transitioned|reject_direct_civic_stage_change/i);
+    expect(route).toContain("app.post(\n    '/v1/signals/:signalId/civic-process/viewed'");
+    expect(route).toContain('markCivicProcessViewed');
+    expect(route.toLowerCase()).toContain('never exposed publicly');
+  });
+
+  it('builds the Civic Inbox from real participation only, never a general community feed', async () => {
+    const repository = await readFile(civicInboxRepositoryPath, 'utf8');
+    const service = await readFile(memberActivityServicePath, 'utf8');
+
+    expect(repository).toContain('WHERE author_actor_id = ${actorId}');
+    expect(repository).toContain('WHERE actor_id = ${actorId}');
+    expect(repository).toContain(
+      "WHERE signal.publication_status = 'published' AND signal.hidden_at IS NULL",
+    );
+    expect(repository).toContain('isNew:');
+    expect(service).toContain('listCivicInboxProcessesForActor');
+    expect(service).not.toMatch(/listPublishedSignalsForCommunity|all processes/i);
+  });
+
+  it('exposes a read-only bounded endpoint without a civic-process state mutation surface', async () => {
     const route = await readFile(routePath, 'utf8');
 
     expect(route).toContain("app.get(\n    '/v1/signals/:signalId/civic-process'");
-    expect(route).not.toMatch(/app\.(post|put|patch|delete)\(/);
     expect(route).not.toContain('denialReason');
     expect(route).toContain('listPublicCivicProcessEvents');
+    // The only mutation is private per-account view bookkeeping for the Civic
+    // Inbox — it never touches current_stage or any other process field.
+    expect(route).toContain("app.post(\n    '/v1/signals/:signalId/civic-process/viewed'");
+    expect(route).not.toMatch(/current_stage|currentStage:\s*['"]/);
   });
 });

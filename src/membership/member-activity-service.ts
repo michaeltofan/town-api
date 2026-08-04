@@ -1,4 +1,5 @@
 import type { Database } from '../db/client.js';
+import { listCivicInboxProcessesForActor } from '../db/repositories/civic-inbox.js';
 import {
   listAuthoredSignalsForAccountActivity,
   listConfirmationsForActorActivity,
@@ -7,12 +8,13 @@ import {
 } from '../db/repositories/member-activity.js';
 import { findActiveCivicActorByAccountId } from '../db/repositories/confirmations.js';
 import { toIsoTimestamp } from '../lib/timestamps.js';
-import type { MemberActivityItem } from './member-activity-schemas.js';
+import type { CivicInboxProcessItem, MemberActivityItem } from './member-activity-schemas.js';
 
 type Db = Database['db'];
 
 const PER_SOURCE_LIMIT = 50;
 const RESPONSE_LIMIT = 100;
+const CIVIC_INBOX_LIMIT = 50;
 
 function signalView(signal: {
   id: string;
@@ -39,13 +41,13 @@ function signalView(signal: {
 export async function getMemberActivityView(
   db: Db,
   input: { accountId: string },
-): Promise<{ items: MemberActivityItem[] }> {
+): Promise<{ items: MemberActivityItem[]; processes: CivicInboxProcessItem[] }> {
   const actor = await findActiveCivicActorByAccountId(db, input.accountId);
   if (!actor) {
-    return { items: [] };
+    return { items: [], processes: [] };
   }
 
-  const [confirmations, contributions, authored, participated] = await Promise.all([
+  const [confirmations, contributions, authored, participated, inboxProcesses] = await Promise.all([
     listConfirmationsForActorActivity(db, actor.id, PER_SOURCE_LIMIT),
     listContributionsForActorActivity(db, actor.id, PER_SOURCE_LIMIT),
     listAuthoredSignalsForAccountActivity(db, input.accountId, PER_SOURCE_LIMIT),
@@ -54,6 +56,7 @@ export async function getMemberActivityView(
       accountId: input.accountId,
       limit: PER_SOURCE_LIMIT,
     }),
+    listCivicInboxProcessesForActor(db, actor.id, CIVIC_INBOX_LIMIT),
   ]);
 
   const items: MemberActivityItem[] = [];
@@ -107,5 +110,19 @@ export async function getMemberActivityView(
     return a.occurredAt < b.occurredAt ? 1 : -1;
   });
 
-  return { items: items.slice(0, RESPONSE_LIMIT) };
+  const processes: CivicInboxProcessItem[] = inboxProcesses.map((row) => ({
+    processId: row.processId,
+    signalId: row.signalId,
+    signalSlug: row.signalSlug,
+    headline: row.headline,
+    community: {
+      slug: row.communitySlug,
+      displayName: row.communityDisplayName,
+    },
+    currentStage: row.currentStage,
+    isNew: row.isNew,
+    updatedAt: toIsoTimestamp(row.updatedAt),
+  }));
+
+  return { items: items.slice(0, RESPONSE_LIMIT), processes };
 }

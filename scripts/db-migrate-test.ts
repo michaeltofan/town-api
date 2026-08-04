@@ -25,6 +25,7 @@ const EXPECTED_TOWN_TABLES = [
   'civic_mandates',
   'civic_process_events',
   'civic_process_transitions',
+  'civic_process_views',
   'civic_processes',
   'civic_proposals',
   'civic_verification_confirmations',
