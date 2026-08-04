@@ -21,6 +21,7 @@ const EXPECTED_TOWN_TABLES = [
   'actors',
   'ceremony_rate_limits',
   'civic_deliberation_contributions',
+  'civic_mandates',
   'civic_process_events',
   'civic_process_transitions',
   'civic_processes',

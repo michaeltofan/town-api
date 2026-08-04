@@ -8,13 +8,14 @@ export const CIVIC_PROPOSAL_THRESHOLD = 5;
 export const CIVIC_DELIBERATION_THRESHOLD = 5;
 
 export type PublicCivicProcessStage =
-  'confirmation' | 'proposals' | 'deliberation' | 'ballot_preparation' | 'voting';
+  'confirmation' | 'proposals' | 'deliberation' | 'ballot_preparation' | 'voting' | 'mandate';
 
 export type CivicProcessReadRow = {
   id: string;
   signalId: string;
   communityId: string;
   currentStage: PublicCivicProcessStage;
+  votingClosesAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -25,7 +26,8 @@ export type PublicCivicProcessEvent = {
     | 'stage_transitioned_to_proposals'
     | 'stage_transitioned_to_deliberation'
     | 'stage_transitioned_to_ballot_preparation'
-    | 'stage_transitioned_to_voting';
+    | 'stage_transitioned_to_voting'
+    | 'stage_transitioned_to_mandate';
   occurredAt: string;
 };
 
@@ -38,10 +40,11 @@ export async function findCivicProcessBySignalId(
     signal_id: string;
     community_id: string;
     current_stage: string;
+    voting_closes_at: string | null;
     created_at: string;
     updated_at: string;
   }>(sql`
-    SELECT id, signal_id, community_id, current_stage, created_at, updated_at
+    SELECT id, signal_id, community_id, current_stage, voting_closes_at, created_at, updated_at
     FROM town.civic_processes
     WHERE signal_id = ${signalId}
     LIMIT 1
@@ -55,7 +58,8 @@ export async function findCivicProcessBySignalId(
     row.current_stage !== 'proposals' &&
     row.current_stage !== 'deliberation' &&
     row.current_stage !== 'ballot_preparation' &&
-    row.current_stage !== 'voting'
+    row.current_stage !== 'voting' &&
+    row.current_stage !== 'mandate'
   ) {
     throw new Error('Unsupported civic process stage');
   }
@@ -64,6 +68,7 @@ export async function findCivicProcessBySignalId(
     signalId: row.signal_id,
     communityId: row.community_id,
     currentStage: row.current_stage,
+    votingClosesAt: row.voting_closes_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -92,7 +97,8 @@ export async function listPublicCivicProcessEvents(
       row.event_type !== 'stage_transitioned_to_proposals' &&
       row.event_type !== 'stage_transitioned_to_deliberation' &&
       row.event_type !== 'stage_transitioned_to_ballot_preparation' &&
-      row.event_type !== 'stage_transitioned_to_voting'
+      row.event_type !== 'stage_transitioned_to_voting' &&
+      row.event_type !== 'stage_transitioned_to_mandate'
     ) {
       throw new Error('Unsupported public civic process event');
     }

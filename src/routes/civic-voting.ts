@@ -14,6 +14,7 @@ import {
   insertCivicVote,
   listCivicVoteTallyForProcess,
 } from '../db/repositories/civic-votes.js';
+import { closeVotingWindowIfElapsed } from '../db/repositories/civic-mandates.js';
 import { findCivicProcessBySignalId } from '../db/repositories/civic-processes.js';
 import { findCivicProposalById, listCivicProposals } from '../db/repositories/civic-proposals.js';
 import { findActiveCivicActorByAccountId } from '../db/repositories/confirmations.js';
@@ -170,9 +171,19 @@ export const civicVotingRoutes: FastifyPluginCallbackTypebox<CivicVotingRoutesOp
   async function visibleProcess(signalId: string) {
     const published = await findPublishedSignalById(app.database.db, signalId);
     if (!published) throw signalNotFoundError();
-    const process = await findCivicProcessBySignalId(app.database.db, published.signal.id);
-    if (process?.communityId !== published.signal.communityId) {
+    const initialProcess = await findCivicProcessBySignalId(app.database.db, published.signal.id);
+    if (initialProcess?.communityId !== published.signal.communityId) {
       throw new Error('Visible signal is missing its canonical civic process');
+    }
+    if (initialProcess.currentStage === 'voting') {
+      await closeVotingWindowIfElapsed(app.database.db, {
+        processId: initialProcess.id,
+        now: now(),
+      });
+    }
+    const process = await findCivicProcessBySignalId(app.database.db, published.signal.id);
+    if (!process) {
+      throw new Error('Civic process disappeared after lazy close check');
     }
     return { published, process };
   }
@@ -212,7 +223,9 @@ export const civicVotingRoutes: FastifyPluginCallbackTypebox<CivicVotingRoutesOp
         data: {
           processId: process.id,
           currentStage:
-            process.currentStage === 'ballot_preparation' || process.currentStage === 'voting'
+            process.currentStage === 'ballot_preparation' ||
+            process.currentStage === 'voting' ||
+            process.currentStage === 'mandate'
               ? process.currentStage
               : 'ballot_preparation',
           canVote: process.currentStage === 'voting' && actor !== null && ownVote === null,

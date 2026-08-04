@@ -19480,7 +19480,15 @@
                           "type": "boolean"
                         },
                         "closingAt": {
-                          "type": "null"
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "communitySlug": {
                           "minLength": 1,
@@ -19500,7 +19508,8 @@
                             "proposals",
                             "deliberation",
                             "ballot_preparation",
-                            "voting"
+                            "voting",
+                            "mandate"
                           ],
                           "type": "string"
                         },
@@ -19521,7 +19530,8 @@
                             "deliberation",
                             "ballot_preparation",
                             "voting",
-                            "mandate"
+                            "mandate",
+                            "action"
                           ],
                           "type": "string"
                         },
@@ -19539,7 +19549,8 @@
                             "civic_process.stage.proposals",
                             "civic_process.stage.deliberation",
                             "civic_process.stage.ballot_preparation",
-                            "civic_process.stage.voting"
+                            "civic_process.stage.voting",
+                            "civic_process.stage.mandate"
                           ],
                           "type": "string"
                         },
@@ -19557,7 +19568,8 @@
                                   "stage_transitioned_to_proposals",
                                   "stage_transitioned_to_deliberation",
                                   "stage_transitioned_to_ballot_preparation",
-                                  "stage_transitioned_to_voting"
+                                  "stage_transitioned_to_voting",
+                                  "stage_transitioned_to_mandate"
                                 ],
                                 "type": "string"
                               }
@@ -19824,6 +19836,12 @@
                             {
                               "enum": [
                                 "voting"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "mandate"
                               ],
                               "type": "string"
                             }
@@ -20385,6 +20403,227 @@
         ]
       }
     },
+    "/v1/signals/{signalId}/civic-process/mandate": {
+      "get": {
+        "description": "Public final result for a visible signal. Voting closes lazily the moment any request observes an elapsed voting window (no scheduled job). A perfect tie among the top vote counts is reported as contested with no winner — no tie-break rule is invented. Never exposes who voted for what.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contested": {
+                          "type": "boolean"
+                        },
+                        "currentStage": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "voting"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "mandate"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "decided": {
+                          "type": "boolean"
+                        },
+                        "decidedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "processId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "totalVotes": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "votingClosesAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "winner": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "authorDisplayName": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "body": {
+                                  "maxLength": 2000,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "proposalId": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "maxLength": 160,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "voteCount": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "proposalId",
+                                "authorDisplayName",
+                                "title",
+                                "body",
+                                "voteCount"
+                              ],
+                              "title": "CivicMandateWinner",
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "processId",
+                        "currentStage",
+                        "decided",
+                        "contested",
+                        "winner",
+                        "totalVotes",
+                        "votingClosesAt",
+                        "decidedAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Read the civic mandate for a process once voting has closed",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
     "/v1/signals/{signalId}/civic-process/proposals": {
       "get": {
         "description": "Public ordered proposals for a visible signal. Optional session state derives only canPropose and isMine. Never exposes account or actor identifiers.",
@@ -20441,6 +20680,12 @@
                             {
                               "enum": [
                                 "voting"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "mandate"
                               ],
                               "type": "string"
                             }
@@ -20920,6 +21165,12 @@
                             {
                               "enum": [
                                 "voting"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "mandate"
                               ],
                               "type": "string"
                             }
