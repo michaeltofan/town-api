@@ -15,41 +15,49 @@ export const CivicProcessStageSchema = Type.Union(
   { $id: 'CivicProcessStage' },
 );
 
-const PublicCivicProcessStageSchema = Type.Unsafe<'confirmation' | 'proposals' | 'deliberation'>({
+const PublicCivicProcessStageSchema = Type.Unsafe<
+  'confirmation' | 'proposals' | 'deliberation' | 'ballot_preparation'
+>({
   type: 'string',
-  enum: ['confirmation', 'proposals', 'deliberation'],
+  enum: ['confirmation', 'proposals', 'deliberation', 'ballot_preparation'],
 });
 
 const PublicCivicProcessStageLabelSchema = Type.Unsafe<
   | 'civic_process.stage.confirmation'
   | 'civic_process.stage.proposals'
   | 'civic_process.stage.deliberation'
+  | 'civic_process.stage.ballot_preparation'
 >({
   type: 'string',
   enum: [
     'civic_process.stage.confirmation',
     'civic_process.stage.proposals',
     'civic_process.stage.deliberation',
+    'civic_process.stage.ballot_preparation',
   ],
 });
 
 const PublicCivicProcessNextStageSchema = Type.Unsafe<
-  'proposals' | 'deliberation' | 'ballot_preparation'
+  'proposals' | 'deliberation' | 'ballot_preparation' | 'voting'
 >({
   type: 'string',
-  enum: ['proposals', 'deliberation', 'ballot_preparation'],
+  enum: ['proposals', 'deliberation', 'ballot_preparation', 'voting'],
 });
 
 const CivicProcessTimelineEventSchema = Type.Object(
   {
     type: Type.Unsafe<
-      'process_created' | 'stage_transitioned_to_proposals' | 'stage_transitioned_to_deliberation'
+      | 'process_created'
+      | 'stage_transitioned_to_proposals'
+      | 'stage_transitioned_to_deliberation'
+      | 'stage_transitioned_to_ballot_preparation'
     >({
       type: 'string',
       enum: [
         'process_created',
         'stage_transitioned_to_proposals',
         'stage_transitioned_to_deliberation',
+        'stage_transitioned_to_ballot_preparation',
       ],
     }),
     occurredAt: Type.String({ format: 'date-time' }),
@@ -75,6 +83,14 @@ const CivicProcessTransitionRuleSchema = Type.Union(
       },
       { additionalProperties: false },
     ),
+    Type.Object(
+      {
+        type: Type.Literal('deliberation_participation_count'),
+        requiredParticipants: Type.Integer({ minimum: 5, maximum: 5 }),
+        reached: Type.Boolean(),
+      },
+      { additionalProperties: false },
+    ),
     Type.Null(),
   ],
   { $id: 'CivicProcessTransitionRule' },
@@ -91,6 +107,7 @@ export const CivicProcessResponseSchema = Type.Object(
         stageLabelKey: PublicCivicProcessStageLabelSchema,
         confirmationCount: Type.Integer({ minimum: 0 }),
         proposalCount: Type.Integer({ minimum: 0 }),
+        deliberationParticipantCount: Type.Integer({ minimum: 0 }),
         hasConfirmed: Type.Boolean(),
         canConfirm: Type.Boolean(),
         nextStage: PublicCivicProcessNextStageSchema,

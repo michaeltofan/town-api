@@ -11,9 +11,11 @@ import {
   findActiveCivicActorByAccountId,
   findConfirmationByActorAndSignal,
 } from '../db/repositories/confirmations.js';
+import { countDistinctCivicDeliberationParticipants } from '../db/repositories/civic-deliberation.js';
 import { countCivicProposalsForProcess } from '../db/repositories/civic-proposals.js';
 import {
   CIVIC_CONFIRMATION_THRESHOLD,
+  CIVIC_DELIBERATION_THRESHOLD,
   CIVIC_PROPOSAL_THRESHOLD,
   findCivicProcessBySignalId,
   listPublicCivicProcessEvents,
@@ -101,12 +103,14 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
         throw new Error('Visible signal is missing its canonical civic process');
       }
 
-      const [confirmationCount, proposalCount, timeline, accountId] = await Promise.all([
-        countConfirmationsForSignal(app.database.db, published.signal.id),
-        countCivicProposalsForProcess(app.database.db, process.id),
-        listPublicCivicProcessEvents(app.database.db, process.id),
-        resolveOptionalSessionAccountId(request),
-      ]);
+      const [confirmationCount, proposalCount, deliberationParticipantCount, timeline, accountId] =
+        await Promise.all([
+          countConfirmationsForSignal(app.database.db, published.signal.id),
+          countCivicProposalsForProcess(app.database.db, process.id),
+          countDistinctCivicDeliberationParticipants(app.database.db, process.id),
+          listPublicCivicProcessEvents(app.database.db, process.id),
+          resolveOptionalSessionAccountId(request),
+        ]);
 
       let hasConfirmed = false;
       let canConfirm = false;
@@ -159,9 +163,12 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
               ? 'civic_process.stage.confirmation'
               : process.currentStage === 'proposals'
                 ? 'civic_process.stage.proposals'
-                : 'civic_process.stage.deliberation',
+                : process.currentStage === 'deliberation'
+                  ? 'civic_process.stage.deliberation'
+                  : 'civic_process.stage.ballot_preparation',
           confirmationCount,
           proposalCount,
+          deliberationParticipantCount,
           hasConfirmed,
           canConfirm,
           nextStage:
@@ -169,7 +176,9 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
               ? 'proposals'
               : process.currentStage === 'proposals'
                 ? 'deliberation'
-                : 'ballot_preparation',
+                : process.currentStage === 'deliberation'
+                  ? 'ballot_preparation'
+                  : 'voting',
           closingAt: null,
           transitionRule:
             process.currentStage === 'confirmation'
@@ -184,7 +193,13 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
                     requiredProposals: CIVIC_PROPOSAL_THRESHOLD,
                     reached: proposalCount >= CIVIC_PROPOSAL_THRESHOLD,
                   }
-                : null,
+                : process.currentStage === 'deliberation'
+                  ? {
+                      type: 'deliberation_participation_count',
+                      requiredParticipants: CIVIC_DELIBERATION_THRESHOLD,
+                      reached: deliberationParticipantCount >= CIVIC_DELIBERATION_THRESHOLD,
+                    }
+                  : null,
           timeline: timeline.map((event) => ({
             type: event.eventType,
             occurredAt: toIsoTimestamp(event.occurredAt),

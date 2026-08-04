@@ -19498,9 +19498,14 @@
                           "enum": [
                             "confirmation",
                             "proposals",
-                            "deliberation"
+                            "deliberation",
+                            "ballot_preparation"
                           ],
                           "type": "string"
+                        },
+                        "deliberationParticipantCount": {
+                          "minimum": 0,
+                          "type": "integer"
                         },
                         "hasConfirmed": {
                           "type": "boolean"
@@ -19513,7 +19518,8 @@
                           "enum": [
                             "proposals",
                             "deliberation",
-                            "ballot_preparation"
+                            "ballot_preparation",
+                            "voting"
                           ],
                           "type": "string"
                         },
@@ -19529,7 +19535,8 @@
                           "enum": [
                             "civic_process.stage.confirmation",
                             "civic_process.stage.proposals",
-                            "civic_process.stage.deliberation"
+                            "civic_process.stage.deliberation",
+                            "civic_process.stage.ballot_preparation"
                           ],
                           "type": "string"
                         },
@@ -19545,7 +19552,8 @@
                                 "enum": [
                                   "process_created",
                                   "stage_transitioned_to_proposals",
-                                  "stage_transitioned_to_deliberation"
+                                  "stage_transitioned_to_deliberation",
+                                  "stage_transitioned_to_ballot_preparation"
                                 ],
                                 "type": "string"
                               }
@@ -19613,6 +19621,31 @@
                               "type": "object"
                             },
                             {
+                              "additionalProperties": false,
+                              "properties": {
+                                "reached": {
+                                  "type": "boolean"
+                                },
+                                "requiredParticipants": {
+                                  "maximum": 5,
+                                  "minimum": 5,
+                                  "type": "integer"
+                                },
+                                "type": {
+                                  "enum": [
+                                    "deliberation_participation_count"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "requiredParticipants",
+                                "reached"
+                              ],
+                              "type": "object"
+                            },
+                            {
                               "type": "null"
                             }
                           ],
@@ -19631,6 +19664,7 @@
                         "stageLabelKey",
                         "confirmationCount",
                         "proposalCount",
+                        "deliberationParticipantCount",
                         "hasConfirmed",
                         "canConfirm",
                         "nextStage",
@@ -19731,6 +19765,611 @@
         ]
       }
     },
+    "/v1/signals/{signalId}/civic-process/deliberation": {
+      "get": {
+        "description": "Public proposals for a visible signal with their structured deliberation contributions (observation, proposal, next_step). Optional session state derives only canContribute and isMine. Never exposes account or actor identifiers.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "canContribute": {
+                          "type": "boolean"
+                        },
+                        "currentStage": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "proposals"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "deliberation"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "ballot_preparation"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "processId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "proposals": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "authorDisplayName": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "body": {
+                                "maxLength": 2000,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "contributions": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "authorDisplayName": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "createdAt": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
+                                    "id": {
+                                      "format": "uuid",
+                                      "type": "string"
+                                    },
+                                    "intent": {
+                                      "anyOf": [
+                                        {
+                                          "enum": [
+                                            "observation"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        {
+                                          "enum": [
+                                            "proposal"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        {
+                                          "enum": [
+                                            "next_step"
+                                          ],
+                                          "type": "string"
+                                        }
+                                      ],
+                                      "title": "CivicDeliberationIntent"
+                                    },
+                                    "isMine": {
+                                      "type": "boolean"
+                                    },
+                                    "text": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "authorDisplayName",
+                                    "intent",
+                                    "text",
+                                    "createdAt",
+                                    "isMine"
+                                  ],
+                                  "title": "CivicDeliberationContribution",
+                                  "type": "object"
+                                },
+                                "maxItems": 200,
+                                "type": "array"
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "isMine": {
+                                "type": "boolean"
+                              },
+                              "title": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "authorDisplayName",
+                              "title",
+                              "body",
+                              "createdAt",
+                              "isMine",
+                              "contributions"
+                            ],
+                            "title": "CivicDeliberationProposal",
+                            "type": "object"
+                          },
+                          "maxItems": 100,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "processId",
+                        "currentStage",
+                        "canContribute",
+                        "proposals"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Read civic deliberation on the proposals for a civic process",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/civic-process/deliberation/proposals/{proposalId}/contributions": {
+      "post": {
+        "description": "Creates a structured contribution (observation, proposal, or next step) on one proposal while the canonical process is in deliberation. Session and CSRF rules are unchanged. Does not transition the process.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "intent": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "observation"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "proposal"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "next_step"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "text": {
+                    "maxLength": 480,
+                    "minLength": 12,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "intent",
+                  "text"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contribution": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "authorDisplayName": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "intent": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "observation"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "proposal"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "next_step"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "isMine": {
+                              "type": "boolean"
+                            },
+                            "text": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "authorDisplayName",
+                            "intent",
+                            "text",
+                            "createdAt",
+                            "isMine"
+                          ],
+                          "type": "object"
+                        },
+                        "proposalId": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "proposalId",
+                        "contribution"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Publish a deliberation contribution on one proposal",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
     "/v1/signals/{signalId}/civic-process/proposals": {
       "get": {
         "description": "Public ordered proposals for a visible signal. Optional session state derives only canPropose and isMine. Never exposes account or actor identifiers.",
@@ -19775,6 +20414,12 @@
                             {
                               "enum": [
                                 "deliberation"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "ballot_preparation"
                               ],
                               "type": "string"
                             }

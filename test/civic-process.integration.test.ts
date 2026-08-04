@@ -41,7 +41,7 @@ describe('civic process confirmation integration', () => {
       FROM town.civic_processes p
       JOIN town.signals s ON s.id = p.signal_id
       WHERE p.community_id <> s.community_id
-         OR p.current_stage NOT IN ('confirmation', 'proposals', 'deliberation')`);
+         OR p.current_stage NOT IN ('confirmation', 'proposals', 'deliberation', 'ballot_preparation')`);
     expect(invalid.rows[0]?.count).toBe('0');
   });
 
@@ -354,8 +354,13 @@ describe('civic process confirmation integration', () => {
         stageLabelKey: 'civic_process.stage.deliberation',
         confirmationCount: 5,
         proposalCount: 5,
+        deliberationParticipantCount: 0,
         nextStage: 'ballot_preparation',
-        transitionRule: null,
+        transitionRule: {
+          type: 'deliberation_participation_count',
+          requiredParticipants: 5,
+          reached: false,
+        },
         timeline: [
           { type: 'process_created' },
           { type: 'stage_transitioned_to_proposals' },
@@ -372,6 +377,161 @@ describe('civic process confirmation integration', () => {
         [processId, actorIds[5]],
       ),
     ).rejects.toThrow(/civic proposal stage is closed/);
+  });
+
+  it('advances once when five distinct actors contribute to deliberation and closes it', async () => {
+    const signalId = randomUUID();
+    const actorIds = Array.from({ length: 6 }, () => randomUUID());
+
+    await pool.query(
+      `INSERT INTO town.signals
+       SELECT (jsonb_populate_record(
+         NULL::town.signals,
+         to_jsonb(source) || jsonb_build_object(
+           'id', $1::uuid,
+           'slug', 'civic-process-deliberation-threshold-test',
+           'position', 32003,
+           'created_at', now(),
+           'updated_at', now(),
+           'published_at', now()
+         )
+       )).*
+       FROM town.signals source
+       ORDER BY position
+       LIMIT 1`,
+      [signalId],
+    );
+
+    for (const actorId of actorIds) {
+      await pool.query(
+        `INSERT INTO town.actors (
+           id, kind, status, display_label, community_id, account_id,
+           local_eligibility_verified_at, community_commitment_accepted_at,
+           community_commitment_version, created_at, updated_at
+         )
+         SELECT
+           $1::uuid, 'controlled_test', 'active', $1::text, community_id, NULL,
+           NULL, NULL, NULL, now(), now()
+         FROM town.signals
+         WHERE id = $2`,
+        [actorId, signalId],
+      );
+    }
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId) =>
+        pool.query(
+          `INSERT INTO town.signal_confirmations
+             (id, signal_id, actor_id, confirmed_at, created_at)
+           VALUES (gen_random_uuid(), $1, $2, now(), now())`,
+          [signalId, actorId],
+        ),
+      ),
+    );
+
+    const processRow = await pool.query<{ id: string; current_stage: string }>(
+      'SELECT id, current_stage FROM town.civic_processes WHERE signal_id = $1',
+      [signalId],
+    );
+    const processId = processRow.rows[0]?.id;
+    expect(processRow.rows[0]?.current_stage).toBe('proposals');
+    if (!processId) return;
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId, index) =>
+        pool.query(
+          `INSERT INTO town.civic_proposals
+             (id, process_id, author_actor_id, title, body, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, now())`,
+          [processId, actorId, `Proposal ${String(index)}`, `Body ${String(index)}`],
+        ),
+      ),
+    );
+
+    const proposalRows = await pool.query<{ id: string }>(
+      'SELECT id FROM town.civic_proposals WHERE process_id = $1 ORDER BY created_at, id',
+      [processId],
+    );
+    const proposalIds = proposalRows.rows.map((row) => row.id);
+    expect(proposalIds).toHaveLength(5);
+
+    const stageAfterProposals = await pool.query<{ current_stage: string }>(
+      'SELECT current_stage FROM town.civic_processes WHERE id = $1',
+      [processId],
+    );
+    expect(stageAfterProposals.rows[0]?.current_stage).toBe('deliberation');
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId, index) =>
+        pool.query(
+          `INSERT INTO town.civic_deliberation_contributions
+             (id, process_id, proposal_id, author_actor_id, intent, text, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, 'observation', $4, now())`,
+          [
+            processId,
+            proposalIds[index],
+            actorId,
+            `Deliberation contribution number ${String(index)}`,
+          ],
+        ),
+      ),
+    );
+
+    const state = await pool.query<{
+      current_stage: string;
+      transitions: string;
+      transition_events: string;
+    }>(
+      `SELECT
+         process.current_stage,
+         (SELECT count(*)::text
+          FROM town.civic_process_transitions transition
+          WHERE transition.process_id = process.id
+            AND transition.from_stage = 'deliberation'
+            AND transition.to_stage = 'ballot_preparation') AS transitions,
+         (SELECT count(*)::text
+          FROM town.civic_process_events event
+          WHERE event.process_id = process.id
+            AND event.event_type = 'stage_transitioned_to_ballot_preparation') AS transition_events
+       FROM town.civic_processes process
+       WHERE process.signal_id = $1`,
+      [signalId],
+    );
+    expect(state.rows).toEqual([
+      { current_stage: 'ballot_preparation', transitions: '1', transition_events: '1' },
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: {
+        currentStage: 'ballot_preparation',
+        stageLabelKey: 'civic_process.stage.ballot_preparation',
+        confirmationCount: 5,
+        proposalCount: 5,
+        deliberationParticipantCount: 5,
+        nextStage: 'voting',
+        transitionRule: null,
+        timeline: [
+          { type: 'process_created' },
+          { type: 'stage_transitioned_to_proposals' },
+          { type: 'stage_transitioned_to_deliberation' },
+          { type: 'stage_transitioned_to_ballot_preparation' },
+        ],
+      },
+    });
+
+    await expect(
+      pool.query(
+        `INSERT INTO town.civic_deliberation_contributions
+           (id, process_id, proposal_id, author_actor_id, intent, text, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, 'observation', 'Too late to matter here', now())`,
+        [processId, proposalIds[0], actorIds[5]],
+      ),
+    ).rejects.toThrow(/civic deliberation stage is closed/);
   });
 
   it('preserves fail-closed missing and invalid signal behavior', async () => {

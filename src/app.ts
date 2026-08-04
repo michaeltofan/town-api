@@ -17,6 +17,7 @@ import { communitiesRoutes } from './routes/communities.js';
 import { confirmationRoutes } from './routes/confirmations.js';
 import { civicProcessRoutes } from './routes/civic-process.js';
 import { civicProposalRoutes } from './routes/civic-proposals.js';
+import { civicDeliberationRoutes } from './routes/civic-deliberation.js';
 import { discussionSessionRoutes } from './routes/discussion-session.js';
 import { emailVerificationRoutes } from './routes/email-verifications.js';
 import { healthRoutes } from './routes/health.js';
@@ -307,6 +308,16 @@ export async function buildApp(options: BuildAppOptions) {
       : {}),
   });
   await app.register(civicProposalRoutes, {
+    env: options.env,
+    ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
+    ...(options.membership?.generateId !== undefined
+      ? { generateId: options.membership.generateId }
+      : {}),
+    ...(options.membership?.localEligibilityResolver !== undefined
+      ? { localEligibilityResolver: options.membership.localEligibilityResolver }
+      : {}),
+  });
+  await app.register(civicDeliberationRoutes, {
     env: options.env,
     ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
     ...(options.membership?.generateId !== undefined

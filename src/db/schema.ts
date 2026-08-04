@@ -2035,7 +2035,7 @@ export const civicProcesses = town.table(
     }).onDelete('restrict'),
     check(
       'civic_processes_stage_supported',
-      sql`${table.currentStage} in ('confirmation', 'proposals', 'deliberation')`,
+      sql`${table.currentStage} in ('confirmation', 'proposals', 'deliberation', 'ballot_preparation')`,
     ),
     index('civic_processes_community_created_idx').on(table.communityId, table.createdAt),
   ],
@@ -2066,6 +2066,54 @@ export const civicProposals = town.table(
     check('civic_proposals_title_valid', sql`char_length(btrim(${table.title})) between 1 and 160`),
     check('civic_proposals_body_valid', sql`char_length(btrim(${table.body})) between 1 and 2000`),
     index('civic_proposals_process_created_idx').on(table.processId, table.createdAt, table.id),
+  ],
+);
+
+export const civicDeliberationContributions = town.table(
+  'civic_deliberation_contributions',
+  {
+    id: uuid('id').primaryKey(),
+    processId: uuid('process_id').notNull(),
+    proposalId: uuid('proposal_id').notNull(),
+    authorActorId: uuid('author_actor_id').notNull(),
+    intent: text('intent').notNull(),
+    text: text('text').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_deliberation_contributions_process_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.proposalId],
+      foreignColumns: [civicProposals.id],
+      name: 'civic_deliberation_contributions_proposal_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.authorActorId],
+      foreignColumns: [actors.id],
+      name: 'civic_deliberation_contributions_author_actor_id_fkey',
+    }).onDelete('restrict'),
+    check(
+      'civic_deliberation_contributions_intent_supported',
+      sql`${table.intent} in ('observation', 'proposal', 'next_step')`,
+    ),
+    check(
+      'civic_deliberation_contributions_text_valid',
+      sql`char_length(btrim(${table.text})) between 12 and 480`,
+    ),
+    index('civic_deliberation_contributions_process_created_idx').on(
+      table.processId,
+      table.createdAt,
+      table.id,
+    ),
+    index('civic_deliberation_contributions_proposal_created_idx').on(
+      table.proposalId,
+      table.createdAt,
+      table.id,
+    ),
   ],
 );
 
@@ -2100,6 +2148,10 @@ export const civicProcessTransitions = town.table(
         ${table.fromStage} = 'proposals'
         and ${table.toStage} = 'deliberation'
         and ${table.reasonKey} = 'proposal_threshold_reached'
+      ) or (
+        ${table.fromStage} = 'deliberation'
+        and ${table.toStage} = 'ballot_preparation'
+        and ${table.reasonKey} = 'deliberation_threshold_reached'
       )`,
     ),
     index('civic_process_transitions_process_occurred_idx').on(table.processId, table.occurredAt),
@@ -2125,7 +2177,8 @@ export const civicProcessEvents = town.table(
       sql`${table.eventType} in (
         'process_created',
         'stage_transitioned_to_proposals',
-        'stage_transitioned_to_deliberation'
+        'stage_transitioned_to_deliberation',
+        'stage_transitioned_to_ballot_preparation'
       )`,
     ),
     unique('civic_process_events_process_type_unique').on(table.processId, table.eventType),
@@ -2135,5 +2188,6 @@ export const civicProcessEvents = town.table(
 
 export type CivicProcessRow = typeof civicProcesses.$inferSelect;
 export type CivicProposalRow = typeof civicProposals.$inferSelect;
+export type CivicDeliberationContributionRow = typeof civicDeliberationContributions.$inferSelect;
 export type CivicProcessTransitionRow = typeof civicProcessTransitions.$inferSelect;
 export type CivicProcessEventRow = typeof civicProcessEvents.$inferSelect;
