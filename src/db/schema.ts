@@ -2037,7 +2037,8 @@ export const civicProcesses = town.table(
     check(
       'civic_processes_stage_supported',
       sql`${table.currentStage} in (
-        'confirmation', 'proposals', 'deliberation', 'ballot_preparation', 'voting', 'mandate', 'action'
+        'confirmation', 'proposals', 'deliberation', 'ballot_preparation', 'voting',
+        'mandate', 'action', 'verification', 'archived'
       )`,
     ),
     index('civic_processes_community_created_idx').on(table.communityId, table.createdAt),
@@ -2197,6 +2198,18 @@ export const civicProcessTransitions = town.table(
         ${table.fromStage} = 'mandate'
         and ${table.toStage} = 'action'
         and ${table.reasonKey} = 'mandate_decided'
+      ) or (
+        ${table.fromStage} = 'action'
+        and ${table.toStage} = 'verification'
+        and ${table.reasonKey} = 'action_marked_ready'
+      ) or (
+        ${table.fromStage} = 'verification'
+        and ${table.toStage} = 'archived'
+        and ${table.reasonKey} = 'verification_delivered_threshold_reached'
+      ) or (
+        ${table.fromStage} = 'verification'
+        and ${table.toStage} = 'archived'
+        and ${table.reasonKey} = 'verification_not_delivered_threshold_reached'
       )`,
     ),
     index('civic_process_transitions_process_occurred_idx').on(table.processId, table.occurredAt),
@@ -2226,7 +2239,9 @@ export const civicProcessEvents = town.table(
         'stage_transitioned_to_ballot_preparation',
         'stage_transitioned_to_voting',
         'stage_transitioned_to_mandate',
-        'stage_transitioned_to_action'
+        'stage_transitioned_to_action',
+        'stage_transitioned_to_verification',
+        'stage_transitioned_to_archived'
       )`,
     ),
     unique('civic_process_events_process_type_unique').on(table.processId, table.eventType),
@@ -2289,6 +2304,103 @@ export const civicActionUpdates = town.table(
   ],
 );
 
+export const civicVerificationEvidence = town.table(
+  'civic_verification_evidence',
+  {
+    id: uuid('id').primaryKey(),
+    processId: uuid('process_id').notNull(),
+    authorActorId: uuid('author_actor_id').notNull(),
+    text: text('text').notNull(),
+    url: text('url'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_verification_evidence_process_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.authorActorId],
+      foreignColumns: [actors.id],
+      name: 'civic_verification_evidence_author_actor_id_fkey',
+    }).onDelete('restrict'),
+    check(
+      'civic_verification_evidence_text_valid',
+      sql`char_length(btrim(${table.text})) between 12 and 480`,
+    ),
+    check(
+      'civic_verification_evidence_url_valid',
+      sql`${table.url} is null or (
+        char_length(btrim(${table.url})) between 1 and 500
+        and (btrim(${table.url}) like 'http://%' or btrim(${table.url}) like 'https://%')
+      )`,
+    ),
+    index('civic_verification_evidence_process_created_idx').on(
+      table.processId,
+      table.createdAt,
+      table.id,
+    ),
+  ],
+);
+
+export const civicVerificationConfirmations = town.table(
+  'civic_verification_confirmations',
+  {
+    id: uuid('id').primaryKey(),
+    processId: uuid('process_id').notNull(),
+    actorId: uuid('actor_id').notNull(),
+    outcome: text('outcome').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_verification_confirmations_process_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.actorId],
+      foreignColumns: [actors.id],
+      name: 'civic_verification_confirmations_actor_id_fkey',
+    }).onDelete('restrict'),
+    unique('civic_verification_confirmations_process_actor_unique').on(
+      table.processId,
+      table.actorId,
+    ),
+    check(
+      'civic_verification_confirmations_outcome_supported',
+      sql`${table.outcome} in ('delivered', 'not_delivered')`,
+    ),
+    index('civic_verification_confirmations_process_outcome_idx').on(
+      table.processId,
+      table.outcome,
+    ),
+  ],
+);
+
+export const civicVerifications = town.table(
+  'civic_verifications',
+  {
+    processId: uuid('process_id').primaryKey(),
+    outcome: text('outcome').notNull(),
+    deliveredCount: integer('delivered_count').notNull(),
+    notDeliveredCount: integer('not_delivered_count').notNull(),
+    decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_verifications_process_id_fkey',
+    }).onDelete('restrict'),
+    check(
+      'civic_verifications_outcome_supported',
+      sql`${table.outcome} in ('delivered', 'not_delivered')`,
+    ),
+  ],
+);
+
 export type CivicProcessRow = typeof civicProcesses.$inferSelect;
 export type CivicProposalRow = typeof civicProposals.$inferSelect;
 export type CivicDeliberationContributionRow = typeof civicDeliberationContributions.$inferSelect;
@@ -2297,3 +2409,6 @@ export type CivicProcessTransitionRow = typeof civicProcessTransitions.$inferSel
 export type CivicProcessEventRow = typeof civicProcessEvents.$inferSelect;
 export type CivicMandateRow = typeof civicMandates.$inferSelect;
 export type CivicActionUpdateRow = typeof civicActionUpdates.$inferSelect;
+export type CivicVerificationEvidenceRow = typeof civicVerificationEvidence.$inferSelect;
+export type CivicVerificationConfirmationRow = typeof civicVerificationConfirmations.$inferSelect;
+export type CivicVerificationRow = typeof civicVerifications.$inferSelect;

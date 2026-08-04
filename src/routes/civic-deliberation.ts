@@ -224,7 +224,9 @@ export const civicDeliberationRoutes: FastifyPluginCallbackTypebox<
             process.currentStage === 'ballot_preparation' ||
             process.currentStage === 'voting' ||
             process.currentStage === 'mandate' ||
-            process.currentStage === 'action'
+            process.currentStage === 'action' ||
+            process.currentStage === 'verification' ||
+            process.currentStage === 'archived'
               ? process.currentStage
               : 'proposals',
           canContribute: process.currentStage === 'deliberation' && actor !== null,

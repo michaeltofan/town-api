@@ -19510,7 +19510,9 @@
                             "ballot_preparation",
                             "voting",
                             "mandate",
-                            "action"
+                            "action",
+                            "verification",
+                            "archived"
                           ],
                           "type": "string"
                         },
@@ -19526,16 +19528,24 @@
                           "type": "string"
                         },
                         "nextStage": {
-                          "enum": [
-                            "proposals",
-                            "deliberation",
-                            "ballot_preparation",
-                            "voting",
-                            "mandate",
-                            "action",
-                            "verification"
-                          ],
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "proposals",
+                                "deliberation",
+                                "ballot_preparation",
+                                "voting",
+                                "mandate",
+                                "action",
+                                "verification",
+                                "archived"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "proposalCount": {
                           "minimum": 0,
@@ -19553,7 +19563,9 @@
                             "civic_process.stage.ballot_preparation",
                             "civic_process.stage.voting",
                             "civic_process.stage.mandate",
-                            "civic_process.stage.action"
+                            "civic_process.stage.action",
+                            "civic_process.stage.verification",
+                            "civic_process.stage.archived"
                           ],
                           "type": "string"
                         },
@@ -19573,7 +19585,9 @@
                                   "stage_transitioned_to_ballot_preparation",
                                   "stage_transitioned_to_voting",
                                   "stage_transitioned_to_mandate",
-                                  "stage_transitioned_to_action"
+                                  "stage_transitioned_to_action",
+                                  "stage_transitioned_to_verification",
+                                  "stage_transitioned_to_archived"
                                 ],
                                 "type": "string"
                               }
@@ -19828,6 +19842,18 @@
                             {
                               "enum": [
                                 "action"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "verification"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "archived"
                               ],
                               "type": "string"
                             }
@@ -20356,6 +20382,18 @@
                             {
                               "enum": [
                                 "action"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "verification"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "archived"
                               ],
                               "type": "string"
                             }
@@ -20963,6 +21001,18 @@
                                 "action"
                               ],
                               "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "verification"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "archived"
+                              ],
+                              "type": "string"
                             }
                           ]
                         },
@@ -21212,6 +21262,18 @@
                             {
                               "enum": [
                                 "action"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "verification"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "archived"
                               ],
                               "type": "string"
                             }
@@ -21653,6 +21715,1176 @@
         ]
       }
     },
+    "/v1/signals/{signalId}/civic-process/verification": {
+      "get": {
+        "description": "Public winning proposal, open evidence log, and live delivered/not-delivered tally for a visible signal. Any active community actor may mark a decided action ready for verification, submit evidence, or confirm one outcome. A dispute that never reaches either threshold is reported honestly with no invented resolution.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "canConfirm": {
+                          "type": "boolean"
+                        },
+                        "canMarkReady": {
+                          "type": "boolean"
+                        },
+                        "currentStage": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "action"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "verification"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "archived"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "decidedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deliveredCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "evidence": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "authorDisplayName": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "isMine": {
+                                "type": "boolean"
+                              },
+                              "text": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "url": {
+                                "anyOf": [
+                                  {
+                                    "format": "uri",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "authorDisplayName",
+                              "text",
+                              "url",
+                              "createdAt",
+                              "isMine"
+                            ],
+                            "title": "CivicVerificationEvidence",
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "type": "array"
+                        },
+                        "hasConfirmed": {
+                          "type": "boolean"
+                        },
+                        "myOutcome": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "delivered"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "not_delivered"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "notDeliveredCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "outcome": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "delivered"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "not_delivered"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "processId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "winner": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "authorDisplayName": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "body": {
+                                  "maxLength": 2000,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "proposalId": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "maxLength": 160,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "voteCount": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "proposalId",
+                                "authorDisplayName",
+                                "title",
+                                "body",
+                                "voteCount"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "processId",
+                        "currentStage",
+                        "winner",
+                        "canMarkReady",
+                        "canConfirm",
+                        "hasConfirmed",
+                        "myOutcome",
+                        "deliveredCount",
+                        "notDeliveredCount",
+                        "outcome",
+                        "decidedAt",
+                        "evidence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Read the verification status of a decided civic mandate",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/civic-process/verification/confirm": {
+      "post": {
+        "description": "Records one delivered/not-delivered confirmation per eligible actor while the canonical process is in verification. Once either outcome reaches five confirmations, the process archives with that outcome. A dispute that never reaches either threshold stays open with no invented resolution.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "outcome": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "delivered"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "not_delivered"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "outcome"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "delivered"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "not_delivered"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "outcome",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Confirm whether the mandated action was delivered",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/civic-process/verification/evidence": {
+      "post": {
+        "description": "Creates a short, structured evidence entry (text and an optional supporting link) while the canonical process is in verification. Does not itself decide the outcome.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "text": {
+                    "maxLength": 480,
+                    "minLength": 12,
+                    "type": "string"
+                  },
+                  "url": {
+                    "anyOf": [
+                      {
+                        "format": "uri",
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "text",
+                  "url"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authorDisplayName": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "isMine": {
+                          "type": "boolean"
+                        },
+                        "text": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "url": {
+                          "anyOf": [
+                            {
+                              "format": "uri",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "authorDisplayName",
+                        "text",
+                        "url",
+                        "createdAt",
+                        "isMine"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Post evidence toward verifying a civic mandate",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/civic-process/verification/ready": {
+      "post": {
+        "description": "Any active community actor may mark the action ready for verification. No threshold: the first eligible actor to call this moves the process into verification immediately.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "currentStage": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "action"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "verification"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "processId": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "processId",
+                        "currentStage"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Mark a decided action ready for verification",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
     "/v1/signals/{signalId}/civic-process/voting": {
       "get": {
         "description": "Public vote options for a visible signal (the five finalized ballot proposals) with aggregate vote counts. Optional session state derives only canVote, hasVoted, and myChoice. Never exposes account or actor identifiers, and never who voted for what.",
@@ -21703,6 +22935,18 @@
                             {
                               "enum": [
                                 "action"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "verification"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "archived"
                               ],
                               "type": "string"
                             }

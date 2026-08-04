@@ -21,12 +21,21 @@ const deliberationMigrationPath = new URL(
 const votingMigrationPath = new URL('../drizzle/0046_civic_voting.sql', import.meta.url);
 const mandateMigrationPath = new URL('../drizzle/0047_civic_mandate.sql', import.meta.url);
 const actionMigrationPath = new URL('../drizzle/0048_civic_action.sql', import.meta.url);
+const verificationMigrationPath = new URL(
+  '../drizzle/0049_civic_verification.sql',
+  import.meta.url,
+);
 const proposalRoutePath = new URL('../src/routes/civic-proposals.ts', import.meta.url);
 const deliberationRoutePath = new URL('../src/routes/civic-deliberation.ts', import.meta.url);
 const votingRoutePath = new URL('../src/routes/civic-voting.ts', import.meta.url);
 const mandateRoutePath = new URL('../src/routes/civic-mandate.ts', import.meta.url);
 const mandateRepositoryPath = new URL('../src/db/repositories/civic-mandates.ts', import.meta.url);
 const actionRoutePath = new URL('../src/routes/civic-action.ts', import.meta.url);
+const verificationRoutePath = new URL('../src/routes/civic-verification.ts', import.meta.url);
+const verificationRepositoryPath = new URL(
+  '../src/db/repositories/civic-verification.ts',
+  import.meta.url,
+);
 const routePath = new URL('../src/routes/civic-process.ts', import.meta.url);
 
 describe('civic process confirmation foundation', () => {
@@ -211,6 +220,84 @@ describe('civic process confirmation foundation', () => {
     expect(route).toContain("app.get(\n    '/v1/signals/:signalId/civic-process/action'");
     expect(route).toContain("app.post(\n    '/v1/signals/:signalId/civic-process/action/updates'");
     expect(route).not.toMatch(/completionPercent|completionThreshold|progressPercent/i);
+  });
+
+  it('opens verification when any eligible actor marks a decided action ready, no threshold', async () => {
+    const migration = await readFile(verificationMigrationPath, 'utf8');
+    const route = await readFile(verificationRoutePath, 'utf8');
+    const repository = await readFile(verificationRepositoryPath, 'utf8');
+
+    expect(migration).toContain("'action_marked_ready'");
+    expect(migration).toContain("'stage_transitioned_to_verification'");
+    expect(migration).toContain(
+      '"from_stage" = \'action\'\n      AND "to_stage" = \'verification\'\n      AND "reason_key" = \'action_marked_ready\'',
+    );
+    expect(route).toContain(
+      "app.post(\n    '/v1/signals/:signalId/civic-process/verification/ready'",
+    );
+    const readyFn = /async function markActionReadyForVerification\([\s\S]*?\n}/.exec(repository);
+    expect(!!readyFn).toBe(true);
+    expect(readyFn?.[0]).not.toMatch(/count\(\*\)|>= 5|threshold/i);
+  });
+
+  it('archives verification with a symmetric 5-actor threshold for delivered vs not_delivered', async () => {
+    const migration = await readFile(verificationMigrationPath, 'utf8');
+
+    expect(migration).toContain("'verification_delivered_threshold_reached'");
+    expect(migration).toContain("'verification_not_delivered_threshold_reached'");
+    expect(migration).toContain('delivered_count >= 5');
+    expect(migration).toContain('not_delivered_count >= 5');
+    expect(migration).toContain('"civic_verification_confirmations_process_actor_unique"');
+    expect(migration).toContain('UNIQUE ("process_id", "actor_id")');
+    expect(migration).toContain('CREATE TABLE "town"."civic_verifications"');
+    expect(migration).not.toMatch(/operator|manual_transition|coin.?flip|majority/i);
+    expect(migration).not.toMatch(/cron|pg_cron|scheduled job/i);
+  });
+
+  it('scopes verification evidence and confirmations to an eligible actor while verification is open', async () => {
+    const migration = await readFile(verificationMigrationPath, 'utf8');
+    const route = await readFile(verificationRoutePath, 'utf8');
+
+    expect(migration).toContain('"civic_verification_evidence_process_id_fkey"');
+    expect(migration).toContain('"civic_verification_confirmations_process_id_fkey"');
+    expect(migration).toContain("IF process_stage IS DISTINCT FROM 'verification' THEN");
+    expect(migration).toContain('actor_community_id IS DISTINCT FROM process_community_id');
+    expect(migration).toContain("LIKE 'http://%'");
+    expect(route).toContain(
+      "app.post(\n    '/v1/signals/:signalId/civic-process/verification/evidence'",
+    );
+    expect(route).toContain(
+      "app.post(\n    '/v1/signals/:signalId/civic-process/verification/confirm'",
+    );
+    expect(route).not.toMatch(/completionPercent|completionThreshold|progressPercent/i);
+  });
+
+  it('reports a verification dispute honestly: no invented resolution when neither outcome reaches threshold', async () => {
+    const route = await readFile(verificationRoutePath, 'utf8');
+
+    expect(route).toContain('deliveredCount: verification?.deliveredCount ?? tally.deliveredCount');
+    expect(route).toContain(
+      'notDeliveredCount: verification?.notDeliveredCount ?? tally.notDeliveredCount',
+    );
+    expect(route).toContain('outcome: verification?.outcome ?? null');
+    expect(route).not.toMatch(/coin.?flip|earliest.?vote|tiebreak(er)?\s*(rule|logic)/i);
+  });
+
+  it('reports action as a permanent public record: still readable once verification or archived', async () => {
+    const route = await readFile(actionRoutePath, 'utf8');
+
+    expect(route).toContain('hasReachedAction');
+    expect(route).toContain("process.currentStage === 'verification' ||");
+    expect(route).toContain("process.currentStage === 'archived'");
+  });
+
+  it('closes the civic-process lifecycle at archived with no invented next stage', async () => {
+    const route = await readFile(routePath, 'utf8');
+
+    expect(route).toContain(
+      "process.currentStage === 'verification'\n                            ? 'archived'\n                            : null",
+    );
+    expect(route).toContain("'civic_process.stage.archived'");
   });
 
   it('exposes a read-only bounded endpoint without a state mutation surface', async () => {

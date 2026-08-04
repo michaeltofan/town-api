@@ -4,6 +4,192 @@ import { Pool } from 'pg';
 import { FOUNDATION_SIGNAL_IDS } from '../src/db/seeds/foundation-content.js';
 import { createSeededTestApp } from './helpers/pg.js';
 
+// The /verification/ready endpoint requires a real session, which this
+// integration harness does not set up (every other write in this file goes
+// straight through the DB triggers). This mirrors exactly what
+// markActionReadyForVerification does at the app layer, inside one explicit
+// transaction so the set_config bypass is visible to the UPDATE it guards.
+async function simulateActionMarkedReady(pool: Pool, processId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO town.civic_process_transitions
+         (id, process_id, from_stage, to_stage, reason_key, occurred_at)
+       VALUES (gen_random_uuid(), $1, 'action', 'verification', 'action_marked_ready', now())
+       ON CONFLICT (process_id, from_stage, to_stage) DO NOTHING`,
+      [processId],
+    );
+    await client.query(
+      "SELECT set_config('town.civic_stage_transition', 'action_marked_ready', true)",
+    );
+    await client.query(
+      `UPDATE town.civic_processes
+       SET current_stage = 'verification', updated_at = now()
+       WHERE id = $1 AND current_stage = 'action'`,
+      [processId],
+    );
+    await client.query("SELECT set_config('town.civic_stage_transition', '', true)");
+    await client.query(
+      `INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at)
+       VALUES (gen_random_uuid(), $1, 'stage_transitioned_to_verification', now())
+       ON CONFLICT (process_id, event_type) DO NOTHING`,
+      [processId],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// Drives a fresh process through confirmation, proposals, deliberation, and
+// voting to a decided mandate with a clear winner (3 votes to 1), then closes
+// voting lazily so it chains straight through mandate into action. Returns
+// enough actors that verification-stage tests can reuse the same pool for
+// their delivered/not_delivered confirmations.
+async function buildDecidedProcessThroughAction(
+  pool: Pool,
+  app: Awaited<ReturnType<typeof createSeededTestApp>>['app'],
+  input: { slug: string; position: number },
+): Promise<{ signalId: string; processId: string; actorIds: string[]; winningProposalId: string }> {
+  const signalId = randomUUID();
+  const actorIds = Array.from({ length: 6 }, () => randomUUID());
+
+  await pool.query(
+    `INSERT INTO town.signals
+     SELECT (jsonb_populate_record(
+       NULL::town.signals,
+       to_jsonb(source) || jsonb_build_object(
+         'id', $1::uuid,
+         'slug', $2::text,
+         'position', $3::int,
+         'created_at', now(),
+         'updated_at', now(),
+         'published_at', now()
+       )
+     )).*
+     FROM town.signals source
+     ORDER BY position
+     LIMIT 1`,
+    [signalId, input.slug, input.position],
+  );
+
+  for (const actorId of actorIds) {
+    await pool.query(
+      `INSERT INTO town.actors (
+         id, kind, status, display_label, community_id, account_id,
+         local_eligibility_verified_at, community_commitment_accepted_at,
+         community_commitment_version, created_at, updated_at
+       )
+       SELECT
+         $1::uuid, 'controlled_test', 'active', $1::text, community_id, NULL,
+         NULL, NULL, NULL, now(), now()
+       FROM town.signals
+       WHERE id = $2`,
+      [actorId, signalId],
+    );
+  }
+
+  await Promise.all(
+    actorIds.slice(0, 5).map((actorId) =>
+      pool.query(
+        `INSERT INTO town.signal_confirmations
+           (id, signal_id, actor_id, confirmed_at, created_at)
+         VALUES (gen_random_uuid(), $1, $2, now(), now())`,
+        [signalId, actorId],
+      ),
+    ),
+  );
+
+  const processRow = await pool.query<{ id: string }>(
+    'SELECT id FROM town.civic_processes WHERE signal_id = $1',
+    [signalId],
+  );
+  const processId = processRow.rows[0]?.id;
+  if (!processId) throw new Error('missing process id');
+
+  await Promise.all(
+    actorIds.slice(0, 5).map((actorId, index) =>
+      pool.query(
+        `INSERT INTO town.civic_proposals
+           (id, process_id, author_actor_id, title, body, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, now())`,
+        [processId, actorId, `Verification proposal ${String(index)}`, `Body ${String(index)}`],
+      ),
+    ),
+  );
+
+  const proposalRows = await pool.query<{ id: string }>(
+    'SELECT id FROM town.civic_proposals WHERE process_id = $1 ORDER BY created_at, id',
+    [processId],
+  );
+  const proposalIds = proposalRows.rows.map((row) => row.id);
+  const winningProposalId = proposalIds[0];
+  const secondProposalId = proposalIds[1];
+  if (!winningProposalId || !secondProposalId) throw new Error('missing proposal ids');
+
+  await Promise.all(
+    actorIds.slice(0, 5).map((actorId, index) =>
+      pool.query(
+        `INSERT INTO town.civic_deliberation_contributions
+           (id, process_id, proposal_id, author_actor_id, intent, text, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, 'observation', $4, now())`,
+        [
+          processId,
+          proposalIds[index],
+          actorId,
+          `Verification deliberation number ${String(index)}`,
+        ],
+      ),
+    ),
+  );
+
+  await Promise.all([
+    pool.query(
+      `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+      [processId, winningProposalId, actorIds[0]],
+    ),
+    pool.query(
+      `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+      [processId, winningProposalId, actorIds[1]],
+    ),
+    pool.query(
+      `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+      [processId, winningProposalId, actorIds[2]],
+    ),
+    pool.query(
+      `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+      [processId, secondProposalId, actorIds[3]],
+    ),
+  ]);
+
+  await pool.query(
+    "UPDATE town.civic_processes SET voting_closes_at = now() - interval '1 second' WHERE id = $1",
+    [processId],
+  );
+
+  // The lazy voting-close (and its chain straight through mandate into
+  // action) only runs as a side effect of a route touching the process, not
+  // from raw SQL — so trigger it via the same public read every real caller
+  // would use.
+  const mandateResponse = await app.inject({
+    method: 'GET',
+    url: `/v1/signals/${signalId}/civic-process/mandate`,
+  });
+  if (mandateResponse.statusCode !== 200) {
+    throw new Error('failed to lazily close voting while building fixture');
+  }
+
+  return { signalId, processId, actorIds, winningProposalId };
+}
+
 describe('civic process confirmation integration', () => {
   let pool: Pool;
   let app: Awaited<ReturnType<typeof createSeededTestApp>>['app'];
@@ -1045,6 +1231,240 @@ describe('civic process confirmation integration', () => {
         [processId, actorIds[0]],
       ),
     ).rejects.toThrow(/civic action stage is closed/);
+  });
+
+  it('marks a decided action ready, then archives as delivered once 5 actors confirm', async () => {
+    const { signalId, processId, actorIds } = await buildDecidedProcessThroughAction(pool, app, {
+      slug: 'civic-process-verification-delivered-test',
+      position: 32006,
+    });
+
+    await simulateActionMarkedReady(pool, processId);
+
+    await pool.query(
+      `INSERT INTO town.civic_verification_evidence (id, process_id, author_actor_id, text, url, created_at)
+       VALUES (gen_random_uuid(), $1, $2, 'Delivered on site, photos attached', 'https://example.org/proof', now())`,
+      [processId, actorIds[0]],
+    );
+
+    for (const actorId of actorIds.slice(0, 5)) {
+      await pool.query(
+        `INSERT INTO town.civic_verification_confirmations (id, process_id, actor_id, outcome, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'delivered', now())`,
+        [processId, actorId],
+      );
+    }
+
+    const dbState = await pool.query<{
+      current_stage: string;
+      outcome: string;
+      delivered_count: number;
+      not_delivered_count: number;
+      archived_transitions: string;
+      archived_events: string;
+    }>(
+      `SELECT
+         process.current_stage,
+         verification.outcome,
+         verification.delivered_count,
+         verification.not_delivered_count,
+         (SELECT count(*)::text
+          FROM town.civic_process_transitions transition
+          WHERE transition.process_id = process.id
+            AND transition.from_stage = 'verification'
+            AND transition.to_stage = 'archived'
+            AND transition.reason_key = 'verification_delivered_threshold_reached') AS archived_transitions,
+         (SELECT count(*)::text
+          FROM town.civic_process_events event
+          WHERE event.process_id = process.id
+            AND event.event_type = 'stage_transitioned_to_archived') AS archived_events
+       FROM town.civic_processes process
+       LEFT JOIN town.civic_verifications verification ON verification.process_id = process.id
+       WHERE process.id = $1`,
+      [processId],
+    );
+    expect(dbState.rows).toEqual([
+      {
+        current_stage: 'archived',
+        outcome: 'delivered',
+        delivered_count: 5,
+        not_delivered_count: 0,
+        archived_transitions: '1',
+        archived_events: '1',
+      },
+    ]);
+
+    const verificationResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/verification`,
+    });
+    expect(verificationResponse.statusCode).toBe(200);
+    expect(verificationResponse.json()).toMatchObject({
+      data: {
+        processId,
+        currentStage: 'archived',
+        canMarkReady: false,
+        canConfirm: false,
+        outcome: 'delivered',
+        deliveredCount: 5,
+        notDeliveredCount: 0,
+      },
+    });
+    const verificationBody = verificationResponse.json<{
+      data: { decidedAt: string | null; evidence: { text: string; url: string | null }[] };
+    }>();
+    expect(verificationBody.data.decidedAt).not.toBeNull();
+    expect(verificationBody.data.evidence).toHaveLength(1);
+    expect(verificationBody.data.evidence[0]).toMatchObject({
+      text: 'Delivered on site, photos attached',
+      url: 'https://example.org/proof',
+    });
+    expect(verificationResponse.body).not.toMatch(/accountId|actorId/);
+
+    const processResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process`,
+    });
+    expect(processResponse.statusCode).toBe(200);
+    expect(processResponse.json()).toMatchObject({
+      data: {
+        currentStage: 'archived',
+        stageLabelKey: 'civic_process.stage.archived',
+        nextStage: null,
+      },
+    });
+    const processBody = processResponse.json<{ data: { timeline: { type: string }[] } }>();
+    expect(processBody.data.timeline.map((event) => event.type)).toContain(
+      'stage_transitioned_to_archived',
+    );
+
+    await expect(
+      pool.query(
+        `INSERT INTO town.civic_verification_confirmations (id, process_id, actor_id, outcome, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'delivered', now())`,
+        [processId, actorIds[5]],
+      ),
+    ).rejects.toThrow(/civic verification stage is closed/);
+  });
+
+  it('archives as not_delivered once 5 actors confirm the action was not delivered', async () => {
+    const { signalId, processId, actorIds } = await buildDecidedProcessThroughAction(pool, app, {
+      slug: 'civic-process-verification-not-delivered-test',
+      position: 32007,
+    });
+
+    await simulateActionMarkedReady(pool, processId);
+
+    for (const actorId of actorIds.slice(0, 5)) {
+      await pool.query(
+        `INSERT INTO town.civic_verification_confirmations (id, process_id, actor_id, outcome, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'not_delivered', now())`,
+        [processId, actorId],
+      );
+    }
+
+    const dbState = await pool.query<{ current_stage: string; outcome: string }>(
+      `SELECT process.current_stage, verification.outcome
+       FROM town.civic_processes process
+       LEFT JOIN town.civic_verifications verification ON verification.process_id = process.id
+       WHERE process.id = $1`,
+      [processId],
+    );
+    expect(dbState.rows).toEqual([{ current_stage: 'archived', outcome: 'not_delivered' }]);
+
+    const verificationResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/verification`,
+    });
+    expect(verificationResponse.statusCode).toBe(200);
+    expect(verificationResponse.json()).toMatchObject({
+      data: {
+        processId,
+        currentStage: 'archived',
+        outcome: 'not_delivered',
+        deliveredCount: 0,
+        notDeliveredCount: 5,
+      },
+    });
+  });
+
+  it('reports a live tally with no invented resolution while neither outcome reaches the threshold', async () => {
+    const { signalId, processId, actorIds } = await buildDecidedProcessThroughAction(pool, app, {
+      slug: 'civic-process-verification-dispute-test',
+      position: 32008,
+    });
+
+    await simulateActionMarkedReady(pool, processId);
+
+    await Promise.all([
+      pool.query(
+        `INSERT INTO town.civic_verification_confirmations (id, process_id, actor_id, outcome, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'delivered', now())`,
+        [processId, actorIds[0]],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_verification_confirmations (id, process_id, actor_id, outcome, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'delivered', now())`,
+        [processId, actorIds[1]],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_verification_confirmations (id, process_id, actor_id, outcome, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'delivered', now())`,
+        [processId, actorIds[2]],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_verification_confirmations (id, process_id, actor_id, outcome, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'not_delivered', now())`,
+        [processId, actorIds[3]],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_verification_confirmations (id, process_id, actor_id, outcome, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'not_delivered', now())`,
+        [processId, actorIds[4]],
+      ),
+    ]);
+
+    const dbState = await pool.query<{ current_stage: string }>(
+      'SELECT current_stage FROM town.civic_processes WHERE id = $1',
+      [processId],
+    );
+    expect(dbState.rows).toEqual([{ current_stage: 'verification' }]);
+
+    const verificationRow = await pool.query<{ process_id: string }>(
+      'SELECT process_id FROM town.civic_verifications WHERE process_id = $1',
+      [processId],
+    );
+    expect(verificationRow.rows).toEqual([]);
+
+    const verificationResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/verification`,
+    });
+    expect(verificationResponse.statusCode).toBe(200);
+    expect(verificationResponse.json()).toMatchObject({
+      data: {
+        processId,
+        currentStage: 'verification',
+        canMarkReady: false,
+        outcome: null,
+        decidedAt: null,
+        deliveredCount: 3,
+        notDeliveredCount: 2,
+      },
+    });
+
+    const processResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process`,
+    });
+    expect(processResponse.statusCode).toBe(200);
+    expect(processResponse.json()).toMatchObject({
+      data: {
+        currentStage: 'verification',
+        stageLabelKey: 'civic_process.stage.verification',
+        nextStage: 'archived',
+      },
+    });
   });
 
   it('preserves fail-closed missing and invalid signal behavior', async () => {
