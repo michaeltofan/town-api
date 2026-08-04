@@ -109,5 +109,50 @@ export async function closeVotingWindowIfElapsed(
       VALUES (${input.processId}, ${winnerProposalId}, ${topCount}, ${totalVotes}, ${input.now})
       ON CONFLICT (process_id) DO NOTHING
     `);
+
+    if (!winnerProposalId) {
+      return;
+    }
+
+    // A decided mandate (a single, undisputed winner) opens action in the
+    // same transaction: there is no waiting period, mirroring how
+    // ballot_preparation opens voting immediately once the ballot is final.
+    // A contested mandate (a tie, no winner) stays parked at mandate.
+    // Recorded a microsecond after the mandate so the two events keep a
+    // well-defined, causally accurate order in the public timeline instead
+    // of tying on an identical timestamp.
+    const actionTransitionResult = await tx.execute(sql`
+      INSERT INTO town.civic_process_transitions (
+        id, process_id, from_stage, to_stage, reason_key, occurred_at
+      ) VALUES (
+        gen_random_uuid(), ${input.processId}, 'mandate', 'action', 'mandate_decided',
+        ${input.now}::timestamptz + interval '1 microsecond'
+      )
+      ON CONFLICT (process_id, from_stage, to_stage) DO NOTHING
+    `);
+    if (!actionTransitionResult.rowCount) {
+      return;
+    }
+
+    await tx.execute(
+      sql`SELECT set_config('town.civic_stage_transition', 'mandate_decided', true)`,
+    );
+    await tx.execute(sql`
+      UPDATE town.civic_processes
+      SET
+        current_stage = 'action',
+        updated_at = ${input.now}::timestamptz + interval '1 microsecond'
+      WHERE id = ${input.processId} AND current_stage = 'mandate'
+    `);
+    await tx.execute(sql`SELECT set_config('town.civic_stage_transition', '', true)`);
+
+    await tx.execute(sql`
+      INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at)
+      VALUES (
+        gen_random_uuid(), ${input.processId}, 'stage_transitioned_to_action',
+        ${input.now}::timestamptz + interval '1 microsecond'
+      )
+      ON CONFLICT (process_id, event_type) DO NOTHING
+    `);
   });
 }

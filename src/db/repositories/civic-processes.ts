@@ -8,7 +8,13 @@ export const CIVIC_PROPOSAL_THRESHOLD = 5;
 export const CIVIC_DELIBERATION_THRESHOLD = 5;
 
 export type PublicCivicProcessStage =
-  'confirmation' | 'proposals' | 'deliberation' | 'ballot_preparation' | 'voting' | 'mandate';
+  | 'confirmation'
+  | 'proposals'
+  | 'deliberation'
+  | 'ballot_preparation'
+  | 'voting'
+  | 'mandate'
+  | 'action';
 
 export type CivicProcessReadRow = {
   id: string;
@@ -27,7 +33,8 @@ export type PublicCivicProcessEvent = {
     | 'stage_transitioned_to_deliberation'
     | 'stage_transitioned_to_ballot_preparation'
     | 'stage_transitioned_to_voting'
-    | 'stage_transitioned_to_mandate';
+    | 'stage_transitioned_to_mandate'
+    | 'stage_transitioned_to_action';
   occurredAt: string;
 };
 
@@ -59,7 +66,8 @@ export async function findCivicProcessBySignalId(
     row.current_stage !== 'deliberation' &&
     row.current_stage !== 'ballot_preparation' &&
     row.current_stage !== 'voting' &&
-    row.current_stage !== 'mandate'
+    row.current_stage !== 'mandate' &&
+    row.current_stage !== 'action'
   ) {
     throw new Error('Unsupported civic process stage');
   }
@@ -98,7 +106,8 @@ export async function listPublicCivicProcessEvents(
       row.event_type !== 'stage_transitioned_to_deliberation' &&
       row.event_type !== 'stage_transitioned_to_ballot_preparation' &&
       row.event_type !== 'stage_transitioned_to_voting' &&
-      row.event_type !== 'stage_transitioned_to_mandate'
+      row.event_type !== 'stage_transitioned_to_mandate' &&
+      row.event_type !== 'stage_transitioned_to_action'
     ) {
       throw new Error('Unsupported public civic process event');
     }

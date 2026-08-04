@@ -16,10 +16,24 @@ export const CivicProcessStageSchema = Type.Union(
 );
 
 const PublicCivicProcessStageSchema = Type.Unsafe<
-  'confirmation' | 'proposals' | 'deliberation' | 'ballot_preparation' | 'voting' | 'mandate'
+  | 'confirmation'
+  | 'proposals'
+  | 'deliberation'
+  | 'ballot_preparation'
+  | 'voting'
+  | 'mandate'
+  | 'action'
 >({
   type: 'string',
-  enum: ['confirmation', 'proposals', 'deliberation', 'ballot_preparation', 'voting', 'mandate'],
+  enum: [
+    'confirmation',
+    'proposals',
+    'deliberation',
+    'ballot_preparation',
+    'voting',
+    'mandate',
+    'action',
+  ],
 });
 
 const PublicCivicProcessStageLabelSchema = Type.Unsafe<
@@ -29,6 +43,7 @@ const PublicCivicProcessStageLabelSchema = Type.Unsafe<
   | 'civic_process.stage.ballot_preparation'
   | 'civic_process.stage.voting'
   | 'civic_process.stage.mandate'
+  | 'civic_process.stage.action'
 >({
   type: 'string',
   enum: [
@@ -38,14 +53,29 @@ const PublicCivicProcessStageLabelSchema = Type.Unsafe<
     'civic_process.stage.ballot_preparation',
     'civic_process.stage.voting',
     'civic_process.stage.mandate',
+    'civic_process.stage.action',
   ],
 });
 
 const PublicCivicProcessNextStageSchema = Type.Unsafe<
-  'proposals' | 'deliberation' | 'ballot_preparation' | 'voting' | 'mandate' | 'action'
+  | 'proposals'
+  | 'deliberation'
+  | 'ballot_preparation'
+  | 'voting'
+  | 'mandate'
+  | 'action'
+  | 'verification'
 >({
   type: 'string',
-  enum: ['proposals', 'deliberation', 'ballot_preparation', 'voting', 'mandate', 'action'],
+  enum: [
+    'proposals',
+    'deliberation',
+    'ballot_preparation',
+    'voting',
+    'mandate',
+    'action',
+    'verification',
+  ],
 });
 
 const CivicProcessTimelineEventSchema = Type.Object(
@@ -57,6 +87,7 @@ const CivicProcessTimelineEventSchema = Type.Object(
       | 'stage_transitioned_to_ballot_preparation'
       | 'stage_transitioned_to_voting'
       | 'stage_transitioned_to_mandate'
+      | 'stage_transitioned_to_action'
     >({
       type: 'string',
       enum: [
@@ -66,6 +97,7 @@ const CivicProcessTimelineEventSchema = Type.Object(
         'stage_transitioned_to_ballot_preparation',
         'stage_transitioned_to_voting',
         'stage_transitioned_to_mandate',
+        'stage_transitioned_to_action',
       ],
     }),
     occurredAt: Type.String({ format: 'date-time' }),

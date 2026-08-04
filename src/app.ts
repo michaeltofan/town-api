@@ -20,6 +20,7 @@ import { civicProposalRoutes } from './routes/civic-proposals.js';
 import { civicDeliberationRoutes } from './routes/civic-deliberation.js';
 import { civicVotingRoutes } from './routes/civic-voting.js';
 import { civicMandateRoutes } from './routes/civic-mandate.js';
+import { civicActionRoutes } from './routes/civic-action.js';
 import { discussionSessionRoutes } from './routes/discussion-session.js';
 import { emailVerificationRoutes } from './routes/email-verifications.js';
 import { healthRoutes } from './routes/health.js';
@@ -342,6 +343,16 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(civicMandateRoutes, {
     env: options.env,
     ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
+  });
+  await app.register(civicActionRoutes, {
+    env: options.env,
+    ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
+    ...(options.membership?.generateId !== undefined
+      ? { generateId: options.membership.generateId }
+      : {}),
+    ...(options.membership?.localEligibilityResolver !== undefined
+      ? { localEligibilityResolver: options.membership.localEligibilityResolver }
+      : {}),
   });
   const objectStorageAdapter =
     options.objectStorageAdapter !== undefined
