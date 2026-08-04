@@ -23,6 +23,8 @@ const PublicCivicProcessStageSchema = Type.Unsafe<
   | 'voting'
   | 'mandate'
   | 'action'
+  | 'verification'
+  | 'archived'
 >({
   type: 'string',
   enum: [
@@ -33,6 +35,8 @@ const PublicCivicProcessStageSchema = Type.Unsafe<
     'voting',
     'mandate',
     'action',
+    'verification',
+    'archived',
   ],
 });
 
@@ -44,6 +48,8 @@ const PublicCivicProcessStageLabelSchema = Type.Unsafe<
   | 'civic_process.stage.voting'
   | 'civic_process.stage.mandate'
   | 'civic_process.stage.action'
+  | 'civic_process.stage.verification'
+  | 'civic_process.stage.archived'
 >({
   type: 'string',
   enum: [
@@ -54,6 +60,8 @@ const PublicCivicProcessStageLabelSchema = Type.Unsafe<
     'civic_process.stage.voting',
     'civic_process.stage.mandate',
     'civic_process.stage.action',
+    'civic_process.stage.verification',
+    'civic_process.stage.archived',
   ],
 });
 
@@ -65,6 +73,7 @@ const PublicCivicProcessNextStageSchema = Type.Unsafe<
   | 'mandate'
   | 'action'
   | 'verification'
+  | 'archived'
 >({
   type: 'string',
   enum: [
@@ -75,6 +84,7 @@ const PublicCivicProcessNextStageSchema = Type.Unsafe<
     'mandate',
     'action',
     'verification',
+    'archived',
   ],
 });
 
@@ -88,6 +98,8 @@ const CivicProcessTimelineEventSchema = Type.Object(
       | 'stage_transitioned_to_voting'
       | 'stage_transitioned_to_mandate'
       | 'stage_transitioned_to_action'
+      | 'stage_transitioned_to_verification'
+      | 'stage_transitioned_to_archived'
     >({
       type: 'string',
       enum: [
@@ -98,6 +110,8 @@ const CivicProcessTimelineEventSchema = Type.Object(
         'stage_transitioned_to_voting',
         'stage_transitioned_to_mandate',
         'stage_transitioned_to_action',
+        'stage_transitioned_to_verification',
+        'stage_transitioned_to_archived',
       ],
     }),
     occurredAt: Type.String({ format: 'date-time' }),
@@ -151,7 +165,7 @@ export const CivicProcessResponseSchema = Type.Object(
         voteCount: Type.Integer({ minimum: 0 }),
         hasConfirmed: Type.Boolean(),
         canConfirm: Type.Boolean(),
-        nextStage: PublicCivicProcessNextStageSchema,
+        nextStage: Type.Union([PublicCivicProcessNextStageSchema, Type.Null()]),
         closingAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
         transitionRule: CivicProcessTransitionRuleSchema,
         timeline: Type.Array(CivicProcessTimelineEventSchema, { maxItems: 50 }),

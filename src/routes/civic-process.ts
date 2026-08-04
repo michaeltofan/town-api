@@ -190,7 +190,11 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
                       ? 'civic_process.stage.voting'
                       : process.currentStage === 'mandate'
                         ? 'civic_process.stage.mandate'
-                        : 'civic_process.stage.action',
+                        : process.currentStage === 'action'
+                          ? 'civic_process.stage.action'
+                          : process.currentStage === 'verification'
+                            ? 'civic_process.stage.verification'
+                            : 'civic_process.stage.archived',
           confirmationCount,
           proposalCount,
           deliberationParticipantCount,
@@ -210,7 +214,11 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
                       ? 'mandate'
                       : process.currentStage === 'mandate'
                         ? 'action'
-                        : 'verification',
+                        : process.currentStage === 'action'
+                          ? 'verification'
+                          : process.currentStage === 'verification'
+                            ? 'archived'
+                            : null,
           closingAt:
             process.currentStage === 'voting' && process.votingClosesAt
               ? toIsoTimestamp(process.votingClosesAt)

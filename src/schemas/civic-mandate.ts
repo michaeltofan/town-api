@@ -21,6 +21,8 @@ export const CivicMandateResponseSchema = Type.Object(
           Type.Literal('voting'),
           Type.Literal('mandate'),
           Type.Literal('action'),
+          Type.Literal('verification'),
+          Type.Literal('archived'),
         ]),
         decided: Type.Boolean(),
         contested: Type.Boolean(),

@@ -226,7 +226,9 @@ export const civicVotingRoutes: FastifyPluginCallbackTypebox<CivicVotingRoutesOp
             process.currentStage === 'ballot_preparation' ||
             process.currentStage === 'voting' ||
             process.currentStage === 'mandate' ||
-            process.currentStage === 'action'
+            process.currentStage === 'action' ||
+            process.currentStage === 'verification' ||
+            process.currentStage === 'archived'
               ? process.currentStage
               : 'ballot_preparation',
           canVote: process.currentStage === 'voting' && actor !== null && ownVote === null,

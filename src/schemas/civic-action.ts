@@ -25,7 +25,12 @@ export const CivicActionResponseSchema = Type.Object(
     data: Type.Object(
       {
         processId: Type.String({ format: 'uuid' }),
-        currentStage: Type.Union([Type.Literal('mandate'), Type.Literal('action')]),
+        currentStage: Type.Union([
+          Type.Literal('mandate'),
+          Type.Literal('action'),
+          Type.Literal('verification'),
+          Type.Literal('archived'),
+        ]),
         winner: Type.Union([CivicMandateWinnerSchema, Type.Null()]),
         canPost: Type.Boolean(),
         updates: Type.Array(CivicActionUpdateSchema, { maxItems: 200 }),

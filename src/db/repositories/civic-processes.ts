@@ -14,7 +14,9 @@ export type PublicCivicProcessStage =
   | 'ballot_preparation'
   | 'voting'
   | 'mandate'
-  | 'action';
+  | 'action'
+  | 'verification'
+  | 'archived';
 
 export type CivicProcessReadRow = {
   id: string;
@@ -34,7 +36,9 @@ export type PublicCivicProcessEvent = {
     | 'stage_transitioned_to_ballot_preparation'
     | 'stage_transitioned_to_voting'
     | 'stage_transitioned_to_mandate'
-    | 'stage_transitioned_to_action';
+    | 'stage_transitioned_to_action'
+    | 'stage_transitioned_to_verification'
+    | 'stage_transitioned_to_archived';
   occurredAt: string;
 };
 
@@ -67,7 +71,9 @@ export async function findCivicProcessBySignalId(
     row.current_stage !== 'ballot_preparation' &&
     row.current_stage !== 'voting' &&
     row.current_stage !== 'mandate' &&
-    row.current_stage !== 'action'
+    row.current_stage !== 'action' &&
+    row.current_stage !== 'verification' &&
+    row.current_stage !== 'archived'
   ) {
     throw new Error('Unsupported civic process stage');
   }
@@ -107,7 +113,9 @@ export async function listPublicCivicProcessEvents(
       row.event_type !== 'stage_transitioned_to_ballot_preparation' &&
       row.event_type !== 'stage_transitioned_to_voting' &&
       row.event_type !== 'stage_transitioned_to_mandate' &&
-      row.event_type !== 'stage_transitioned_to_action'
+      row.event_type !== 'stage_transitioned_to_action' &&
+      row.event_type !== 'stage_transitioned_to_verification' &&
+      row.event_type !== 'stage_transitioned_to_archived'
     ) {
       throw new Error('Unsupported public civic process event');
     }

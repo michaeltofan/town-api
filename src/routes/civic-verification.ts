@@ -9,13 +9,18 @@ import {
   type SessionTransportExtraction,
 } from '../ceremony/passkey-authentication/session-transport.js';
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
-import {
-  insertCivicActionUpdate,
-  listCivicActionUpdatesForProcess,
-} from '../db/repositories/civic-action.js';
 import { closeVotingWindowIfElapsed, findCivicMandate } from '../db/repositories/civic-mandates.js';
 import { findCivicProcessBySignalId } from '../db/repositories/civic-processes.js';
 import { findCivicProposalById } from '../db/repositories/civic-proposals.js';
+import {
+  findCivicVerification,
+  findCivicVerificationConfirmationByProcessAndActor,
+  insertCivicVerificationConfirmation,
+  insertCivicVerificationEvidence,
+  listCivicVerificationConfirmationTallyForProcess,
+  listCivicVerificationEvidenceForProcess,
+  markActionReadyForVerification,
+} from '../db/repositories/civic-verification.js';
 import { findActiveCivicActorByAccountId } from '../db/repositories/confirmations.js';
 import { findPublishedSignalById } from '../db/repositories/signals.js';
 import {
@@ -31,11 +36,15 @@ import {
   type LocalParticipationEligibilityResolver,
 } from '../membership/local-eligibility.js';
 import { findEntitlementByAccountId } from '../membership/repositories/entitlements.js';
-import { CivicActionRouteResponses, CivicActionUpdateBodySchema } from '../schemas/civic-action.js';
 import { ERROR_CODE } from '../schemas/error.js';
 import { SignalIdParamsSchema } from '../schemas/signals.js';
+import {
+  CivicVerificationConfirmationBodySchema,
+  CivicVerificationEvidenceBodySchema,
+  CivicVerificationRouteResponses,
+} from '../schemas/civic-verification.js';
 
-export type CivicActionRoutesOptions = {
+export type CivicVerificationRoutesOptions = {
   env: Env;
   now?: () => string;
   generateId?: () => string;
@@ -50,8 +59,24 @@ function validationError(): AppError {
   return new AppError(400, ERROR_CODE.VALIDATION_ERROR, 'Request validation failed.');
 }
 
-function stageClosedError(): AppError {
+function actionStageClosedError(): AppError {
   return new AppError(409, 'CIVIC_ACTION_STAGE_CLOSED', 'The action stage is not open.');
+}
+
+function verificationStageClosedError(): AppError {
+  return new AppError(
+    409,
+    'CIVIC_VERIFICATION_STAGE_CLOSED',
+    'The verification stage is not open.',
+  );
+}
+
+function alreadyConfirmedError(): AppError {
+  return new AppError(
+    409,
+    'CIVIC_VERIFICATION_ALREADY_CONFIRMED',
+    'This member has already confirmed the outcome.',
+  );
 }
 
 function singleHeader(value: string | string[] | undefined): string | undefined {
@@ -78,11 +103,9 @@ function rejectNonSessionSchemes(authorization: string | string[] | undefined): 
   }
 }
 
-export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOptions> = (
-  app,
-  options,
-  done,
-) => {
+export const civicVerificationRoutes: FastifyPluginCallbackTypebox<
+  CivicVerificationRoutesOptions
+> = (app, options, done) => {
   const now = options.now ?? (() => new Date().toISOString());
   const generateId = options.generateId ?? (() => randomUUID());
   const resolver =
@@ -185,15 +208,15 @@ export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOp
   }
 
   app.get(
-    '/v1/signals/:signalId/civic-process/action',
+    '/v1/signals/:signalId/civic-process/verification',
     {
       schema: {
         tags: ['Civic Process'],
-        summary: 'Read the action status log for a decided civic mandate',
+        summary: 'Read the verification status of a decided civic mandate',
         description:
-          'Public winning proposal and an open, structured status log for a visible signal once its mandate is decided. Any active community actor may post a status update while the process is in action. Never invents a completion percentage or threshold.',
+          'Public winning proposal, open evidence log, and live delivered/not-delivered tally for a visible signal. Any active community actor may mark a decided action ready for verification, submit evidence, or confirm one outcome. A dispute that never reaches either threshold is reported honestly with no invented resolution.',
         params: SignalIdParamsSchema,
-        response: CivicActionRouteResponses.read,
+        response: CivicVerificationRouteResponses.read,
       },
     },
     async (request, reply) => {
@@ -203,30 +226,38 @@ export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOp
         session?.accountId ?? null,
         published.signal.communityId,
       );
-      const hasReachedAction =
-        process.currentStage === 'action' ||
-        process.currentStage === 'verification' ||
-        process.currentStage === 'archived';
+      const isAction = process.currentStage === 'action';
+      const isVerification = process.currentStage === 'verification';
+      const isArchived = process.currentStage === 'archived';
       const mandate =
-        process.currentStage === 'mandate' || hasReachedAction
+        isAction || isVerification || isArchived
           ? await findCivicMandate(app.database.db, process.id)
           : null;
-      const [winnerProposal, updates] = await Promise.all([
+      const [winnerProposal, verification, tally, myConfirmation, evidence] = await Promise.all([
         mandate?.proposalId ? findCivicProposalById(app.database.db, mandate.proposalId) : null,
-        hasReachedAction
-          ? listCivicActionUpdatesForProcess(app.database.db, process.id)
+        isArchived ? findCivicVerification(app.database.db, process.id) : null,
+        isVerification || isArchived
+          ? listCivicVerificationConfirmationTallyForProcess(app.database.db, process.id)
+          : Promise.resolve({ deliveredCount: 0, notDeliveredCount: 0 }),
+        actor && (isVerification || isArchived)
+          ? findCivicVerificationConfirmationByProcessAndActor(app.database.db, {
+              processId: process.id,
+              actorId: actor.id,
+            })
+          : Promise.resolve(null),
+        isVerification || isArchived
+          ? listCivicVerificationEvidenceForProcess(app.database.db, process.id)
           : Promise.resolve([]),
       ]);
       return await reply.status(200).send({
         data: {
           processId: process.id,
           currentStage:
-            process.currentStage === 'mandate' ||
             process.currentStage === 'action' ||
             process.currentStage === 'verification' ||
             process.currentStage === 'archived'
               ? process.currentStage
-              : 'mandate',
+              : 'action',
           winner: winnerProposal
             ? {
                 proposalId: winnerProposal.id,
@@ -236,13 +267,21 @@ export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOp
                 voteCount: mandate?.voteCount ?? 0,
               }
             : null,
-          canPost: process.currentStage === 'action' && actor !== null,
-          updates: updates.map((update) => ({
-            id: update.id,
-            authorDisplayName: update.authorDisplayName,
-            text: update.text,
-            createdAt: toIsoTimestamp(update.createdAt),
-            isMine: actor?.id === update.authorActorId,
+          canMarkReady: isAction && actor !== null,
+          canConfirm: isVerification && actor !== null && myConfirmation === null,
+          hasConfirmed: myConfirmation !== null,
+          myOutcome: myConfirmation?.outcome ?? null,
+          deliveredCount: verification?.deliveredCount ?? tally.deliveredCount,
+          notDeliveredCount: verification?.notDeliveredCount ?? tally.notDeliveredCount,
+          outcome: verification?.outcome ?? null,
+          decidedAt: verification ? toIsoTimestamp(verification.decidedAt) : null,
+          evidence: evidence.map((item) => ({
+            id: item.id,
+            authorDisplayName: item.authorDisplayName,
+            text: item.text,
+            url: item.url,
+            createdAt: toIsoTimestamp(item.createdAt),
+            isMine: actor?.id === item.authorActorId,
           })),
         },
       });
@@ -250,51 +289,147 @@ export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOp
   );
 
   app.post(
-    '/v1/signals/:signalId/civic-process/action/updates',
+    '/v1/signals/:signalId/civic-process/verification/ready',
     {
       schema: {
         tags: ['Civic Process'],
-        summary: 'Post a status update on a decided civic mandate',
+        summary: 'Mark a decided action ready for verification',
         description:
-          'Creates a short, structured status update while the canonical process is in action. Does not transition the process; verification of the action is a later stage.',
+          'Any active community actor may mark the action ready for verification. No threshold: the first eligible actor to call this moves the process into verification immediately.',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
         params: SignalIdParamsSchema,
-        body: CivicActionUpdateBodySchema,
-        response: CivicActionRouteResponses.create,
+        response: CivicVerificationRouteResponses.ready,
       },
     },
     async (request, reply) => {
       const { published, process } = await visibleProcess(request.params.signalId);
-      if (process.currentStage !== 'action') throw stageClosedError();
+      if (process.currentStage !== 'action') throw actionStageClosedError();
+      const session = await resolveSession(request, true, true);
+      if (!session) throw sessionNotAuthorizedError();
+      const actor = await participantActor(session.accountId, published.signal.communityId);
+      if (!actor) throw civicParticipationNotAuthorizedError();
+      await markActionReadyForVerification(app.database.db, {
+        processId: process.id,
+        now: now(),
+      });
+      const updated = await findCivicProcessBySignalId(app.database.db, published.signal.id);
+      return await reply.status(200).send({
+        data: {
+          processId: process.id,
+          currentStage: updated?.currentStage === 'verification' ? 'verification' : 'action',
+        },
+      });
+    },
+  );
+
+  app.post(
+    '/v1/signals/:signalId/civic-process/verification/evidence',
+    {
+      schema: {
+        tags: ['Civic Process'],
+        summary: 'Post evidence toward verifying a civic mandate',
+        description:
+          'Creates a short, structured evidence entry (text and an optional supporting link) while the canonical process is in verification. Does not itself decide the outcome.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: SignalIdParamsSchema,
+        body: CivicVerificationEvidenceBodySchema,
+        response: CivicVerificationRouteResponses.evidence,
+      },
+    },
+    async (request, reply) => {
+      const { published, process } = await visibleProcess(request.params.signalId);
+      if (process.currentStage !== 'verification') throw verificationStageClosedError();
       const session = await resolveSession(request, true, true);
       if (!session) throw sessionNotAuthorizedError();
       const actor = await participantActor(session.accountId, published.signal.communityId);
       if (!actor) throw civicParticipationNotAuthorizedError();
       const text = request.body.text.trim();
       if (text.length < 12 || text.length > 480) throw validationError();
-      const updateId = generateId();
+      const url = request.body.url ? request.body.url.trim() : null;
+      if (url && (url.length > 500 || !/^https?:\/\//.test(url))) throw validationError();
+      const evidenceId = generateId();
       const createdAt = now();
       try {
-        await insertCivicActionUpdate(app.database.db, {
-          id: updateId,
+        await insertCivicVerificationEvidence(app.database.db, {
+          id: evidenceId,
           processId: process.id,
           actorId: actor.id,
           text,
+          url,
           createdAt,
         });
       } catch (error: unknown) {
         if (error instanceof Error && error.message.includes('stage is closed')) {
-          throw stageClosedError();
+          throw verificationStageClosedError();
         }
         throw error;
       }
       return await reply.status(201).send({
         data: {
-          id: updateId,
+          id: evidenceId,
           authorDisplayName: actor.displayLabel,
           text,
+          url,
           createdAt: toIsoTimestamp(createdAt),
           isMine: true,
+        },
+      });
+    },
+  );
+
+  app.post(
+    '/v1/signals/:signalId/civic-process/verification/confirm',
+    {
+      schema: {
+        tags: ['Civic Process'],
+        summary: 'Confirm whether the mandated action was delivered',
+        description:
+          'Records one delivered/not-delivered confirmation per eligible actor while the canonical process is in verification. Once either outcome reaches five confirmations, the process archives with that outcome. A dispute that never reaches either threshold stays open with no invented resolution.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: SignalIdParamsSchema,
+        body: CivicVerificationConfirmationBodySchema,
+        response: CivicVerificationRouteResponses.confirm,
+      },
+    },
+    async (request, reply) => {
+      const { published, process } = await visibleProcess(request.params.signalId);
+      if (process.currentStage !== 'verification') throw verificationStageClosedError();
+      const session = await resolveSession(request, true, true);
+      if (!session) throw sessionNotAuthorizedError();
+      const actor = await participantActor(session.accountId, published.signal.communityId);
+      if (!actor) throw civicParticipationNotAuthorizedError();
+      const existing = await findCivicVerificationConfirmationByProcessAndActor(app.database.db, {
+        processId: process.id,
+        actorId: actor.id,
+      });
+      if (existing) throw alreadyConfirmedError();
+      const createdAt = now();
+      try {
+        await insertCivicVerificationConfirmation(app.database.db, {
+          id: generateId(),
+          processId: process.id,
+          actorId: actor.id,
+          outcome: request.body.outcome,
+          createdAt,
+        });
+      } catch (error: unknown) {
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          (error as { code?: unknown }).code === '23505'
+        ) {
+          throw alreadyConfirmedError();
+        }
+        if (error instanceof Error && error.message.includes('stage is closed')) {
+          throw verificationStageClosedError();
+        }
+        throw error;
+      }
+      return await reply.status(201).send({
+        data: {
+          outcome: request.body.outcome,
+          createdAt: toIsoTimestamp(createdAt),
         },
       });
     },

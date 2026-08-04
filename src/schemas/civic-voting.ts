@@ -29,6 +29,8 @@ export const CivicVotingResponseSchema = Type.Object(
           Type.Literal('voting'),
           Type.Literal('mandate'),
           Type.Literal('action'),
+          Type.Literal('verification'),
+          Type.Literal('archived'),
         ]),
         canVote: Type.Boolean(),
         hasVoted: Type.Boolean(),
