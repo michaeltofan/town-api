@@ -18,8 +18,10 @@ const deliberationMigrationPath = new URL(
   '../drizzle/0045_civic_deliberation.sql',
   import.meta.url,
 );
+const votingMigrationPath = new URL('../drizzle/0046_civic_voting.sql', import.meta.url);
 const proposalRoutePath = new URL('../src/routes/civic-proposals.ts', import.meta.url);
 const deliberationRoutePath = new URL('../src/routes/civic-deliberation.ts', import.meta.url);
+const votingRoutePath = new URL('../src/routes/civic-voting.ts', import.meta.url);
 const routePath = new URL('../src/routes/civic-process.ts', import.meta.url);
 
 describe('civic process confirmation foundation', () => {
@@ -108,6 +110,32 @@ describe('civic process confirmation foundation', () => {
     expect(migration).toContain("'deliberation_threshold'");
     expect(migration).not.toMatch(/operator|manual_transition/i);
     expect(migration).not.toMatch(/voting|ballot.*(select|winner)/i);
+  });
+
+  it('opens voting immediately once the ballot is prepared, chained in the same transaction', async () => {
+    const migration = await readFile(votingMigrationPath, 'utf8');
+
+    expect(migration).toContain("'ballot_prepared'");
+    expect(migration).toContain("'stage_transitioned_to_voting'");
+    expect(migration).toContain(
+      "'deliberation',\n    'ballot_preparation',\n    'deliberation_threshold_reached',",
+    );
+    expect(migration).toContain("'ballot_preparation',\n    'voting',\n    'ballot_prepared',");
+    expect(migration).not.toMatch(/operator|manual_transition/i);
+    expect(migration).not.toMatch(/quorum|plurality|majority/i);
+  });
+
+  it('scopes one vote per actor to a proposal in the voting stage and community', async () => {
+    const migration = await readFile(votingMigrationPath, 'utf8');
+    const route = await readFile(votingRoutePath, 'utf8');
+
+    expect(migration).toContain('"civic_votes_process_actor_unique" UNIQUE');
+    expect(migration).toContain("'voting'");
+    expect(migration).toContain('proposal_process_id IS DISTINCT FROM NEW."process_id"');
+    expect(migration).toContain('actor_community_id IS DISTINCT FROM process_community_id');
+    expect(route).toContain("app.get(\n    '/v1/signals/:signalId/civic-process/voting'");
+    expect(route).toContain("app.post(\n    '/v1/signals/:signalId/civic-process/voting/vote'");
+    expect(route.toLowerCase()).toContain('not yet a secret ballot');
   });
 
   it('exposes a read-only bounded endpoint without a state mutation surface', async () => {

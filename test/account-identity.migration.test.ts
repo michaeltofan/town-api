@@ -14,6 +14,7 @@ const EXPECTED_TABLES = [
   'civic_process_transitions',
   'civic_processes',
   'civic_proposals',
+  'civic_votes',
   'communities',
   'email_challenges',
   'google_play_purchase_links',
