@@ -28,6 +28,7 @@ export const CivicVotingResponseSchema = Type.Object(
           Type.Literal('ballot_preparation'),
           Type.Literal('voting'),
           Type.Literal('mandate'),
+          Type.Literal('action'),
         ]),
         canVote: Type.Boolean(),
         hasVoted: Type.Boolean(),

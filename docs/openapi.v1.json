@@ -19509,7 +19509,8 @@
                             "deliberation",
                             "ballot_preparation",
                             "voting",
-                            "mandate"
+                            "mandate",
+                            "action"
                           ],
                           "type": "string"
                         },
@@ -19531,7 +19532,8 @@
                             "ballot_preparation",
                             "voting",
                             "mandate",
-                            "action"
+                            "action",
+                            "verification"
                           ],
                           "type": "string"
                         },
@@ -19550,7 +19552,8 @@
                             "civic_process.stage.deliberation",
                             "civic_process.stage.ballot_preparation",
                             "civic_process.stage.voting",
-                            "civic_process.stage.mandate"
+                            "civic_process.stage.mandate",
+                            "civic_process.stage.action"
                           ],
                           "type": "string"
                         },
@@ -19569,7 +19572,8 @@
                                   "stage_transitioned_to_deliberation",
                                   "stage_transitioned_to_ballot_preparation",
                                   "stage_transitioned_to_voting",
-                                  "stage_transitioned_to_mandate"
+                                  "stage_transitioned_to_mandate",
+                                  "stage_transitioned_to_action"
                                 ],
                                 "type": "string"
                               }
@@ -19786,6 +19790,510 @@
         ]
       }
     },
+    "/v1/signals/{signalId}/civic-process/action": {
+      "get": {
+        "description": "Public winning proposal and an open, structured status log for a visible signal once its mandate is decided. Any active community actor may post a status update while the process is in action. Never invents a completion percentage or threshold.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "canPost": {
+                          "type": "boolean"
+                        },
+                        "currentStage": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "mandate"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "action"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "processId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "updates": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "authorDisplayName": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "isMine": {
+                                "type": "boolean"
+                              },
+                              "text": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "authorDisplayName",
+                              "text",
+                              "createdAt",
+                              "isMine"
+                            ],
+                            "title": "CivicActionUpdate",
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "type": "array"
+                        },
+                        "winner": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "authorDisplayName": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "body": {
+                                  "maxLength": 2000,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "proposalId": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "maxLength": 160,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "voteCount": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "proposalId",
+                                "authorDisplayName",
+                                "title",
+                                "body",
+                                "voteCount"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "processId",
+                        "currentStage",
+                        "winner",
+                        "canPost",
+                        "updates"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Read the action status log for a decided civic mandate",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/civic-process/action/updates": {
+      "post": {
+        "description": "Creates a short, structured status update while the canonical process is in action. Does not transition the process; verification of the action is a later stage.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "text": {
+                    "maxLength": 480,
+                    "minLength": 12,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authorDisplayName": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "isMine": {
+                          "type": "boolean"
+                        },
+                        "text": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "authorDisplayName",
+                        "text",
+                        "createdAt",
+                        "isMine"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Post a status update on a decided civic mandate",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
     "/v1/signals/{signalId}/civic-process/deliberation": {
       "get": {
         "description": "Public proposals for a visible signal with their structured deliberation contributions (observation, proposal, next_step). Optional session state derives only canContribute and isMine. Never exposes account or actor identifiers.",
@@ -19842,6 +20350,12 @@
                             {
                               "enum": [
                                 "mandate"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "action"
                               ],
                               "type": "string"
                             }
@@ -20443,6 +20957,12 @@
                                 "mandate"
                               ],
                               "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "action"
+                              ],
+                              "type": "string"
                             }
                           ]
                         },
@@ -20686,6 +21206,12 @@
                             {
                               "enum": [
                                 "mandate"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "action"
                               ],
                               "type": "string"
                             }
@@ -21171,6 +21697,12 @@
                             {
                               "enum": [
                                 "mandate"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "action"
                               ],
                               "type": "string"
                             }

@@ -20,11 +20,13 @@ const deliberationMigrationPath = new URL(
 );
 const votingMigrationPath = new URL('../drizzle/0046_civic_voting.sql', import.meta.url);
 const mandateMigrationPath = new URL('../drizzle/0047_civic_mandate.sql', import.meta.url);
+const actionMigrationPath = new URL('../drizzle/0048_civic_action.sql', import.meta.url);
 const proposalRoutePath = new URL('../src/routes/civic-proposals.ts', import.meta.url);
 const deliberationRoutePath = new URL('../src/routes/civic-deliberation.ts', import.meta.url);
 const votingRoutePath = new URL('../src/routes/civic-voting.ts', import.meta.url);
 const mandateRoutePath = new URL('../src/routes/civic-mandate.ts', import.meta.url);
 const mandateRepositoryPath = new URL('../src/db/repositories/civic-mandates.ts', import.meta.url);
+const actionRoutePath = new URL('../src/routes/civic-action.ts', import.meta.url);
 const routePath = new URL('../src/routes/civic-process.ts', import.meta.url);
 
 describe('civic process confirmation foundation', () => {
@@ -174,6 +176,41 @@ describe('civic process confirmation foundation', () => {
     expect(route).toContain('contested: mandate !== null && mandate.proposalId === null');
     expect(route.toLowerCase()).toContain('no tie-break rule is invented');
     expect(route).not.toMatch(/coin.?flip|random|earliest.?vote|tiebreak(er)?\s*(rule|logic)/i);
+  });
+
+  it('opens action immediately once the mandate is decided, chained in the same transaction', async () => {
+    const migration = await readFile(actionMigrationPath, 'utf8');
+
+    expect(migration).toContain("'mandate_decided'");
+    expect(migration).toContain("'stage_transitioned_to_action'");
+    expect(migration).toContain(
+      '"from_stage" = \'mandate\'\n      AND "to_stage" = \'action\'\n      AND "reason_key" = \'mandate_decided\'',
+    );
+    expect(migration).toContain('CREATE TABLE "town"."civic_action_updates"');
+    expect(migration).not.toMatch(/operator|manual_transition/i);
+    expect(migration).not.toMatch(/cron|pg_cron|scheduled job/i);
+  });
+
+  it('opens action only for a decided mandate; a contested mandate stays parked', async () => {
+    const repository = await readFile(mandateRepositoryPath, 'utf8');
+
+    expect(repository).toContain('if (!winnerProposalId) {\n      return;\n    }');
+    expect(repository).toContain("'mandate_decided'");
+    expect(repository).toContain("current_stage = 'action'");
+    expect(repository).not.toMatch(/verification|archived/i);
+  });
+
+  it('scopes action status updates to any active community actor while action is open', async () => {
+    const migration = await readFile(actionMigrationPath, 'utf8');
+    const route = await readFile(actionRoutePath, 'utf8');
+
+    expect(migration).toContain('"civic_action_updates_process_id_fkey"');
+    expect(migration).toContain('"civic_action_updates_author_actor_id_fkey"');
+    expect(migration).toContain("IF process_stage IS DISTINCT FROM 'action' THEN");
+    expect(migration).toContain('actor_community_id IS DISTINCT FROM process_community_id');
+    expect(route).toContain("app.get(\n    '/v1/signals/:signalId/civic-process/action'");
+    expect(route).toContain("app.post(\n    '/v1/signals/:signalId/civic-process/action/updates'");
+    expect(route).not.toMatch(/completionPercent|completionThreshold|progressPercent/i);
   });
 
   it('exposes a read-only bounded endpoint without a state mutation surface', async () => {

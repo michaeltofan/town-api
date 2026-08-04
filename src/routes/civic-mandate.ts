@@ -52,7 +52,7 @@ export const civicMandateRoutes: FastifyPluginCallbackTypebox<CivicMandateRoutes
       if (!process) throw new Error('Civic process disappeared after lazy close check');
 
       const mandate =
-        process.currentStage === 'mandate'
+        process.currentStage === 'mandate' || process.currentStage === 'action'
           ? await findCivicMandate(app.database.db, process.id)
           : null;
       const winnerProposal = mandate?.proposalId
@@ -63,10 +63,12 @@ export const civicMandateRoutes: FastifyPluginCallbackTypebox<CivicMandateRoutes
         data: {
           processId: process.id,
           currentStage:
-            process.currentStage === 'voting' || process.currentStage === 'mandate'
+            process.currentStage === 'voting' ||
+            process.currentStage === 'mandate' ||
+            process.currentStage === 'action'
               ? process.currentStage
               : 'voting',
-          decided: process.currentStage === 'mandate',
+          decided: process.currentStage === 'mandate' || process.currentStage === 'action',
           contested: mandate !== null && mandate.proposalId === null,
           winner: winnerProposal
             ? {

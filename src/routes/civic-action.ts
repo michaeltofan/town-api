@@ -10,11 +10,12 @@ import {
 } from '../ceremony/passkey-authentication/session-transport.js';
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
 import {
-  insertCivicDeliberationContribution,
-  listCivicDeliberationContributionsForProcess,
-} from '../db/repositories/civic-deliberation.js';
+  insertCivicActionUpdate,
+  listCivicActionUpdatesForProcess,
+} from '../db/repositories/civic-action.js';
+import { closeVotingWindowIfElapsed, findCivicMandate } from '../db/repositories/civic-mandates.js';
 import { findCivicProcessBySignalId } from '../db/repositories/civic-processes.js';
-import { findCivicProposalById, listCivicProposals } from '../db/repositories/civic-proposals.js';
+import { findCivicProposalById } from '../db/repositories/civic-proposals.js';
 import { findActiveCivicActorByAccountId } from '../db/repositories/confirmations.js';
 import { findPublishedSignalById } from '../db/repositories/signals.js';
 import {
@@ -30,15 +31,11 @@ import {
   type LocalParticipationEligibilityResolver,
 } from '../membership/local-eligibility.js';
 import { findEntitlementByAccountId } from '../membership/repositories/entitlements.js';
-import {
-  CivicDeliberationContributionBodySchema,
-  CivicDeliberationRouteResponses,
-  SignalProposalIdParamsSchema,
-} from '../schemas/civic-deliberation.js';
+import { CivicActionRouteResponses, CivicActionUpdateBodySchema } from '../schemas/civic-action.js';
 import { ERROR_CODE } from '../schemas/error.js';
 import { SignalIdParamsSchema } from '../schemas/signals.js';
 
-export type CivicDeliberationRoutesOptions = {
+export type CivicActionRoutesOptions = {
   env: Env;
   now?: () => string;
   generateId?: () => string;
@@ -54,15 +51,7 @@ function validationError(): AppError {
 }
 
 function stageClosedError(): AppError {
-  return new AppError(
-    409,
-    'CIVIC_DELIBERATION_STAGE_CLOSED',
-    'The deliberation stage is not open.',
-  );
-}
-
-function proposalNotFoundError(): AppError {
-  return new AppError(404, 'CIVIC_PROPOSAL_NOT_FOUND', 'The requested proposal was not found.');
+  return new AppError(409, 'CIVIC_ACTION_STAGE_CLOSED', 'The action stage is not open.');
 }
 
 function singleHeader(value: string | string[] | undefined): string | undefined {
@@ -89,9 +78,11 @@ function rejectNonSessionSchemes(authorization: string | string[] | undefined): 
   }
 }
 
-export const civicDeliberationRoutes: FastifyPluginCallbackTypebox<
-  CivicDeliberationRoutesOptions
-> = (app, options, done) => {
+export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOptions> = (
+  app,
+  options,
+  done,
+) => {
   const now = options.now ?? (() => new Date().toISOString());
   const generateId = options.generateId ?? (() => randomUUID());
   const resolver =
@@ -176,23 +167,33 @@ export const civicDeliberationRoutes: FastifyPluginCallbackTypebox<
   async function visibleProcess(signalId: string) {
     const published = await findPublishedSignalById(app.database.db, signalId);
     if (!published) throw signalNotFoundError();
-    const process = await findCivicProcessBySignalId(app.database.db, published.signal.id);
-    if (process?.communityId !== published.signal.communityId) {
+    const initialProcess = await findCivicProcessBySignalId(app.database.db, published.signal.id);
+    if (initialProcess?.communityId !== published.signal.communityId) {
       throw new Error('Visible signal is missing its canonical civic process');
+    }
+    if (initialProcess.currentStage === 'voting') {
+      await closeVotingWindowIfElapsed(app.database.db, {
+        processId: initialProcess.id,
+        now: now(),
+      });
+    }
+    const process = await findCivicProcessBySignalId(app.database.db, published.signal.id);
+    if (!process) {
+      throw new Error('Civic process disappeared after lazy close check');
     }
     return { published, process };
   }
 
   app.get(
-    '/v1/signals/:signalId/civic-process/deliberation',
+    '/v1/signals/:signalId/civic-process/action',
     {
       schema: {
         tags: ['Civic Process'],
-        summary: 'Read civic deliberation on the proposals for a civic process',
+        summary: 'Read the action status log for a decided civic mandate',
         description:
-          'Public proposals for a visible signal with their structured deliberation contributions (observation, proposal, next_step). Optional session state derives only canContribute and isMine. Never exposes account or actor identifiers.',
+          'Public winning proposal and an open, structured status log for a visible signal once its mandate is decided. Any active community actor may post a status update while the process is in action. Never invents a completion percentage or threshold.',
         params: SignalIdParamsSchema,
-        response: CivicDeliberationRouteResponses.read,
+        response: CivicActionRouteResponses.read,
       },
     },
     async (request, reply) => {
@@ -202,47 +203,39 @@ export const civicDeliberationRoutes: FastifyPluginCallbackTypebox<
         session?.accountId ?? null,
         published.signal.communityId,
       );
-      const [proposals, contributions] = await Promise.all([
-        listCivicProposals(app.database.db, process.id),
-        listCivicDeliberationContributionsForProcess(app.database.db, process.id),
+      const mandate =
+        process.currentStage === 'mandate' || process.currentStage === 'action'
+          ? await findCivicMandate(app.database.db, process.id)
+          : null;
+      const [winnerProposal, updates] = await Promise.all([
+        mandate?.proposalId ? findCivicProposalById(app.database.db, mandate.proposalId) : null,
+        process.currentStage === 'action'
+          ? listCivicActionUpdatesForProcess(app.database.db, process.id)
+          : Promise.resolve([]),
       ]);
-      const contributionsByProposal = new Map<string, typeof contributions>();
-      for (const contribution of contributions) {
-        const bucket = contributionsByProposal.get(contribution.proposalId);
-        if (bucket) {
-          bucket.push(contribution);
-        } else {
-          contributionsByProposal.set(contribution.proposalId, [contribution]);
-        }
-      }
       return await reply.status(200).send({
         data: {
           processId: process.id,
           currentStage:
-            process.currentStage === 'proposals' ||
-            process.currentStage === 'deliberation' ||
-            process.currentStage === 'ballot_preparation' ||
-            process.currentStage === 'voting' ||
-            process.currentStage === 'mandate' ||
-            process.currentStage === 'action'
+            process.currentStage === 'mandate' || process.currentStage === 'action'
               ? process.currentStage
-              : 'proposals',
-          canContribute: process.currentStage === 'deliberation' && actor !== null,
-          proposals: proposals.map((proposal) => ({
-            id: proposal.id,
-            authorDisplayName: proposal.authorDisplayName,
-            title: proposal.title,
-            body: proposal.body,
-            createdAt: toIsoTimestamp(proposal.createdAt),
-            isMine: actor?.id === proposal.authorActorId,
-            contributions: (contributionsByProposal.get(proposal.id) ?? []).map((contribution) => ({
-              id: contribution.id,
-              authorDisplayName: contribution.authorDisplayName,
-              intent: contribution.intent,
-              text: contribution.text,
-              createdAt: toIsoTimestamp(contribution.createdAt),
-              isMine: actor?.id === contribution.authorActorId,
-            })),
+              : 'mandate',
+          winner: winnerProposal
+            ? {
+                proposalId: winnerProposal.id,
+                authorDisplayName: winnerProposal.authorDisplayName,
+                title: winnerProposal.title,
+                body: winnerProposal.body,
+                voteCount: mandate?.voteCount ?? 0,
+              }
+            : null,
+          canPost: process.currentStage === 'action' && actor !== null,
+          updates: updates.map((update) => ({
+            id: update.id,
+            authorDisplayName: update.authorDisplayName,
+            text: update.text,
+            createdAt: toIsoTimestamp(update.createdAt),
+            isMine: actor?.id === update.authorActorId,
           })),
         },
       });
@@ -250,39 +243,35 @@ export const civicDeliberationRoutes: FastifyPluginCallbackTypebox<
   );
 
   app.post(
-    '/v1/signals/:signalId/civic-process/deliberation/proposals/:proposalId/contributions',
+    '/v1/signals/:signalId/civic-process/action/updates',
     {
       schema: {
         tags: ['Civic Process'],
-        summary: 'Publish a deliberation contribution on one proposal',
+        summary: 'Post a status update on a decided civic mandate',
         description:
-          'Creates a structured contribution (observation, proposal, or next step) on one proposal while the canonical process is in deliberation. Session and CSRF rules are unchanged. Does not transition the process.',
+          'Creates a short, structured status update while the canonical process is in action. Does not transition the process; verification of the action is a later stage.',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
-        params: SignalProposalIdParamsSchema,
-        body: CivicDeliberationContributionBodySchema,
-        response: CivicDeliberationRouteResponses.create,
+        params: SignalIdParamsSchema,
+        body: CivicActionUpdateBodySchema,
+        response: CivicActionRouteResponses.create,
       },
     },
     async (request, reply) => {
       const { published, process } = await visibleProcess(request.params.signalId);
-      if (process.currentStage !== 'deliberation') throw stageClosedError();
-      const proposal = await findCivicProposalById(app.database.db, request.params.proposalId);
-      if (proposal?.processId !== process.id) throw proposalNotFoundError();
+      if (process.currentStage !== 'action') throw stageClosedError();
       const session = await resolveSession(request, true, true);
       if (!session) throw sessionNotAuthorizedError();
       const actor = await participantActor(session.accountId, published.signal.communityId);
       if (!actor) throw civicParticipationNotAuthorizedError();
       const text = request.body.text.trim();
       if (text.length < 12 || text.length > 480) throw validationError();
-      const contributionId = generateId();
+      const updateId = generateId();
       const createdAt = now();
       try {
-        await insertCivicDeliberationContribution(app.database.db, {
-          id: contributionId,
+        await insertCivicActionUpdate(app.database.db, {
+          id: updateId,
           processId: process.id,
-          proposalId: proposal.id,
           actorId: actor.id,
-          intent: request.body.intent,
           text,
           createdAt,
         });
@@ -294,15 +283,11 @@ export const civicDeliberationRoutes: FastifyPluginCallbackTypebox<
       }
       return await reply.status(201).send({
         data: {
-          proposalId: proposal.id,
-          contribution: {
-            id: contributionId,
-            authorDisplayName: actor.displayLabel,
-            intent: request.body.intent,
-            text,
-            createdAt: toIsoTimestamp(createdAt),
-            isMine: true,
-          },
+          id: updateId,
+          authorDisplayName: actor.displayLabel,
+          text,
+          createdAt: toIsoTimestamp(createdAt),
+          isMine: true,
         },
       });
     },

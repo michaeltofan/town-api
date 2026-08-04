@@ -617,7 +617,7 @@ describe('civic process confirmation integration', () => {
     expect(votingResponse.body).not.toMatch(/accountId|actorId/);
   });
 
-  it('closes voting lazily once its window elapses and records an honest mandate for a clear winner', async () => {
+  it('closes voting lazily, records an honest mandate for a clear winner, and opens action in the same chain', async () => {
     const signalId = randomUUID();
     const actorIds = Array.from({ length: 6 }, () => randomUUID());
 
@@ -747,7 +747,7 @@ describe('civic process confirmation integration', () => {
     expect(mandateResponse.json()).toMatchObject({
       data: {
         processId,
-        currentStage: 'mandate',
+        currentStage: 'action',
         decided: true,
         contested: false,
         winner: {
@@ -763,8 +763,10 @@ describe('civic process confirmation integration', () => {
 
     const dbState = await pool.query<{
       current_stage: string;
-      transitions: string;
-      events: string;
+      mandate_transitions: string;
+      mandate_events: string;
+      action_transitions: string;
+      action_events: string;
       mandate_proposal_id: string | null;
       mandate_vote_count: number;
       mandate_total_votes: number;
@@ -776,11 +778,21 @@ describe('civic process confirmation integration', () => {
           WHERE transition.process_id = process.id
             AND transition.from_stage = 'voting'
             AND transition.to_stage = 'mandate'
-            AND transition.reason_key = 'voting_window_closed') AS transitions,
+            AND transition.reason_key = 'voting_window_closed') AS mandate_transitions,
          (SELECT count(*)::text
           FROM town.civic_process_events event
           WHERE event.process_id = process.id
-            AND event.event_type = 'stage_transitioned_to_mandate') AS events,
+            AND event.event_type = 'stage_transitioned_to_mandate') AS mandate_events,
+         (SELECT count(*)::text
+          FROM town.civic_process_transitions transition
+          WHERE transition.process_id = process.id
+            AND transition.from_stage = 'mandate'
+            AND transition.to_stage = 'action'
+            AND transition.reason_key = 'mandate_decided') AS action_transitions,
+         (SELECT count(*)::text
+          FROM town.civic_process_events event
+          WHERE event.process_id = process.id
+            AND event.event_type = 'stage_transitioned_to_action') AS action_events,
          mandate.proposal_id AS mandate_proposal_id,
          mandate.vote_count AS mandate_vote_count,
          mandate.total_votes AS mandate_total_votes
@@ -791,9 +803,11 @@ describe('civic process confirmation integration', () => {
     );
     expect(dbState.rows).toEqual([
       {
-        current_stage: 'mandate',
-        transitions: '1',
-        events: '1',
+        current_stage: 'action',
+        mandate_transitions: '1',
+        mandate_events: '1',
+        action_transitions: '1',
+        action_events: '1',
         mandate_proposal_id: firstProposalId,
         mandate_vote_count: 3,
         mandate_total_votes: 4,
@@ -815,9 +829,9 @@ describe('civic process confirmation integration', () => {
     expect(processResponse.statusCode).toBe(200);
     expect(processResponse.json()).toMatchObject({
       data: {
-        currentStage: 'mandate',
-        stageLabelKey: 'civic_process.stage.mandate',
-        nextStage: 'action',
+        currentStage: 'action',
+        stageLabelKey: 'civic_process.stage.action',
+        nextStage: 'verification',
         closingAt: null,
         transitionRule: null,
         timeline: [
@@ -827,9 +841,51 @@ describe('civic process confirmation integration', () => {
           { type: 'stage_transitioned_to_ballot_preparation' },
           { type: 'stage_transitioned_to_voting' },
           { type: 'stage_transitioned_to_mandate' },
+          { type: 'stage_transitioned_to_action' },
         ],
       },
     });
+
+    const actionReadResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/action`,
+    });
+    expect(actionReadResponse.statusCode).toBe(200);
+    expect(actionReadResponse.json()).toMatchObject({
+      data: {
+        processId,
+        currentStage: 'action',
+        winner: { proposalId: firstProposalId, voteCount: 3 },
+        canPost: false,
+        updates: [],
+      },
+    });
+
+    await pool.query(
+      `INSERT INTO town.civic_action_updates (id, process_id, author_actor_id, text, created_at)
+       VALUES (gen_random_uuid(), $1, $2, 'First status update on the winning proposal', now())`,
+      [processId, actorIds[0]],
+    );
+
+    const updateRow = await pool.query<{ id: string }>(
+      'SELECT id FROM town.civic_action_updates WHERE process_id = $1',
+      [processId],
+    );
+    expect(updateRow.rows).toHaveLength(1);
+
+    const actionReadAfterUpdate = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/action`,
+    });
+    expect(actionReadAfterUpdate.statusCode).toBe(200);
+    const actionBody = actionReadAfterUpdate.json<{
+      data: { updates: { id: string; authorDisplayName: string; text: string }[] };
+    }>();
+    expect(actionBody.data.updates).toHaveLength(1);
+    expect(actionBody.data.updates[0]).toMatchObject({
+      text: 'First status update on the winning proposal',
+    });
+    expect(actionReadAfterUpdate.body).not.toMatch(/accountId|actorId/);
   });
 
   it('reports a perfect tie as contested with no winner and no invented tie-break', async () => {
@@ -958,6 +1014,37 @@ describe('civic process confirmation integration', () => {
       [processId],
     );
     expect(mandateRow.rows).toEqual([{ proposal_id: null }]);
+
+    const stageState = await pool.query<{ current_stage: string; action_transitions: string }>(
+      `SELECT
+         process.current_stage,
+         (SELECT count(*)::text
+          FROM town.civic_process_transitions transition
+          WHERE transition.process_id = process.id
+            AND transition.from_stage = 'mandate'
+            AND transition.to_stage = 'action') AS action_transitions
+       FROM town.civic_processes process
+       WHERE process.id = $1`,
+      [processId],
+    );
+    expect(stageState.rows).toEqual([{ current_stage: 'mandate', action_transitions: '0' }]);
+
+    const actionResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/action`,
+    });
+    expect(actionResponse.statusCode).toBe(200);
+    expect(actionResponse.json()).toMatchObject({
+      data: { currentStage: 'mandate', winner: null, canPost: false, updates: [] },
+    });
+
+    await expect(
+      pool.query(
+        `INSERT INTO town.civic_action_updates (id, process_id, author_actor_id, text, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'A contested mandate never opens action', now())`,
+        [processId, actorIds[0]],
+      ),
+    ).rejects.toThrow(/civic action stage is closed/);
   });
 
   it('preserves fail-closed missing and invalid signal behavior', async () => {
