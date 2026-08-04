@@ -2023,6 +2023,7 @@ export const civicProcesses = town.table(
     signalId: uuid('signal_id').notNull(),
     communityId: uuid('community_id').notNull(),
     currentStage: text('current_stage').notNull(),
+    votingClosesAt: timestamp('voting_closes_at', { withTimezone: true, mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
@@ -2036,7 +2037,7 @@ export const civicProcesses = town.table(
     check(
       'civic_processes_stage_supported',
       sql`${table.currentStage} in (
-        'confirmation', 'proposals', 'deliberation', 'ballot_preparation', 'voting'
+        'confirmation', 'proposals', 'deliberation', 'ballot_preparation', 'voting', 'mandate'
       )`,
     ),
     index('civic_processes_community_created_idx').on(table.communityId, table.createdAt),
@@ -2188,6 +2189,10 @@ export const civicProcessTransitions = town.table(
         ${table.fromStage} = 'ballot_preparation'
         and ${table.toStage} = 'voting'
         and ${table.reasonKey} = 'ballot_prepared'
+      ) or (
+        ${table.fromStage} = 'voting'
+        and ${table.toStage} = 'mandate'
+        and ${table.reasonKey} = 'voting_window_closed'
       )`,
     ),
     index('civic_process_transitions_process_occurred_idx').on(table.processId, table.occurredAt),
@@ -2215,11 +2220,35 @@ export const civicProcessEvents = town.table(
         'stage_transitioned_to_proposals',
         'stage_transitioned_to_deliberation',
         'stage_transitioned_to_ballot_preparation',
-        'stage_transitioned_to_voting'
+        'stage_transitioned_to_voting',
+        'stage_transitioned_to_mandate'
       )`,
     ),
     unique('civic_process_events_process_type_unique').on(table.processId, table.eventType),
     index('civic_process_events_process_occurred_idx').on(table.processId, table.occurredAt),
+  ],
+);
+
+export const civicMandates = town.table(
+  'civic_mandates',
+  {
+    processId: uuid('process_id').primaryKey(),
+    proposalId: uuid('proposal_id'),
+    voteCount: integer('vote_count').notNull(),
+    totalVotes: integer('total_votes').notNull(),
+    decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_mandates_process_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.proposalId],
+      foreignColumns: [civicProposals.id],
+      name: 'civic_mandates_proposal_id_fkey',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -2229,3 +2258,4 @@ export type CivicDeliberationContributionRow = typeof civicDeliberationContribut
 export type CivicVoteRow = typeof civicVotes.$inferSelect;
 export type CivicProcessTransitionRow = typeof civicProcessTransitions.$inferSelect;
 export type CivicProcessEventRow = typeof civicProcessEvents.$inferSelect;
+export type CivicMandateRow = typeof civicMandates.$inferSelect;

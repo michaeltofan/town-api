@@ -617,6 +617,349 @@ describe('civic process confirmation integration', () => {
     expect(votingResponse.body).not.toMatch(/accountId|actorId/);
   });
 
+  it('closes voting lazily once its window elapses and records an honest mandate for a clear winner', async () => {
+    const signalId = randomUUID();
+    const actorIds = Array.from({ length: 6 }, () => randomUUID());
+
+    await pool.query(
+      `INSERT INTO town.signals
+       SELECT (jsonb_populate_record(
+         NULL::town.signals,
+         to_jsonb(source) || jsonb_build_object(
+           'id', $1::uuid,
+           'slug', 'civic-process-mandate-winner-test',
+           'position', 32004,
+           'created_at', now(),
+           'updated_at', now(),
+           'published_at', now()
+         )
+       )).*
+       FROM town.signals source
+       ORDER BY position
+       LIMIT 1`,
+      [signalId],
+    );
+
+    for (const actorId of actorIds) {
+      await pool.query(
+        `INSERT INTO town.actors (
+           id, kind, status, display_label, community_id, account_id,
+           local_eligibility_verified_at, community_commitment_accepted_at,
+           community_commitment_version, created_at, updated_at
+         )
+         SELECT
+           $1::uuid, 'controlled_test', 'active', $1::text, community_id, NULL,
+           NULL, NULL, NULL, now(), now()
+         FROM town.signals
+         WHERE id = $2`,
+        [actorId, signalId],
+      );
+    }
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId) =>
+        pool.query(
+          `INSERT INTO town.signal_confirmations
+             (id, signal_id, actor_id, confirmed_at, created_at)
+           VALUES (gen_random_uuid(), $1, $2, now(), now())`,
+          [signalId, actorId],
+        ),
+      ),
+    );
+
+    const processRow = await pool.query<{ id: string }>(
+      'SELECT id FROM town.civic_processes WHERE signal_id = $1',
+      [signalId],
+    );
+    const processId = processRow.rows[0]?.id;
+    if (!processId) throw new Error('missing process id');
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId, index) =>
+        pool.query(
+          `INSERT INTO town.civic_proposals
+             (id, process_id, author_actor_id, title, body, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, now())`,
+          [processId, actorId, `Mandate proposal ${String(index)}`, `Body ${String(index)}`],
+        ),
+      ),
+    );
+
+    const proposalRows = await pool.query<{ id: string }>(
+      'SELECT id FROM town.civic_proposals WHERE process_id = $1 ORDER BY created_at, id',
+      [processId],
+    );
+    const proposalIds = proposalRows.rows.map((row) => row.id);
+    const firstProposalId = proposalIds[0];
+    const secondProposalId = proposalIds[1];
+    if (!firstProposalId || !secondProposalId) throw new Error('missing proposal ids');
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId, index) =>
+        pool.query(
+          `INSERT INTO town.civic_deliberation_contributions
+             (id, process_id, proposal_id, author_actor_id, intent, text, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, 'observation', $4, now())`,
+          [processId, proposalIds[index], actorId, `Mandate deliberation number ${String(index)}`],
+        ),
+      ),
+    );
+
+    const stageAfterDeliberation = await pool.query<{ current_stage: string }>(
+      'SELECT current_stage FROM town.civic_processes WHERE id = $1',
+      [processId],
+    );
+    expect(stageAfterDeliberation.rows[0]?.current_stage).toBe('voting');
+
+    await Promise.all([
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, firstProposalId, actorIds[0]],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, firstProposalId, actorIds[1]],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, firstProposalId, actorIds[2]],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, secondProposalId, actorIds[3]],
+      ),
+    ]);
+
+    await pool.query(
+      "UPDATE town.civic_processes SET voting_closes_at = now() - interval '1 second' WHERE id = $1",
+      [processId],
+    );
+
+    const mandateResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/mandate`,
+    });
+    expect(mandateResponse.statusCode).toBe(200);
+    expect(mandateResponse.json()).toMatchObject({
+      data: {
+        processId,
+        currentStage: 'mandate',
+        decided: true,
+        contested: false,
+        winner: {
+          proposalId: firstProposalId,
+          voteCount: 3,
+        },
+        totalVotes: 4,
+      },
+    });
+    const mandateBody = mandateResponse.json<{ data: { decidedAt: string | null } }>();
+    expect(mandateBody.data.decidedAt).not.toBeNull();
+    expect(mandateResponse.body).not.toMatch(/accountId|actorId/);
+
+    const dbState = await pool.query<{
+      current_stage: string;
+      transitions: string;
+      events: string;
+      mandate_proposal_id: string | null;
+      mandate_vote_count: number;
+      mandate_total_votes: number;
+    }>(
+      `SELECT
+         process.current_stage,
+         (SELECT count(*)::text
+          FROM town.civic_process_transitions transition
+          WHERE transition.process_id = process.id
+            AND transition.from_stage = 'voting'
+            AND transition.to_stage = 'mandate'
+            AND transition.reason_key = 'voting_window_closed') AS transitions,
+         (SELECT count(*)::text
+          FROM town.civic_process_events event
+          WHERE event.process_id = process.id
+            AND event.event_type = 'stage_transitioned_to_mandate') AS events,
+         mandate.proposal_id AS mandate_proposal_id,
+         mandate.vote_count AS mandate_vote_count,
+         mandate.total_votes AS mandate_total_votes
+       FROM town.civic_processes process
+       LEFT JOIN town.civic_mandates mandate ON mandate.process_id = process.id
+       WHERE process.signal_id = $1`,
+      [signalId],
+    );
+    expect(dbState.rows).toEqual([
+      {
+        current_stage: 'mandate',
+        transitions: '1',
+        events: '1',
+        mandate_proposal_id: firstProposalId,
+        mandate_vote_count: 3,
+        mandate_total_votes: 4,
+      },
+    ]);
+
+    await expect(
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, firstProposalId, actorIds[5]],
+      ),
+    ).rejects.toThrow(/civic voting stage is closed/);
+
+    const processResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process`,
+    });
+    expect(processResponse.statusCode).toBe(200);
+    expect(processResponse.json()).toMatchObject({
+      data: {
+        currentStage: 'mandate',
+        stageLabelKey: 'civic_process.stage.mandate',
+        nextStage: 'action',
+        closingAt: null,
+        transitionRule: null,
+        timeline: [
+          { type: 'process_created' },
+          { type: 'stage_transitioned_to_proposals' },
+          { type: 'stage_transitioned_to_deliberation' },
+          { type: 'stage_transitioned_to_ballot_preparation' },
+          { type: 'stage_transitioned_to_voting' },
+          { type: 'stage_transitioned_to_mandate' },
+        ],
+      },
+    });
+  });
+
+  it('reports a perfect tie as contested with no winner and no invented tie-break', async () => {
+    const signalId = randomUUID();
+    const actorIds = Array.from({ length: 6 }, () => randomUUID());
+
+    await pool.query(
+      `INSERT INTO town.signals
+       SELECT (jsonb_populate_record(
+         NULL::town.signals,
+         to_jsonb(source) || jsonb_build_object(
+           'id', $1::uuid,
+           'slug', 'civic-process-mandate-tie-test',
+           'position', 32005,
+           'created_at', now(),
+           'updated_at', now(),
+           'published_at', now()
+         )
+       )).*
+       FROM town.signals source
+       ORDER BY position
+       LIMIT 1`,
+      [signalId],
+    );
+
+    for (const actorId of actorIds) {
+      await pool.query(
+        `INSERT INTO town.actors (
+           id, kind, status, display_label, community_id, account_id,
+           local_eligibility_verified_at, community_commitment_accepted_at,
+           community_commitment_version, created_at, updated_at
+         )
+         SELECT
+           $1::uuid, 'controlled_test', 'active', $1::text, community_id, NULL,
+           NULL, NULL, NULL, now(), now()
+         FROM town.signals
+         WHERE id = $2`,
+        [actorId, signalId],
+      );
+    }
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId) =>
+        pool.query(
+          `INSERT INTO town.signal_confirmations
+             (id, signal_id, actor_id, confirmed_at, created_at)
+           VALUES (gen_random_uuid(), $1, $2, now(), now())`,
+          [signalId, actorId],
+        ),
+      ),
+    );
+
+    const processRow = await pool.query<{ id: string }>(
+      'SELECT id FROM town.civic_processes WHERE signal_id = $1',
+      [signalId],
+    );
+    const processId = processRow.rows[0]?.id;
+    if (!processId) throw new Error('missing process id');
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId, index) =>
+        pool.query(
+          `INSERT INTO town.civic_proposals
+             (id, process_id, author_actor_id, title, body, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, now())`,
+          [processId, actorId, `Tie proposal ${String(index)}`, `Body ${String(index)}`],
+        ),
+      ),
+    );
+
+    const proposalRows = await pool.query<{ id: string }>(
+      'SELECT id FROM town.civic_proposals WHERE process_id = $1 ORDER BY created_at, id',
+      [processId],
+    );
+    const proposalIds = proposalRows.rows.map((row) => row.id);
+    const firstProposalId = proposalIds[0];
+    const secondProposalId = proposalIds[1];
+    if (!firstProposalId || !secondProposalId) throw new Error('missing proposal ids');
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId, index) =>
+        pool.query(
+          `INSERT INTO town.civic_deliberation_contributions
+             (id, process_id, proposal_id, author_actor_id, intent, text, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, 'observation', $4, now())`,
+          [processId, proposalIds[index], actorId, `Tie deliberation number ${String(index)}`],
+        ),
+      ),
+    );
+
+    await Promise.all([
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, firstProposalId, actorIds[0]],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, secondProposalId, actorIds[1]],
+      ),
+    ]);
+
+    await pool.query(
+      "UPDATE town.civic_processes SET voting_closes_at = now() - interval '1 second' WHERE id = $1",
+      [processId],
+    );
+
+    const mandateResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/mandate`,
+    });
+    expect(mandateResponse.statusCode).toBe(200);
+    expect(mandateResponse.json()).toMatchObject({
+      data: {
+        currentStage: 'mandate',
+        decided: true,
+        contested: true,
+        winner: null,
+        totalVotes: 2,
+      },
+    });
+
+    const mandateRow = await pool.query<{ proposal_id: string | null }>(
+      'SELECT proposal_id FROM town.civic_mandates WHERE process_id = $1',
+      [processId],
+    );
+    expect(mandateRow.rows).toEqual([{ proposal_id: null }]);
+  });
+
   it('preserves fail-closed missing and invalid signal behavior', async () => {
     const missing = await app.inject({
       method: 'GET',

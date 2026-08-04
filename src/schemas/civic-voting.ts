@@ -24,7 +24,11 @@ export const CivicVotingResponseSchema = Type.Object(
     data: Type.Object(
       {
         processId: Type.String({ format: 'uuid' }),
-        currentStage: Type.Union([Type.Literal('ballot_preparation'), Type.Literal('voting')]),
+        currentStage: Type.Union([
+          Type.Literal('ballot_preparation'),
+          Type.Literal('voting'),
+          Type.Literal('mandate'),
+        ]),
         canVote: Type.Boolean(),
         hasVoted: Type.Boolean(),
         myChoice: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),

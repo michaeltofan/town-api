@@ -32,6 +32,7 @@ export const CivicProposalListResponseSchema = Type.Object(
           Type.Literal('deliberation'),
           Type.Literal('ballot_preparation'),
           Type.Literal('voting'),
+          Type.Literal('mandate'),
         ]),
         canPropose: Type.Boolean(),
         proposals: Type.Array(CivicProposalSchema, { maxItems: 100 }),

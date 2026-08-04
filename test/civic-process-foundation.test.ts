@@ -19,9 +19,12 @@ const deliberationMigrationPath = new URL(
   import.meta.url,
 );
 const votingMigrationPath = new URL('../drizzle/0046_civic_voting.sql', import.meta.url);
+const mandateMigrationPath = new URL('../drizzle/0047_civic_mandate.sql', import.meta.url);
 const proposalRoutePath = new URL('../src/routes/civic-proposals.ts', import.meta.url);
 const deliberationRoutePath = new URL('../src/routes/civic-deliberation.ts', import.meta.url);
 const votingRoutePath = new URL('../src/routes/civic-voting.ts', import.meta.url);
+const mandateRoutePath = new URL('../src/routes/civic-mandate.ts', import.meta.url);
+const mandateRepositoryPath = new URL('../src/db/repositories/civic-mandates.ts', import.meta.url);
 const routePath = new URL('../src/routes/civic-process.ts', import.meta.url);
 
 describe('civic process confirmation foundation', () => {
@@ -95,7 +98,7 @@ describe('civic process confirmation foundation', () => {
     expect(route).toContain(
       "app.post(\n    '/v1/signals/:signalId/civic-process/deliberation/proposals/:proposalId/contributions'",
     );
-    expect(route).not.toMatch(/voting|ballot.*(select|winner|advance)/i);
+    expect(route).not.toMatch(/vote_count|tally|civic_votes|winner|voting_closes_at/i);
   });
 
   it('advances exactly once at five distinct deliberation participants through an audited database transition', async () => {
@@ -136,6 +139,41 @@ describe('civic process confirmation foundation', () => {
     expect(route).toContain("app.get(\n    '/v1/signals/:signalId/civic-process/voting'");
     expect(route).toContain("app.post(\n    '/v1/signals/:signalId/civic-process/voting/vote'");
     expect(route.toLowerCase()).toContain('not yet a secret ballot');
+  });
+
+  it('closes the voting window lazily and records an audited transition to mandate', async () => {
+    const migration = await readFile(mandateMigrationPath, 'utf8');
+
+    expect(migration).toContain('"voting_closes_at" timestamp with time zone');
+    expect(migration).toContain("'voting_window_closed'");
+    expect(migration).toContain("'stage_transitioned_to_mandate'");
+    expect(migration).toContain(
+      '"from_stage" = \'voting\'\n      AND "to_stage" = \'mandate\'\n      AND "reason_key" = \'voting_window_closed\'',
+    );
+    expect(migration).toContain('CREATE TABLE "town"."civic_mandates"');
+    expect(migration).not.toMatch(/operator|manual_transition/i);
+    expect(migration).not.toMatch(/cron|pg_cron|scheduled job/i);
+  });
+
+  it('closes the voting window in application code with row locking, no scheduled job', async () => {
+    const repository = await readFile(mandateRepositoryPath, 'utf8');
+
+    expect(repository).toContain('FOR UPDATE');
+    expect(repository).toContain("current_stage !== 'voting'");
+    expect(repository).toContain('tiedAtTop');
+    expect(repository).toContain(
+      'winnerProposalId = top && tiedAtTop === 1 ? top.proposal_id : null',
+    );
+    expect(repository).not.toMatch(/cron|pg_cron|node-cron|setInterval/i);
+  });
+
+  it('reports a perfect tie as contested with no invented tie-break rule', async () => {
+    const route = await readFile(mandateRoutePath, 'utf8');
+
+    expect(route).toContain("app.get(\n    '/v1/signals/:signalId/civic-process/mandate'");
+    expect(route).toContain('contested: mandate !== null && mandate.proposalId === null');
+    expect(route.toLowerCase()).toContain('no tie-break rule is invented');
+    expect(route).not.toMatch(/coin.?flip|random|earliest.?vote|tiebreak(er)?\s*(rule|logic)/i);
   });
 
   it('exposes a read-only bounded endpoint without a state mutation surface', async () => {

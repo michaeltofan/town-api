@@ -16,10 +16,10 @@ export const CivicProcessStageSchema = Type.Union(
 );
 
 const PublicCivicProcessStageSchema = Type.Unsafe<
-  'confirmation' | 'proposals' | 'deliberation' | 'ballot_preparation' | 'voting'
+  'confirmation' | 'proposals' | 'deliberation' | 'ballot_preparation' | 'voting' | 'mandate'
 >({
   type: 'string',
-  enum: ['confirmation', 'proposals', 'deliberation', 'ballot_preparation', 'voting'],
+  enum: ['confirmation', 'proposals', 'deliberation', 'ballot_preparation', 'voting', 'mandate'],
 });
 
 const PublicCivicProcessStageLabelSchema = Type.Unsafe<
@@ -28,6 +28,7 @@ const PublicCivicProcessStageLabelSchema = Type.Unsafe<
   | 'civic_process.stage.deliberation'
   | 'civic_process.stage.ballot_preparation'
   | 'civic_process.stage.voting'
+  | 'civic_process.stage.mandate'
 >({
   type: 'string',
   enum: [
@@ -36,14 +37,15 @@ const PublicCivicProcessStageLabelSchema = Type.Unsafe<
     'civic_process.stage.deliberation',
     'civic_process.stage.ballot_preparation',
     'civic_process.stage.voting',
+    'civic_process.stage.mandate',
   ],
 });
 
 const PublicCivicProcessNextStageSchema = Type.Unsafe<
-  'proposals' | 'deliberation' | 'ballot_preparation' | 'voting' | 'mandate'
+  'proposals' | 'deliberation' | 'ballot_preparation' | 'voting' | 'mandate' | 'action'
 >({
   type: 'string',
-  enum: ['proposals', 'deliberation', 'ballot_preparation', 'voting', 'mandate'],
+  enum: ['proposals', 'deliberation', 'ballot_preparation', 'voting', 'mandate', 'action'],
 });
 
 const CivicProcessTimelineEventSchema = Type.Object(
@@ -54,6 +56,7 @@ const CivicProcessTimelineEventSchema = Type.Object(
       | 'stage_transitioned_to_deliberation'
       | 'stage_transitioned_to_ballot_preparation'
       | 'stage_transitioned_to_voting'
+      | 'stage_transitioned_to_mandate'
     >({
       type: 'string',
       enum: [
@@ -62,6 +65,7 @@ const CivicProcessTimelineEventSchema = Type.Object(
         'stage_transitioned_to_deliberation',
         'stage_transitioned_to_ballot_preparation',
         'stage_transitioned_to_voting',
+        'stage_transitioned_to_mandate',
       ],
     }),
     occurredAt: Type.String({ format: 'date-time' }),
@@ -116,7 +120,7 @@ export const CivicProcessResponseSchema = Type.Object(
         hasConfirmed: Type.Boolean(),
         canConfirm: Type.Boolean(),
         nextStage: PublicCivicProcessNextStageSchema,
-        closingAt: Type.Null(),
+        closingAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
         transitionRule: CivicProcessTransitionRuleSchema,
         timeline: Type.Array(CivicProcessTimelineEventSchema, { maxItems: 50 }),
         createdAt: Type.String({ format: 'date-time' }),

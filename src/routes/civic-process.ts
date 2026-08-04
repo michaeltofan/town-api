@@ -12,6 +12,7 @@ import {
   findConfirmationByActorAndSignal,
 } from '../db/repositories/confirmations.js';
 import { countDistinctCivicDeliberationParticipants } from '../db/repositories/civic-deliberation.js';
+import { closeVotingWindowIfElapsed } from '../db/repositories/civic-mandates.js';
 import { countCivicProposalsForProcess } from '../db/repositories/civic-proposals.js';
 import { countCivicVotesForProcess } from '../db/repositories/civic-votes.js';
 import {
@@ -99,9 +100,19 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
         throw signalNotFoundError();
       }
 
-      const process = await findCivicProcessBySignalId(app.database.db, published.signal.id);
-      if (process?.communityId !== published.signal.communityId) {
+      const initialProcess = await findCivicProcessBySignalId(app.database.db, published.signal.id);
+      if (initialProcess?.communityId !== published.signal.communityId) {
         throw new Error('Visible signal is missing its canonical civic process');
+      }
+      if (initialProcess.currentStage === 'voting') {
+        await closeVotingWindowIfElapsed(app.database.db, {
+          processId: initialProcess.id,
+          now: now(),
+        });
+      }
+      const process = await findCivicProcessBySignalId(app.database.db, published.signal.id);
+      if (!process) {
+        throw new Error('Civic process disappeared after lazy close check');
       }
 
       const [
@@ -175,7 +186,9 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
                   ? 'civic_process.stage.deliberation'
                   : process.currentStage === 'ballot_preparation'
                     ? 'civic_process.stage.ballot_preparation'
-                    : 'civic_process.stage.voting',
+                    : process.currentStage === 'voting'
+                      ? 'civic_process.stage.voting'
+                      : 'civic_process.stage.mandate',
           confirmationCount,
           proposalCount,
           deliberationParticipantCount,
@@ -191,8 +204,13 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
                   ? 'ballot_preparation'
                   : process.currentStage === 'ballot_preparation'
                     ? 'voting'
-                    : 'mandate',
-          closingAt: null,
+                    : process.currentStage === 'voting'
+                      ? 'mandate'
+                      : 'action',
+          closingAt:
+            process.currentStage === 'voting' && process.votingClosesAt
+              ? toIsoTimestamp(process.votingClosesAt)
+              : null,
           transitionRule:
             process.currentStage === 'confirmation'
               ? {
