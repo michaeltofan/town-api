@@ -178,5 +178,18 @@ export const CivicProcessResponseSchema = Type.Object(
   { additionalProperties: false, $id: 'CivicProcessResponse' },
 );
 
+export const CivicProcessViewedResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        processId: Type.String({ format: 'uuid' }),
+        viewedAt: Type.String({ format: 'date-time' }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'CivicProcessViewedResponse' },
+);
+
 export type CivicProcessStage = Static<typeof CivicProcessStageSchema>;
 export type CivicProcessResponse = Static<typeof CivicProcessResponseSchema>;

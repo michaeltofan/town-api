@@ -62,6 +62,7 @@ describe('GET /v1/account/activity', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json<MemberActivityResponse>();
     expect(body.data.items).toEqual([]);
+    expect(body.data.processes).toEqual([]);
   });
 
   it('returns real confirmations, contributions, and signal evolution — no invented rows', async () => {
@@ -135,5 +136,81 @@ describe('GET /v1/account/activity', () => {
     for (const item of body.data.items) {
       expect(item.signal.id).toBe(signalId);
     }
+
+    // Civic Inbox: this signal's canonical civic process appears because the
+    // member actually participated (confirmed it), not just because it exists.
+    expect(body.data.processes).toHaveLength(1);
+    expect(body.data.processes[0]).toMatchObject({
+      signalId,
+      currentStage: 'confirmation',
+      isNew: true,
+    });
+  });
+
+  it('marks a civic process viewed, clearing its Civic Inbox "new" marker until it changes again', async () => {
+    const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal2;
+    const { login } = await participantSession('InboxViewed+setup@example.com');
+
+    const confirm = await ctx.app.inject({
+      method: 'PUT',
+      url: `/v1/signals/${signalId}/confirmation`,
+      headers: { authorization: `Session ${login.sessionToken}` },
+      payload: {},
+    });
+    expect(confirm.statusCode).toBe(200);
+
+    const beforeView = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/account/activity',
+      headers: { authorization: `Session ${login.sessionToken}` },
+    });
+    expect(beforeView.statusCode).toBe(200);
+    const beforeBody = beforeView.json<MemberActivityResponse>();
+    const beforeProcess = beforeBody.data.processes.find((p) => p.signalId === signalId);
+    expect(beforeProcess).toMatchObject({ isNew: true });
+
+    const viewed = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/signals/${signalId}/civic-process/viewed`,
+      headers: { authorization: `Session ${login.sessionToken}` },
+      payload: {},
+    });
+    expect(viewed.statusCode).toBe(200);
+    expect(viewed.json()).toMatchObject({
+      data: { processId: beforeProcess?.processId },
+    });
+
+    const afterView = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/account/activity',
+      headers: { authorization: `Session ${login.sessionToken}` },
+    });
+    expect(afterView.statusCode).toBe(200);
+    const afterBody = afterView.json<MemberActivityResponse>();
+    const afterProcess = afterBody.data.processes.find((p) => p.signalId === signalId);
+    expect(afterProcess).toMatchObject({ isNew: false });
+  });
+
+  it('rejects marking a civic process viewed without a session', async () => {
+    const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal1;
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/signals/${signalId}/civic-process/viewed`,
+      payload: {},
+    });
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: { code: 'SESSION_NOT_AUTHORIZED' } });
+  });
+
+  it('rejects marking a missing signal viewed', async () => {
+    const { login } = await participantSession('InboxViewedMissing+setup@example.com');
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/signals/00000000-0000-4000-8000-000000000999/civic-process/viewed',
+      headers: { authorization: `Session ${login.sessionToken}` },
+      payload: {},
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ error: { code: 'SIGNAL_NOT_FOUND' } });
   });
 });

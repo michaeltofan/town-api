@@ -2401,6 +2401,30 @@ export const civicVerifications = town.table(
   ],
 );
 
+export const civicProcessViews = town.table(
+  'civic_process_views',
+  {
+    id: uuid('id').primaryKey(),
+    actorId: uuid('actor_id').notNull(),
+    processId: uuid('process_id').notNull(),
+    viewedAt: timestamp('viewed_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.actorId],
+      foreignColumns: [actors.id],
+      name: 'civic_process_views_actor_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_process_views_process_id_fkey',
+    }).onDelete('restrict'),
+    unique('civic_process_views_actor_process_unique').on(table.actorId, table.processId),
+    index('civic_process_views_process_id_idx').on(table.processId),
+  ],
+);
+
 export type CivicProcessRow = typeof civicProcesses.$inferSelect;
 export type CivicProposalRow = typeof civicProposals.$inferSelect;
 export type CivicDeliberationContributionRow = typeof civicDeliberationContributions.$inferSelect;
@@ -2412,3 +2436,4 @@ export type CivicActionUpdateRow = typeof civicActionUpdates.$inferSelect;
 export type CivicVerificationEvidenceRow = typeof civicVerificationEvidence.$inferSelect;
 export type CivicVerificationConfirmationRow = typeof civicVerificationConfirmations.$inferSelect;
 export type CivicVerificationRow = typeof civicVerifications.$inferSelect;
+export type CivicProcessViewRow = typeof civicProcessViews.$inferSelect;

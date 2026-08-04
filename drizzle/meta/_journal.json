@@ -351,6 +351,13 @@
       "when": 1787510400000,
       "tag": "0049_civic_verification",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1787596800000,
+      "tag": "0050_civic_process_views",
+      "breakpoints": true
     }
   ]
 }
