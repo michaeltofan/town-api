@@ -41,7 +41,7 @@ describe('civic process confirmation integration', () => {
       FROM town.civic_processes p
       JOIN town.signals s ON s.id = p.signal_id
       WHERE p.community_id <> s.community_id
-         OR p.current_stage NOT IN ('confirmation', 'proposals', 'deliberation', 'ballot_preparation')`);
+         OR p.current_stage NOT IN ('confirmation', 'proposals', 'deliberation', 'ballot_preparation', 'voting')`);
     expect(invalid.rows[0]?.count).toBe('0');
   });
 
@@ -379,7 +379,7 @@ describe('civic process confirmation integration', () => {
     ).rejects.toThrow(/civic proposal stage is closed/);
   });
 
-  it('advances once when five distinct actors contribute to deliberation and closes it', async () => {
+  it('advances through ballot_preparation into voting immediately, closes deliberation, and tallies one vote per actor', async () => {
     const signalId = randomUUID();
     const actorIds = Array.from({ length: 6 }, () => randomUUID());
 
@@ -479,8 +479,10 @@ describe('civic process confirmation integration', () => {
 
     const state = await pool.query<{
       current_stage: string;
-      transitions: string;
-      transition_events: string;
+      ballot_transitions: string;
+      ballot_events: string;
+      voting_transitions: string;
+      voting_events: string;
     }>(
       `SELECT
          process.current_stage,
@@ -488,17 +490,32 @@ describe('civic process confirmation integration', () => {
           FROM town.civic_process_transitions transition
           WHERE transition.process_id = process.id
             AND transition.from_stage = 'deliberation'
-            AND transition.to_stage = 'ballot_preparation') AS transitions,
+            AND transition.to_stage = 'ballot_preparation') AS ballot_transitions,
          (SELECT count(*)::text
           FROM town.civic_process_events event
           WHERE event.process_id = process.id
-            AND event.event_type = 'stage_transitioned_to_ballot_preparation') AS transition_events
+            AND event.event_type = 'stage_transitioned_to_ballot_preparation') AS ballot_events,
+         (SELECT count(*)::text
+          FROM town.civic_process_transitions transition
+          WHERE transition.process_id = process.id
+            AND transition.from_stage = 'ballot_preparation'
+            AND transition.to_stage = 'voting') AS voting_transitions,
+         (SELECT count(*)::text
+          FROM town.civic_process_events event
+          WHERE event.process_id = process.id
+            AND event.event_type = 'stage_transitioned_to_voting') AS voting_events
        FROM town.civic_processes process
        WHERE process.signal_id = $1`,
       [signalId],
     );
     expect(state.rows).toEqual([
-      { current_stage: 'ballot_preparation', transitions: '1', transition_events: '1' },
+      {
+        current_stage: 'voting',
+        ballot_transitions: '1',
+        ballot_events: '1',
+        voting_transitions: '1',
+        voting_events: '1',
+      },
     ]);
 
     const response = await app.inject({
@@ -508,18 +525,20 @@ describe('civic process confirmation integration', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       data: {
-        currentStage: 'ballot_preparation',
-        stageLabelKey: 'civic_process.stage.ballot_preparation',
+        currentStage: 'voting',
+        stageLabelKey: 'civic_process.stage.voting',
         confirmationCount: 5,
         proposalCount: 5,
         deliberationParticipantCount: 5,
-        nextStage: 'voting',
+        voteCount: 0,
+        nextStage: 'mandate',
         transitionRule: null,
         timeline: [
           { type: 'process_created' },
           { type: 'stage_transitioned_to_proposals' },
           { type: 'stage_transitioned_to_deliberation' },
           { type: 'stage_transitioned_to_ballot_preparation' },
+          { type: 'stage_transitioned_to_voting' },
         ],
       },
     });
@@ -532,6 +551,70 @@ describe('civic process confirmation integration', () => {
         [processId, proposalIds[0], actorIds[5]],
       ),
     ).rejects.toThrow(/civic deliberation stage is closed/);
+
+    await Promise.all([
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, proposalIds[0], actorIds[0]],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, proposalIds[0], actorIds[1]],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, proposalIds[1], actorIds[2]],
+      ),
+    ]);
+
+    await expect(
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, proposalIds[1], actorIds[0]],
+      ),
+    ).rejects.toThrow(/civic_votes_process_actor_unique/);
+
+    await expect(
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, proposalIds[0], actorIds[5]],
+      ),
+    ).resolves.toBeDefined();
+
+    const votingResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/voting`,
+    });
+    expect(votingResponse.statusCode).toBe(200);
+    const votingBody = votingResponse.json<{
+      data: {
+        currentStage: string;
+        canVote: boolean;
+        hasVoted: boolean;
+        myChoice: string | null;
+        totalVotes: number;
+        options: { proposalId: string; voteCount: number }[];
+      };
+    }>();
+    expect(votingBody.data.currentStage).toBe('voting');
+    expect(votingBody.data.canVote).toBe(false);
+    expect(votingBody.data.hasVoted).toBe(false);
+    expect(votingBody.data.myChoice).toBeNull();
+    expect(votingBody.data.totalVotes).toBe(4);
+    const tallyByProposal = new Map(
+      votingBody.data.options.map((option) => [option.proposalId, option.voteCount]),
+    );
+    const firstProposalId = proposalIds[0];
+    const secondProposalId = proposalIds[1];
+    if (!firstProposalId || !secondProposalId) throw new Error('missing proposal ids');
+    expect(tallyByProposal.get(firstProposalId)).toBe(3);
+    expect(tallyByProposal.get(secondProposalId)).toBe(1);
+    expect(votingResponse.body).not.toMatch(/accountId|actorId/);
   });
 
   it('preserves fail-closed missing and invalid signal behavior', async () => {

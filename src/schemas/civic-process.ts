@@ -16,10 +16,10 @@ export const CivicProcessStageSchema = Type.Union(
 );
 
 const PublicCivicProcessStageSchema = Type.Unsafe<
-  'confirmation' | 'proposals' | 'deliberation' | 'ballot_preparation'
+  'confirmation' | 'proposals' | 'deliberation' | 'ballot_preparation' | 'voting'
 >({
   type: 'string',
-  enum: ['confirmation', 'proposals', 'deliberation', 'ballot_preparation'],
+  enum: ['confirmation', 'proposals', 'deliberation', 'ballot_preparation', 'voting'],
 });
 
 const PublicCivicProcessStageLabelSchema = Type.Unsafe<
@@ -27,6 +27,7 @@ const PublicCivicProcessStageLabelSchema = Type.Unsafe<
   | 'civic_process.stage.proposals'
   | 'civic_process.stage.deliberation'
   | 'civic_process.stage.ballot_preparation'
+  | 'civic_process.stage.voting'
 >({
   type: 'string',
   enum: [
@@ -34,14 +35,15 @@ const PublicCivicProcessStageLabelSchema = Type.Unsafe<
     'civic_process.stage.proposals',
     'civic_process.stage.deliberation',
     'civic_process.stage.ballot_preparation',
+    'civic_process.stage.voting',
   ],
 });
 
 const PublicCivicProcessNextStageSchema = Type.Unsafe<
-  'proposals' | 'deliberation' | 'ballot_preparation' | 'voting'
+  'proposals' | 'deliberation' | 'ballot_preparation' | 'voting' | 'mandate'
 >({
   type: 'string',
-  enum: ['proposals', 'deliberation', 'ballot_preparation', 'voting'],
+  enum: ['proposals', 'deliberation', 'ballot_preparation', 'voting', 'mandate'],
 });
 
 const CivicProcessTimelineEventSchema = Type.Object(
@@ -51,6 +53,7 @@ const CivicProcessTimelineEventSchema = Type.Object(
       | 'stage_transitioned_to_proposals'
       | 'stage_transitioned_to_deliberation'
       | 'stage_transitioned_to_ballot_preparation'
+      | 'stage_transitioned_to_voting'
     >({
       type: 'string',
       enum: [
@@ -58,6 +61,7 @@ const CivicProcessTimelineEventSchema = Type.Object(
         'stage_transitioned_to_proposals',
         'stage_transitioned_to_deliberation',
         'stage_transitioned_to_ballot_preparation',
+        'stage_transitioned_to_voting',
       ],
     }),
     occurredAt: Type.String({ format: 'date-time' }),
@@ -108,6 +112,7 @@ export const CivicProcessResponseSchema = Type.Object(
         confirmationCount: Type.Integer({ minimum: 0 }),
         proposalCount: Type.Integer({ minimum: 0 }),
         deliberationParticipantCount: Type.Integer({ minimum: 0 }),
+        voteCount: Type.Integer({ minimum: 0 }),
         hasConfirmed: Type.Boolean(),
         canConfirm: Type.Boolean(),
         nextStage: PublicCivicProcessNextStageSchema,

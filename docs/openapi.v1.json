@@ -19499,7 +19499,8 @@
                             "confirmation",
                             "proposals",
                             "deliberation",
-                            "ballot_preparation"
+                            "ballot_preparation",
+                            "voting"
                           ],
                           "type": "string"
                         },
@@ -19519,7 +19520,8 @@
                             "proposals",
                             "deliberation",
                             "ballot_preparation",
-                            "voting"
+                            "voting",
+                            "mandate"
                           ],
                           "type": "string"
                         },
@@ -19536,7 +19538,8 @@
                             "civic_process.stage.confirmation",
                             "civic_process.stage.proposals",
                             "civic_process.stage.deliberation",
-                            "civic_process.stage.ballot_preparation"
+                            "civic_process.stage.ballot_preparation",
+                            "civic_process.stage.voting"
                           ],
                           "type": "string"
                         },
@@ -19553,7 +19556,8 @@
                                   "process_created",
                                   "stage_transitioned_to_proposals",
                                   "stage_transitioned_to_deliberation",
-                                  "stage_transitioned_to_ballot_preparation"
+                                  "stage_transitioned_to_ballot_preparation",
+                                  "stage_transitioned_to_voting"
                                 ],
                                 "type": "string"
                               }
@@ -19654,6 +19658,10 @@
                         "updatedAt": {
                           "format": "date-time",
                           "type": "string"
+                        },
+                        "voteCount": {
+                          "minimum": 0,
+                          "type": "integer"
                         }
                       },
                       "required": [
@@ -19665,6 +19673,7 @@
                         "confirmationCount",
                         "proposalCount",
                         "deliberationParticipantCount",
+                        "voteCount",
                         "hasConfirmed",
                         "canConfirm",
                         "nextStage",
@@ -19809,6 +19818,12 @@
                             {
                               "enum": [
                                 "ballot_preparation"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "voting"
                               ],
                               "type": "string"
                             }
@@ -20422,6 +20437,12 @@
                                 "ballot_preparation"
                               ],
                               "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "voting"
+                              ],
+                              "type": "string"
                             }
                           ]
                         },
@@ -20856,6 +20877,476 @@
           }
         ],
         "summary": "Submit one structured proposal to an open civic process",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/civic-process/voting": {
+      "get": {
+        "description": "Public vote options for a visible signal (the five finalized ballot proposals) with aggregate vote counts. Optional session state derives only canVote, hasVoted, and myChoice. Never exposes account or actor identifiers, and never who voted for what.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "canVote": {
+                          "type": "boolean"
+                        },
+                        "currentStage": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "ballot_preparation"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "voting"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "hasVoted": {
+                          "type": "boolean"
+                        },
+                        "myChoice": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "options": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "authorDisplayName": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "body": {
+                                "maxLength": 2000,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "proposalId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "title": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "voteCount": {
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "proposalId",
+                              "authorDisplayName",
+                              "title",
+                              "body",
+                              "voteCount"
+                            ],
+                            "title": "CivicVoteOption",
+                            "type": "object"
+                          },
+                          "maxItems": 100,
+                          "type": "array"
+                        },
+                        "processId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "totalVotes": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "processId",
+                        "currentStage",
+                        "canVote",
+                        "hasVoted",
+                        "myChoice",
+                        "totalVotes",
+                        "options"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Read the civic vote for a process and its per-option tally",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/civic-process/voting/vote": {
+      "post": {
+        "description": "Records one vote for one proposal while the canonical process is in voting. One vote per eligible civic actor; votes cannot be changed once cast. This is not yet a secret ballot: the vote is linked to the actor internally for eligibility and one-person-one-vote enforcement, and TOWN does not present it as anonymous.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "proposalId": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "proposalId"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "castAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "proposalId": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "proposalId",
+                        "castAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Cast one vote for one ballot option",
         "tags": [
           "Civic Process"
         ]

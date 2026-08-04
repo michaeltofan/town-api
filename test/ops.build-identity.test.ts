@@ -49,7 +49,7 @@ describe('buildIdentityFromEnv', () => {
     const env = createTestEnv();
     const identity = buildIdentityFromEnv(env);
     expect(identity.expectedMigrationCount).toBe(EXPECTED_MIGRATION_COUNT);
-    expect(EXPECTED_MIGRATION_COUNT).toBe(46);
+    expect(EXPECTED_MIGRATION_COUNT).toBe(47);
   });
 
   it('never emits secret fields', () => {
