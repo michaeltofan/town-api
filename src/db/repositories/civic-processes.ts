@@ -88,6 +88,32 @@ export async function findCivicProcessBySignalId(
   };
 }
 
+/**
+ * Provisions the canonical civic process for a published signal that is
+ * missing one — mirrors the `signals_provision_civic_process` trigger and the
+ * one-time migration 0041 backfill, for signals that slipped through both
+ * (e.g. upserted via ON CONFLICT DO UPDATE, which does not re-fire an
+ * AFTER INSERT trigger). Idempotent: safe to call whenever a read finds the
+ * process missing, including under concurrent requests.
+ */
+export async function provisionMissingCivicProcess(
+  db: Db,
+  params: { processId: string; eventId: string; signalId: string; communityId: string; createdAt: string },
+): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO town.civic_processes (id, signal_id, community_id, current_stage, created_at, updated_at)
+    VALUES (${params.processId}, ${params.signalId}, ${params.communityId}, 'confirmation', ${params.createdAt}, ${params.createdAt})
+    ON CONFLICT (signal_id) DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at)
+    SELECT ${params.eventId}, id, 'process_created', ${params.createdAt}
+    FROM town.civic_processes
+    WHERE signal_id = ${params.signalId}
+    ON CONFLICT (process_id, event_type) DO NOTHING
+  `);
+}
+
 export async function listPublicCivicProcessEvents(
   db: Db,
   processId: string,
