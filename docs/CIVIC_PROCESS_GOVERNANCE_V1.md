@@ -42,17 +42,17 @@ confirmation → proposals → deliberation → ballot_preparation → voting
 
 ## 2. Who can open and advance each stage **[V1 — implemented]**
 
-| Stage | Opened by | Advanced by |
-| --- | --- | --- |
-| confirmation | automatic, at signal creation | any active civic actor in the signal's community confirming; threshold-triggered |
-| proposals | automatic, on confirmation threshold | any eligible actor publishing a proposal; threshold-triggered |
-| deliberation | automatic, on proposal threshold | any eligible actor contributing; threshold-triggered |
-| ballot_preparation | automatic, on deliberation threshold | automatic, same transaction (see §8) |
-| voting | automatic, chained from ballot_preparation | lazy close on read once `voting_closes_at` elapses |
-| mandate | automatic, on voting close | automatic (winner computed at close) |
-| action | automatic, only if mandate has a decided winner (not contested) | any active community actor posting a status update |
-| verification | opened by any eligible actor marking the action `ready` — no threshold to open | closes via the symmetric 5-actor threshold (§13) |
-| archived | automatic, on verification outcome reached | terminal |
+| Stage              | Opened by                                                                      | Advanced by                                                                      |
+| ------------------ | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| confirmation       | automatic, at signal creation                                                  | any active civic actor in the signal's community confirming; threshold-triggered |
+| proposals          | automatic, on confirmation threshold                                           | any eligible actor publishing a proposal; threshold-triggered                    |
+| deliberation       | automatic, on proposal threshold                                               | any eligible actor contributing; threshold-triggered                             |
+| ballot_preparation | automatic, on deliberation threshold                                           | automatic, same transaction (see §8)                                             |
+| voting             | automatic, chained from ballot_preparation                                     | lazy close on read once `voting_closes_at` elapses                               |
+| mandate            | automatic, on voting close                                                     | automatic (winner computed at close)                                             |
+| action             | automatic, only if mandate has a decided winner (not contested)                | any active community actor posting a status update                               |
+| verification       | opened by any eligible actor marking the action `ready` — no threshold to open | closes via the symmetric 5-actor threshold (§13)                                 |
+| archived           | automatic, on verification outcome reached                                     | terminal                                                                         |
 
 No stage transition is ever a free-form operator action. Operators (§14) can
 moderate content inside a stage; they cannot push the process forward or
@@ -341,24 +341,24 @@ same existing audit mechanisms, no new logging system.
 
 Matches the owner's PR plan, one slice per PR, API before its dependent UI:
 
-| # | Repo | Delivers |
-| --- | --- | --- |
-| 1 | town-api (this doc) | This governance specification |
-| 2 | town-api | *(done — confirmation-stage nucleus, PR #94 and earlier)* |
-| 3 | town-public | *(done — confirmation-stage right panel, PR #99–#101)* |
-| 4 | town-api | Rich proposal object + lifecycle (§6) |
-| 5 | town-public | Proposal authoring/list UI for the new fields |
-| 6 | town-api | Extended deliberation intents + reply threading (§7) |
-| 7 | town-public | Deliberation UI for the new intents |
-| 8 | town-api | Real ballot-preparation gate + freeze snapshot (§8) |
-| 9 | town-api + town-public, coordinated | Secret-ballot vote table + approval ballot (§9) |
-| 10 | town-api + town-public | Mandate extensions: minority position, contestation (§10, §11) |
-| 11 | town-api + town-public | Action extensions (§12) |
-| 12 | town-api + town-public | Verification dispute routing (§13) |
-| 13 | town-api + platform console | `moderate_civic_process` + contestation review UI (§14) |
-| 14 | town-public | HOME civic center surfacing real process state |
-| 15 | town-api + town-public | Notifications / Civic Inbox / civic profile extensions |
-| 16 | town-public | Mobile parity pass |
+| #   | Repo                                | Delivers                                                       |
+| --- | ----------------------------------- | -------------------------------------------------------------- |
+| 1   | town-api (this doc)                 | This governance specification                                  |
+| 2   | town-api                            | _(done — confirmation-stage nucleus, PR #94 and earlier)_      |
+| 3   | town-public                         | _(done — confirmation-stage right panel, PR #99–#101)_         |
+| 4   | town-api                            | Rich proposal object + lifecycle (§6)                          |
+| 5   | town-public                         | Proposal authoring/list UI for the new fields                  |
+| 6   | town-api                            | Extended deliberation intents + reply threading (§7)           |
+| 7   | town-public                         | Deliberation UI for the new intents                            |
+| 8   | town-api                            | Real ballot-preparation gate + freeze snapshot (§8)            |
+| 9   | town-api + town-public, coordinated | Secret-ballot vote table + approval ballot (§9)                |
+| 10  | town-api + town-public              | Mandate extensions: minority position, contestation (§10, §11) |
+| 11  | town-api + town-public              | Action extensions (§12)                                        |
+| 12  | town-api + town-public              | Verification dispute routing (§13)                             |
+| 13  | town-api + platform console         | `moderate_civic_process` + contestation review UI (§14)        |
+| 14  | town-public                         | HOME civic center surfacing real process state                 |
+| 15  | town-api + town-public              | Notifications / Civic Inbox / civic profile extensions         |
+| 16  | town-public                         | Mobile parity pass                                             |
 
 Each PR must update this document in the same PR if it changes a decision
 recorded here — this file is the contract, not the README.
