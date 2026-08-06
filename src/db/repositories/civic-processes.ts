@@ -98,7 +98,13 @@ export async function findCivicProcessBySignalId(
  */
 export async function provisionMissingCivicProcess(
   db: Db,
-  params: { processId: string; eventId: string; signalId: string; communityId: string; createdAt: string },
+  params: {
+    processId: string;
+    eventId: string;
+    signalId: string;
+    communityId: string;
+    createdAt: string;
+  },
 ): Promise<void> {
   await db.execute(sql`
     INSERT INTO town.civic_processes (id, signal_id, community_id, current_stage, created_at, updated_at)

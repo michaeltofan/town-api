@@ -307,9 +307,10 @@ describe('civic process confirmation integration', () => {
       await pool.query('ALTER TABLE town.signals ENABLE TRIGGER signals_provision_civic_process');
     }
 
-    const beforeHeal = await pool.query('SELECT id FROM town.civic_processes WHERE signal_id = $1', [
-      signalId,
-    ]);
+    const beforeHeal = await pool.query(
+      'SELECT id FROM town.civic_processes WHERE signal_id = $1',
+      [signalId],
+    );
     expect(beforeHeal.rows).toHaveLength(0);
 
     const response = await app.inject({
