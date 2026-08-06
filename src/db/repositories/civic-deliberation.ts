@@ -3,16 +3,49 @@ import type { Database } from '../client.js';
 
 type Db = Database['db'];
 
+export type CivicDeliberationIntent =
+  | 'observation'
+  | 'proposal'
+  | 'next_step'
+  | 'argument_for'
+  | 'risk_or_objection'
+  | 'question'
+  | 'author_response'
+  | 'evidence'
+  | 'amendment_suggestion'
+  | 'minority_position';
+
 export type CivicDeliberationContributionView = {
   id: string;
   processId: string;
   proposalId: string;
   authorActorId: string;
   authorDisplayName: string;
-  intent: 'observation' | 'proposal' | 'next_step';
+  intent: CivicDeliberationIntent;
   text: string;
+  replyToContributionId: string | null;
   createdAt: string;
 };
+
+const SUPPORTED_INTENTS: readonly CivicDeliberationIntent[] = [
+  'observation',
+  'proposal',
+  'next_step',
+  'argument_for',
+  'risk_or_objection',
+  'question',
+  'author_response',
+  'evidence',
+  'amendment_suggestion',
+  'minority_position',
+];
+
+function toIntent(value: string): CivicDeliberationIntent {
+  if (!(SUPPORTED_INTENTS as readonly string[]).includes(value)) {
+    throw new Error('Unsupported civic deliberation contribution intent');
+  }
+  return value as CivicDeliberationIntent;
+}
 
 function toContributionView(row: {
   id: string;
@@ -22,19 +55,18 @@ function toContributionView(row: {
   author_display_name: string;
   intent: string;
   text: string;
+  reply_to_contribution_id: string | null;
   created_at: string;
 }): CivicDeliberationContributionView {
-  if (row.intent !== 'observation' && row.intent !== 'proposal' && row.intent !== 'next_step') {
-    throw new Error('Unsupported civic deliberation contribution intent');
-  }
   return {
     id: row.id,
     processId: row.process_id,
     proposalId: row.proposal_id,
     authorActorId: row.author_actor_id,
     authorDisplayName: row.author_display_name,
-    intent: row.intent,
+    intent: toIntent(row.intent),
     text: row.text,
+    replyToContributionId: row.reply_to_contribution_id,
     createdAt: row.created_at,
   };
 }
@@ -53,6 +85,7 @@ export async function listCivicDeliberationContributionsForProcess(
     author_display_name: string;
     intent: string;
     text: string;
+    reply_to_contribution_id: string | null;
     created_at: string;
   }>(sql`
     SELECT
@@ -63,6 +96,7 @@ export async function listCivicDeliberationContributionsForProcess(
       actor.display_label AS author_display_name,
       contribution.intent,
       contribution.text,
+      contribution.reply_to_contribution_id,
       contribution.created_at
     FROM town.civic_deliberation_contributions contribution
     JOIN town.actors actor ON actor.id = contribution.author_actor_id
@@ -80,17 +114,19 @@ export async function insertCivicDeliberationContribution(
     processId: string;
     proposalId: string;
     actorId: string;
-    intent: 'observation' | 'proposal' | 'next_step';
+    intent: CivicDeliberationIntent;
     text: string;
+    replyToContributionId: string | null;
     createdAt: string;
   },
 ): Promise<void> {
   await db.execute(sql`
     INSERT INTO town.civic_deliberation_contributions (
-      id, process_id, proposal_id, author_actor_id, intent, text, created_at
+      id, process_id, proposal_id, author_actor_id, intent, text,
+      reply_to_contribution_id, created_at
     ) VALUES (
       ${input.id}, ${input.processId}, ${input.proposalId}, ${input.actorId},
-      ${input.intent}, ${input.text}, ${input.createdAt}
+      ${input.intent}, ${input.text}, ${input.replyToContributionId}, ${input.createdAt}
     )
   `);
 }

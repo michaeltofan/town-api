@@ -2128,6 +2128,7 @@ export const civicDeliberationContributions = town.table(
     authorActorId: uuid('author_actor_id').notNull(),
     intent: text('intent').notNull(),
     text: text('text').notNull(),
+    replyToContributionId: uuid('reply_to_contribution_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -2146,9 +2147,19 @@ export const civicDeliberationContributions = town.table(
       foreignColumns: [actors.id],
       name: 'civic_deliberation_contributions_author_actor_id_fkey',
     }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.replyToContributionId],
+      foreignColumns: [table.id],
+      name: 'civic_deliberation_contributions_reply_to_fkey',
+    }).onDelete('restrict'),
+    index('civic_deliberation_contributions_reply_to_idx').on(table.replyToContributionId),
     check(
       'civic_deliberation_contributions_intent_supported',
-      sql`${table.intent} in ('observation', 'proposal', 'next_step')`,
+      sql`${table.intent} in (
+        'observation', 'proposal', 'next_step', 'argument_for',
+        'risk_or_objection', 'question', 'author_response', 'evidence',
+        'amendment_suggestion', 'minority_position'
+      )`,
     ),
     check(
       'civic_deliberation_contributions_text_valid',

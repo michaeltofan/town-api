@@ -20568,12 +20568,65 @@
                                             "next_step"
                                           ],
                                           "type": "string"
+                                        },
+                                        {
+                                          "enum": [
+                                            "argument_for"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        {
+                                          "enum": [
+                                            "risk_or_objection"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        {
+                                          "enum": [
+                                            "question"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        {
+                                          "enum": [
+                                            "author_response"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        {
+                                          "enum": [
+                                            "evidence"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        {
+                                          "enum": [
+                                            "amendment_suggestion"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        {
+                                          "enum": [
+                                            "minority_position"
+                                          ],
+                                          "type": "string"
                                         }
                                       ],
                                       "title": "CivicDeliberationIntent"
                                     },
                                     "isMine": {
                                       "type": "boolean"
+                                    },
+                                    "replyToContributionId": {
+                                      "anyOf": [
+                                        {
+                                          "format": "uuid",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
                                     },
                                     "text": {
                                       "minLength": 1,
@@ -20585,6 +20638,7 @@
                                     "authorDisplayName",
                                     "intent",
                                     "text",
+                                    "replyToContributionId",
                                     "createdAt",
                                     "isMine"
                                   ],
@@ -20772,8 +20826,54 @@
                           "next_step"
                         ],
                         "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "argument_for"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "risk_or_objection"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "question"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "author_response"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "evidence"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "amendment_suggestion"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "minority_position"
+                        ],
+                        "type": "string"
                       }
                     ]
+                  },
+                  "replyToContributionId": {
+                    "format": "uuid",
+                    "type": "string"
                   },
                   "text": {
                     "maxLength": 480,
@@ -20835,11 +20935,64 @@
                                     "next_step"
                                   ],
                                   "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "argument_for"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "risk_or_objection"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "question"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "author_response"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "evidence"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "amendment_suggestion"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "minority_position"
+                                  ],
+                                  "type": "string"
                                 }
                               ]
                             },
                             "isMine": {
                               "type": "boolean"
+                            },
+                            "replyToContributionId": {
+                              "anyOf": [
+                                {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "text": {
                               "minLength": 1,
@@ -20851,6 +21004,7 @@
                             "authorDisplayName",
                             "intent",
                             "text",
+                            "replyToContributionId",
                             "createdAt",
                             "isMine"
                           ],
