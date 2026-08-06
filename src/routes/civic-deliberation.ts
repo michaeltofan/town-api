@@ -65,6 +65,14 @@ function proposalNotFoundError(): AppError {
   return new AppError(404, 'CIVIC_PROPOSAL_NOT_FOUND', 'The requested proposal was not found.');
 }
 
+function invalidReplyTargetError(): AppError {
+  return new AppError(
+    400,
+    'CIVIC_DELIBERATION_INVALID_REPLY_TARGET',
+    'The contribution being replied to does not belong to this proposal.',
+  );
+}
+
 function singleHeader(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -242,6 +250,7 @@ export const civicDeliberationRoutes: FastifyPluginCallbackTypebox<
               authorDisplayName: contribution.authorDisplayName,
               intent: contribution.intent,
               text: contribution.text,
+              replyToContributionId: contribution.replyToContributionId,
               createdAt: toIsoTimestamp(contribution.createdAt),
               isMine: actor?.id === contribution.authorActorId,
             })),
@@ -276,6 +285,17 @@ export const civicDeliberationRoutes: FastifyPluginCallbackTypebox<
       if (!actor) throw civicParticipationNotAuthorizedError();
       const text = request.body.text.trim();
       if (text.length < 12 || text.length > 480) throw validationError();
+      const replyToContributionId = request.body.replyToContributionId ?? null;
+      if (replyToContributionId) {
+        const contributions = await listCivicDeliberationContributionsForProcess(
+          app.database.db,
+          process.id,
+        );
+        const replyTarget = contributions.find((c) => c.id === replyToContributionId);
+        if (replyTarget?.proposalId !== proposal.id) {
+          throw invalidReplyTargetError();
+        }
+      }
       const contributionId = generateId();
       const createdAt = now();
       try {
@@ -286,6 +306,7 @@ export const civicDeliberationRoutes: FastifyPluginCallbackTypebox<
           actorId: actor.id,
           intent: request.body.intent,
           text,
+          replyToContributionId,
           createdAt,
         });
       } catch (error: unknown) {
@@ -302,6 +323,7 @@ export const civicDeliberationRoutes: FastifyPluginCallbackTypebox<
             authorDisplayName: actor.displayLabel,
             intent: request.body.intent,
             text,
+            replyToContributionId,
             createdAt: toIsoTimestamp(createdAt),
             isMine: true,
           },

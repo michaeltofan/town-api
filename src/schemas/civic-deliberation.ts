@@ -10,7 +10,18 @@ export const SignalProposalIdParamsSchema = Type.Object(
 );
 
 export const CivicDeliberationIntentSchema = Type.Union(
-  [Type.Literal('observation'), Type.Literal('proposal'), Type.Literal('next_step')],
+  [
+    Type.Literal('observation'),
+    Type.Literal('proposal'),
+    Type.Literal('next_step'),
+    Type.Literal('argument_for'),
+    Type.Literal('risk_or_objection'),
+    Type.Literal('question'),
+    Type.Literal('author_response'),
+    Type.Literal('evidence'),
+    Type.Literal('amendment_suggestion'),
+    Type.Literal('minority_position'),
+  ],
   { $id: 'CivicDeliberationIntent' },
 );
 
@@ -18,6 +29,7 @@ export const CivicDeliberationContributionBodySchema = Type.Object(
   {
     intent: CivicDeliberationIntentSchema,
     text: Type.String({ minLength: 12, maxLength: 480 }),
+    replyToContributionId: Type.Optional(Type.String({ format: 'uuid' })),
   },
   { additionalProperties: false, $id: 'CivicDeliberationContributionBody' },
 );
@@ -28,6 +40,7 @@ export const CivicDeliberationContributionSchema = Type.Object(
     authorDisplayName: Type.String({ minLength: 1 }),
     intent: CivicDeliberationIntentSchema,
     text: Type.String({ minLength: 1 }),
+    replyToContributionId: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
     createdAt: Type.String({ format: 'date-time' }),
     isMine: Type.Boolean(),
   },
