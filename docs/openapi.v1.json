@@ -21313,7 +21313,7 @@
     },
     "/v1/signals/{signalId}/civic-process/proposals": {
       "get": {
-        "description": "Public ordered proposals for a visible signal. Optional session state derives only canPropose and isMine. Never exposes account or actor identifiers.",
+        "description": "Public ordered proposals for a visible signal. Optional session state derives only canPropose, isMine, canRevise, canWithdraw. Never exposes account or actor identifiers.",
         "parameters": [
           {
             "in": "path",
@@ -21413,21 +21413,118 @@
                                 "minLength": 1,
                                 "type": "string"
                               },
+                              "canRevise": {
+                                "type": "boolean"
+                              },
+                              "canWithdraw": {
+                                "type": "boolean"
+                              },
                               "createdAt": {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              "estimatedResources": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "expectedOutcome": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "id": {
                                 "format": "uuid",
                                 "type": "string"
                               },
+                              "indicativeDeadline": {
+                                "anyOf": [
+                                  {
+                                    "format": "date",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "isMine": {
                                 "type": "boolean"
+                              },
+                              "lifecycleState": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "published"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "revised"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "withdrawn"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "revisedAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "targetInstitution": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "title": {
                                 "maxLength": 160,
                                 "minLength": 1,
                                 "type": "string"
+                              },
+                              "withdrawnAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -21435,8 +21532,17 @@
                               "authorDisplayName",
                               "title",
                               "body",
+                              "targetInstitution",
+                              "expectedOutcome",
+                              "estimatedResources",
+                              "indicativeDeadline",
+                              "lifecycleState",
+                              "revisedAt",
+                              "withdrawnAt",
                               "createdAt",
-                              "isMine"
+                              "isMine",
+                              "canRevise",
+                              "canWithdraw"
                             ],
                             "title": "CivicProposal",
                             "type": "object"
@@ -21565,6 +21671,25 @@
                     "minLength": 1,
                     "type": "string"
                   },
+                  "estimatedResources": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "expectedOutcome": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "indicativeDeadline": {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "targetInstitution": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "title": {
                     "maxLength": 160,
                     "minLength": 1,
@@ -21573,7 +21698,8 @@
                 },
                 "required": [
                   "title",
-                  "body"
+                  "body",
+                  "expectedOutcome"
                 ],
                 "type": "object"
               }
@@ -21600,21 +21726,118 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "canRevise": {
+                          "type": "boolean"
+                        },
+                        "canWithdraw": {
+                          "type": "boolean"
+                        },
                         "createdAt": {
                           "format": "date-time",
                           "type": "string"
+                        },
+                        "estimatedResources": {
+                          "anyOf": [
+                            {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "expectedOutcome": {
+                          "anyOf": [
+                            {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "id": {
                           "format": "uuid",
                           "type": "string"
                         },
+                        "indicativeDeadline": {
+                          "anyOf": [
+                            {
+                              "format": "date",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "isMine": {
                           "type": "boolean"
+                        },
+                        "lifecycleState": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "published"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "revised"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "withdrawn"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "revisedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "targetInstitution": {
+                          "anyOf": [
+                            {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "title": {
                           "maxLength": 160,
                           "minLength": 1,
                           "type": "string"
+                        },
+                        "withdrawnAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -21622,8 +21845,17 @@
                         "authorDisplayName",
                         "title",
                         "body",
+                        "targetInstitution",
+                        "expectedOutcome",
+                        "estimatedResources",
+                        "indicativeDeadline",
+                        "lifecycleState",
+                        "revisedAt",
+                        "withdrawnAt",
                         "createdAt",
-                        "isMine"
+                        "isMine",
+                        "canRevise",
+                        "canWithdraw"
                       ],
                       "type": "object"
                     }
@@ -21827,6 +22059,777 @@
           }
         ],
         "summary": "Submit one structured proposal to an open civic process",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/civic-process/proposals/{proposalId}": {
+      "put": {
+        "description": "A proposal may be revised exactly once, only by its author, only while the process is still in the proposals stage. The prior content is preserved in the append-only revision ledger. Enforced at the database level, not just here.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "body": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "estimatedResources": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "expectedOutcome": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "indicativeDeadline": {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "targetInstitution": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "title": {
+                    "maxLength": 160,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "body",
+                  "expectedOutcome"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authorDisplayName": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "body": {
+                          "maxLength": 2000,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "canRevise": {
+                          "type": "boolean"
+                        },
+                        "canWithdraw": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "estimatedResources": {
+                          "anyOf": [
+                            {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "expectedOutcome": {
+                          "anyOf": [
+                            {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "indicativeDeadline": {
+                          "anyOf": [
+                            {
+                              "format": "date",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "isMine": {
+                          "type": "boolean"
+                        },
+                        "lifecycleState": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "published"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "revised"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "withdrawn"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "revisedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "targetInstitution": {
+                          "anyOf": [
+                            {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "withdrawnAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "authorDisplayName",
+                        "title",
+                        "body",
+                        "targetInstitution",
+                        "expectedOutcome",
+                        "estimatedResources",
+                        "indicativeDeadline",
+                        "lifecycleState",
+                        "revisedAt",
+                        "withdrawnAt",
+                        "createdAt",
+                        "isMine",
+                        "canRevise",
+                        "canWithdraw"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Revise the author's own proposal exactly once",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/civic-process/proposals/{proposalId}/withdraw": {
+      "post": {
+        "description": "Withdrawal is author-only and permanent — a withdrawn proposal keeps its full history visible but is excluded once the process moves past proposals. Allowed at any stage; content cannot change on withdrawal.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authorDisplayName": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "body": {
+                          "maxLength": 2000,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "canRevise": {
+                          "type": "boolean"
+                        },
+                        "canWithdraw": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "estimatedResources": {
+                          "anyOf": [
+                            {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "expectedOutcome": {
+                          "anyOf": [
+                            {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "indicativeDeadline": {
+                          "anyOf": [
+                            {
+                              "format": "date",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "isMine": {
+                          "type": "boolean"
+                        },
+                        "lifecycleState": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "published"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "revised"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "withdrawn"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "revisedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "targetInstitution": {
+                          "anyOf": [
+                            {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "withdrawnAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "authorDisplayName",
+                        "title",
+                        "body",
+                        "targetInstitution",
+                        "expectedOutcome",
+                        "estimatedResources",
+                        "indicativeDeadline",
+                        "lifecycleState",
+                        "revisedAt",
+                        "withdrawnAt",
+                        "createdAt",
+                        "isMine",
+                        "canRevise",
+                        "canWithdraw"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Withdraw the author's own proposal",
         "tags": [
           "Civic Process"
         ]
