@@ -372,6 +372,13 @@
       "when": 1787769600000,
       "tag": "0052_civic_deliberation_intents",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1787856000000,
+      "tag": "0053_civic_ballot_preparation",
+      "breakpoints": true
     }
   ]
 }

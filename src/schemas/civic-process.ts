@@ -150,6 +150,36 @@ const CivicProcessTransitionRuleSchema = Type.Union(
   { $id: 'CivicProcessTransitionRule' },
 );
 
+const CivicBallotPreviewProposalSchema = Type.Object(
+  {
+    id: Type.String({ format: 'uuid' }),
+    authorDisplayName: Type.String({ minLength: 1 }),
+    title: Type.String({ minLength: 1, maxLength: 160 }),
+    body: Type.String({ minLength: 1, maxLength: 2000 }),
+  },
+  { additionalProperties: false },
+);
+
+const CivicBallotPreviewSchema = Type.Union(
+  [
+    Type.Object(
+      {
+        question: Type.Literal("Which proposal should this signal's mandate be?"),
+        proposals: Type.Array(CivicBallotPreviewProposalSchema, { maxItems: 100 }),
+        votingOpensAt: Type.String({ format: 'date-time' }),
+        votingClosesAt: Type.String({ format: 'date-time' }),
+        ballotType: Type.Literal('approval'),
+        quorum: Type.Integer({ minimum: 5, maximum: 5 }),
+        eligibleVoterCount: Type.Integer({ minimum: 0 }),
+        winRuleKey: Type.Literal('most_approvals_no_tiebreak'),
+      },
+      { additionalProperties: false },
+    ),
+    Type.Null(),
+  ],
+  { $id: 'CivicBallotPreview' },
+);
+
 export const CivicProcessResponseSchema = Type.Object(
   {
     data: Type.Object(
@@ -168,6 +198,7 @@ export const CivicProcessResponseSchema = Type.Object(
         nextStage: Type.Union([PublicCivicProcessNextStageSchema, Type.Null()]),
         closingAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
         transitionRule: CivicProcessTransitionRuleSchema,
+        ballotPreview: CivicBallotPreviewSchema,
         timeline: Type.Array(CivicProcessTimelineEventSchema, { maxItems: 50 }),
         createdAt: Type.String({ format: 'date-time' }),
         updatedAt: Type.String({ format: 'date-time' }),

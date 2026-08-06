@@ -6,6 +6,8 @@ type Db = Database['db'];
 export const CIVIC_CONFIRMATION_THRESHOLD = 5;
 export const CIVIC_PROPOSAL_THRESHOLD = 5;
 export const CIVIC_DELIBERATION_THRESHOLD = 5;
+export const CIVIC_BALLOT_QUORUM = 5;
+export const CIVIC_BALLOT_QUESTION = "Which proposal should this signal's mandate be?";
 
 export type PublicCivicProcessStage =
   | 'confirmation'
@@ -23,6 +25,7 @@ export type CivicProcessReadRow = {
   signalId: string;
   communityId: string;
   currentStage: PublicCivicProcessStage;
+  votingOpensAt: string | null;
   votingClosesAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -51,11 +54,13 @@ export async function findCivicProcessBySignalId(
     signal_id: string;
     community_id: string;
     current_stage: string;
+    voting_opens_at: string | null;
     voting_closes_at: string | null;
     created_at: string;
     updated_at: string;
   }>(sql`
-    SELECT id, signal_id, community_id, current_stage, voting_closes_at, created_at, updated_at
+    SELECT id, signal_id, community_id, current_stage, voting_opens_at, voting_closes_at,
+           created_at, updated_at
     FROM town.civic_processes
     WHERE signal_id = ${signalId}
     LIMIT 1
@@ -82,6 +87,7 @@ export async function findCivicProcessBySignalId(
     signalId: row.signal_id,
     communityId: row.community_id,
     currentStage: row.current_stage,
+    votingOpensAt: row.voting_opens_at,
     votingClosesAt: row.voting_closes_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -118,6 +124,68 @@ export async function provisionMissingCivicProcess(
     WHERE signal_id = ${params.signalId}
     ON CONFLICT (process_id, event_type) DO NOTHING
   `);
+}
+
+/**
+ * There is no scheduled job: the 10-minute ballot-preparation freeze window
+ * is only ever closed lazily, the moment any request touches a process
+ * whose voting_opens_at has passed. Row-locked and idempotent, so
+ * concurrent requests race safely. Proposal freezing and the eligible-voter
+ * snapshot already happened synchronously when ballot_preparation began
+ * (see the advance_civic_process_after_deliberation DB trigger) — this only
+ * flips the stage itself once the fixed freeze window has elapsed.
+ */
+export async function openVotingIfBallotPreparationElapsed(
+  db: Db,
+  input: { processId: string; now: string },
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const rows = await tx.execute<{
+      current_stage: string;
+      voting_opens_at: string | null;
+    }>(sql`
+      SELECT current_stage, voting_opens_at
+      FROM town.civic_processes
+      WHERE id = ${input.processId}
+      FOR UPDATE
+    `);
+    const row = rows.rows[0];
+    if (!row?.voting_opens_at || row.current_stage !== 'ballot_preparation') {
+      return;
+    }
+    if (new Date(row.voting_opens_at).getTime() > new Date(input.now).getTime()) {
+      return;
+    }
+
+    const transitionResult = await tx.execute(sql`
+      INSERT INTO town.civic_process_transitions (
+        id, process_id, from_stage, to_stage, reason_key, occurred_at
+      ) VALUES (
+        gen_random_uuid(), ${input.processId}, 'ballot_preparation', 'voting',
+        'ballot_prepared', ${input.now}
+      )
+      ON CONFLICT (process_id, from_stage, to_stage) DO NOTHING
+    `);
+    if (!transitionResult.rowCount) {
+      return;
+    }
+
+    await tx.execute(
+      sql`SELECT set_config('town.civic_stage_transition', 'ballot_prepared', true)`,
+    );
+    await tx.execute(sql`
+      UPDATE town.civic_processes
+      SET current_stage = 'voting', updated_at = ${input.now}
+      WHERE id = ${input.processId} AND current_stage = 'ballot_preparation'
+    `);
+    await tx.execute(sql`SELECT set_config('town.civic_stage_transition', '', true)`);
+
+    await tx.execute(sql`
+      INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at)
+      VALUES (gen_random_uuid(), ${input.processId}, 'stage_transitioned_to_voting', ${input.now})
+      ON CONFLICT (process_id, event_type) DO NOTHING
+    `);
+  });
 }
 
 export async function listPublicCivicProcessEvents(

@@ -3,7 +3,7 @@ import type { Database } from '../client.js';
 
 type Db = Database['db'];
 
-export type CivicProposalLifecycleState = 'published' | 'revised' | 'withdrawn';
+export type CivicProposalLifecycleState = 'published' | 'revised' | 'withdrawn' | 'frozen';
 
 export type CivicProposalView = {
   id: string;
@@ -19,6 +19,7 @@ export type CivicProposalView = {
   lifecycleState: CivicProposalLifecycleState;
   revisedAt: string | null;
   withdrawnAt: string | null;
+  frozenAt: string | null;
   createdAt: string;
 };
 
@@ -36,11 +37,12 @@ type CivicProposalRow = {
   lifecycle_state: string;
   revised_at: string | null;
   withdrawn_at: string | null;
+  frozen_at: string | null;
   created_at: string;
 };
 
 function toLifecycleState(value: string): CivicProposalLifecycleState {
-  if (value !== 'published' && value !== 'revised' && value !== 'withdrawn') {
+  if (value !== 'published' && value !== 'revised' && value !== 'withdrawn' && value !== 'frozen') {
     throw new Error('Unsupported civic proposal lifecycle state');
   }
   return value;
@@ -61,6 +63,7 @@ function toView(row: CivicProposalRow): CivicProposalView {
     lifecycleState: toLifecycleState(row.lifecycle_state),
     revisedAt: row.revised_at,
     withdrawnAt: row.withdrawn_at,
+    frozenAt: row.frozen_at,
     createdAt: row.created_at,
   };
 }
@@ -80,6 +83,7 @@ const PROPOSAL_SELECT = sql`
     proposal.lifecycle_state,
     proposal.revised_at,
     proposal.withdrawn_at,
+    proposal.frozen_at,
     proposal.created_at
   FROM town.civic_proposals proposal
   JOIN town.actors actor ON actor.id = proposal.author_actor_id

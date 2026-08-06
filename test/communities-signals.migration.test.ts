@@ -32,6 +32,8 @@ describe('communities and signals migration', () => {
       'actors',
       'ceremony_rate_limits',
       'civic_action_updates',
+
+      'civic_ballot_eligible_actors',
       'civic_deliberation_contributions',
       'civic_mandates',
       'civic_process_events',
@@ -147,6 +149,8 @@ describe('communities and signals migration', () => {
       'actors',
       'ceremony_rate_limits',
       'civic_action_updates',
+
+      'civic_ballot_eligible_actors',
       'civic_deliberation_contributions',
       'civic_mandates',
       'civic_process_events',

@@ -10,7 +10,10 @@ import {
 } from '../ceremony/passkey-authentication/session-transport.js';
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
 import { closeVotingWindowIfElapsed, findCivicMandate } from '../db/repositories/civic-mandates.js';
-import { findCivicProcessBySignalId } from '../db/repositories/civic-processes.js';
+import {
+  findCivicProcessBySignalId,
+  openVotingIfBallotPreparationElapsed,
+} from '../db/repositories/civic-processes.js';
 import { findCivicProposalById } from '../db/repositories/civic-proposals.js';
 import {
   findCivicVerification,
@@ -193,6 +196,12 @@ export const civicVerificationRoutes: FastifyPluginCallbackTypebox<
     const initialProcess = await findCivicProcessBySignalId(app.database.db, published.signal.id);
     if (initialProcess?.communityId !== published.signal.communityId) {
       throw new Error('Visible signal is missing its canonical civic process');
+    }
+    if (initialProcess.currentStage === 'ballot_preparation') {
+      await openVotingIfBallotPreparationElapsed(app.database.db, {
+        processId: initialProcess.id,
+        now: now(),
+      });
     }
     if (initialProcess.currentStage === 'voting') {
       await closeVotingWindowIfElapsed(app.database.db, {

@@ -2023,6 +2023,7 @@ export const civicProcesses = town.table(
     signalId: uuid('signal_id').notNull(),
     communityId: uuid('community_id').notNull(),
     currentStage: text('current_stage').notNull(),
+    votingOpensAt: timestamp('voting_opens_at', { withTimezone: true, mode: 'string' }),
     votingClosesAt: timestamp('voting_closes_at', { withTimezone: true, mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
@@ -2060,6 +2061,7 @@ export const civicProposals = town.table(
     lifecycleState: text('lifecycle_state').notNull().default('published'),
     revisedAt: timestamp('revised_at', { withTimezone: true, mode: 'string' }),
     withdrawnAt: timestamp('withdrawn_at', { withTimezone: true, mode: 'string' }),
+    frozenAt: timestamp('frozen_at', { withTimezone: true, mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -2090,7 +2092,7 @@ export const civicProposals = town.table(
     ),
     check(
       'civic_proposals_lifecycle_state_valid',
-      sql`${table.lifecycleState} IN ('published', 'revised', 'withdrawn')`,
+      sql`${table.lifecycleState} IN ('published', 'revised', 'withdrawn', 'frozen')`,
     ),
     index('civic_proposals_process_created_idx').on(table.processId, table.createdAt, table.id),
   ],
@@ -2116,6 +2118,30 @@ export const civicProposalRevisions = town.table(
       name: 'civic_proposal_revisions_proposal_id_fkey',
     }).onDelete('restrict'),
     index('civic_proposal_revisions_proposal_idx').on(table.proposalId, table.revisedAt),
+  ],
+);
+
+export const civicBallotEligibleActors = town.table(
+  'civic_ballot_eligible_actors',
+  {
+    id: uuid('id').primaryKey(),
+    processId: uuid('process_id').notNull(),
+    actorId: uuid('actor_id').notNull(),
+    snapshottedAt: timestamp('snapshotted_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_ballot_eligible_actors_process_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.actorId],
+      foreignColumns: [actors.id],
+      name: 'civic_ballot_eligible_actors_actor_id_fkey',
+    }).onDelete('restrict'),
+    unique('civic_ballot_eligible_actors_process_actor_unique').on(table.processId, table.actorId),
+    index('civic_ballot_eligible_actors_process_idx').on(table.processId),
   ],
 );
 
