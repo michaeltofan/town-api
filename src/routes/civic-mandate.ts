@@ -1,7 +1,10 @@
 import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
 import type { Env } from '../config/env.js';
 import { closeVotingWindowIfElapsed, findCivicMandate } from '../db/repositories/civic-mandates.js';
-import { findCivicProcessBySignalId } from '../db/repositories/civic-processes.js';
+import {
+  findCivicProcessBySignalId,
+  openVotingIfBallotPreparationElapsed,
+} from '../db/repositories/civic-processes.js';
 import { findCivicProposalById } from '../db/repositories/civic-proposals.js';
 import { findPublishedSignalById } from '../db/repositories/signals.js';
 import { signalNotFoundError } from '../errors/app-error.js';
@@ -42,6 +45,12 @@ export const civicMandateRoutes: FastifyPluginCallbackTypebox<CivicMandateRoutes
       }
 
       const nowIso = now();
+      if (initialProcess.currentStage === 'ballot_preparation') {
+        await openVotingIfBallotPreparationElapsed(app.database.db, {
+          processId: initialProcess.id,
+          now: nowIso,
+        });
+      }
       if (initialProcess.currentStage === 'voting') {
         await closeVotingWindowIfElapsed(app.database.db, {
           processId: initialProcess.id,

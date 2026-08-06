@@ -20,6 +20,7 @@ export const CivicProposalLifecycleStateSchema = Type.Union([
   Type.Literal('published'),
   Type.Literal('revised'),
   Type.Literal('withdrawn'),
+  Type.Literal('frozen'),
 ]);
 
 export const CivicProposalSchema = Type.Object(
@@ -35,6 +36,7 @@ export const CivicProposalSchema = Type.Object(
     lifecycleState: CivicProposalLifecycleStateSchema,
     revisedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
     withdrawnAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
+    frozenAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
     createdAt: Type.String({ format: 'date-time' }),
     isMine: Type.Boolean(),
     canRevise: Type.Boolean(),

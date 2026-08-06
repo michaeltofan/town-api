@@ -45,6 +45,29 @@ async function simulateActionMarkedReady(pool: Pool, processId: string): Promise
   }
 }
 
+// The 10-minute ballot-preparation freeze window (§8) is only ever closed
+// lazily, as a side effect of a route touching the process, not from raw
+// SQL — rewind voting_opens_at into the past, then trigger it via the same
+// public read every real caller would use, exactly like the analogous
+// voting-close pattern below.
+async function advanceBallotPreparationToVoting(
+  pool: Pool,
+  app: Awaited<ReturnType<typeof createSeededTestApp>>['app'],
+  input: { signalId: string; processId: string },
+): Promise<void> {
+  await pool.query(
+    "UPDATE town.civic_processes SET voting_opens_at = now() - interval '1 second' WHERE id = $1",
+    [input.processId],
+  );
+  const response = await app.inject({
+    method: 'GET',
+    url: `/v1/signals/${input.signalId}/civic-process`,
+  });
+  if (response.statusCode !== 200) {
+    throw new Error('failed to lazily open voting while building fixture');
+  }
+}
+
 // Drives a fresh process through confirmation, proposals, deliberation, and
 // voting to a decided mandate with a clear winner (3 votes to 1), then closes
 // voting lazily so it chains straight through mandate into action. Returns
@@ -146,6 +169,8 @@ async function buildDecidedProcessThroughAction(
       ),
     ),
   );
+
+  await advanceBallotPreparationToVoting(pool, app, { signalId, processId });
 
   await Promise.all([
     pool.query(
@@ -645,7 +670,7 @@ describe('civic process confirmation integration', () => {
     ).rejects.toThrow(/civic proposal stage is closed/);
   });
 
-  it('advances through ballot_preparation into voting immediately, closes deliberation, and tallies one vote per actor', async () => {
+  it('advances into ballot_preparation, freezes proposals, snapshots eligible voters, previews the ballot, then opens voting once the freeze window elapses', async () => {
     const signalId = randomUUID();
     const actorIds = Array.from({ length: 6 }, () => randomUUID());
 
@@ -776,12 +801,124 @@ describe('civic process confirmation integration', () => {
     );
     expect(state.rows).toEqual([
       {
-        current_stage: 'voting',
+        current_stage: 'ballot_preparation',
         ballot_transitions: '1',
         ballot_events: '1',
-        voting_transitions: '1',
-        voting_events: '1',
+        voting_transitions: '0',
+        voting_events: '0',
       },
+    ]);
+
+    // Every non-withdrawn proposal is frozen the instant ballot_preparation
+    // begins — the frozen set becomes the fixed ballot (§8).
+    const frozenProposals = await pool.query<{
+      lifecycle_state: string;
+      frozen_at: string | null;
+    }>('SELECT lifecycle_state, frozen_at FROM town.civic_proposals WHERE process_id = $1', [
+      processId,
+    ]);
+    expect(frozenProposals.rows).toHaveLength(5);
+    for (const row of frozenProposals.rows) {
+      expect(row.lifecycle_state).toBe('frozen');
+      expect(row.frozen_at).not.toBeNull();
+    }
+
+    // The eligible-voter snapshot includes every active actor in the
+    // community at freeze time — a superset of this test's own actors
+    // (shared foundation community, other tests' actors included), and
+    // crucially still includes actorIds[5], who never confirmed, proposed,
+    // or deliberated on this specific signal.
+    const eligibleActors = await pool.query<{ actor_id: string }>(
+      'SELECT actor_id FROM town.civic_ballot_eligible_actors WHERE process_id = $1',
+      [processId],
+    );
+    const eligibleActorIds = eligibleActors.rows.map((row) => row.actor_id);
+    for (const actorId of actorIds) {
+      expect(eligibleActorIds).toContain(actorId);
+    }
+
+    const ballotPreparationResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process`,
+    });
+    expect(ballotPreparationResponse.statusCode).toBe(200);
+    const ballotPreparationBody = ballotPreparationResponse.json<{
+      data: {
+        ballotPreview: {
+          question: string;
+          proposals: { id: string }[];
+          votingOpensAt: string;
+          votingClosesAt: string;
+          ballotType: string;
+          quorum: number;
+          eligibleVoterCount: number;
+          winRuleKey: string;
+        } | null;
+      };
+    }>();
+    expect(ballotPreparationResponse.json()).toMatchObject({
+      data: {
+        currentStage: 'ballot_preparation',
+        stageLabelKey: 'civic_process.stage.ballot_preparation',
+        nextStage: 'voting',
+        transitionRule: null,
+        timeline: [
+          { type: 'process_created' },
+          { type: 'stage_transitioned_to_proposals' },
+          { type: 'stage_transitioned_to_deliberation' },
+          { type: 'stage_transitioned_to_ballot_preparation' },
+        ],
+      },
+    });
+    const ballotPreview = ballotPreparationBody.data.ballotPreview;
+    expect(ballotPreview).not.toBeNull();
+    if (!ballotPreview) throw new Error('expected a ballot preview');
+    expect(ballotPreview.question).toBe("Which proposal should this signal's mandate be?");
+    expect(new Set(ballotPreview.proposals.map((proposal) => proposal.id))).toEqual(
+      new Set(proposalIds),
+    );
+    expect(ballotPreview.ballotType).toBe('approval');
+    expect(ballotPreview.quorum).toBe(5);
+    expect(ballotPreview.eligibleVoterCount).toBe(eligibleActorIds.length);
+    expect(ballotPreview.winRuleKey).toBe('most_approvals_no_tiebreak');
+    const votingOpensAtMs = new Date(ballotPreview.votingOpensAt).getTime();
+    const votingClosesAtMs = new Date(ballotPreview.votingClosesAt).getTime();
+    expect(votingClosesAtMs - votingOpensAtMs).toBe(72 * 60 * 60 * 1000);
+
+    // Voting is not open yet: a vote cast during ballot_preparation is
+    // rejected, and the ballot cannot be reached through the voting route.
+    await expect(
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+        [processId, proposalIds[0], actorIds[0]],
+      ),
+    ).rejects.toThrow(/civic voting stage is closed/);
+
+    await advanceBallotPreparationToVoting(pool, app, { signalId, processId });
+
+    const stateAfterFreezeWindow = await pool.query<{
+      current_stage: string;
+      voting_transitions: string;
+      voting_events: string;
+    }>(
+      `SELECT
+         process.current_stage,
+         (SELECT count(*)::text
+          FROM town.civic_process_transitions transition
+          WHERE transition.process_id = process.id
+            AND transition.from_stage = 'ballot_preparation'
+            AND transition.to_stage = 'voting') AS voting_transitions,
+         (SELECT count(*)::text
+          FROM town.civic_process_events event
+          WHERE event.process_id = process.id
+            AND event.event_type = 'stage_transitioned_to_voting') AS voting_events
+       FROM town.civic_processes process
+       WHERE process.signal_id = $1`,
+      [signalId],
+    );
+    expect(stateAfterFreezeWindow.rows).toEqual([
+      { current_stage: 'voting', voting_transitions: '1', voting_events: '1' },
     ]);
 
     const response = await app.inject({
@@ -799,6 +936,7 @@ describe('civic process confirmation integration', () => {
         voteCount: 0,
         nextStage: 'mandate',
         transitionRule: null,
+        ballotPreview: null,
         timeline: [
           { type: 'process_created' },
           { type: 'stage_transitioned_to_proposals' },
@@ -975,7 +1113,9 @@ describe('civic process confirmation integration', () => {
       'SELECT current_stage FROM town.civic_processes WHERE id = $1',
       [processId],
     );
-    expect(stageAfterDeliberation.rows[0]?.current_stage).toBe('voting');
+    expect(stageAfterDeliberation.rows[0]?.current_stage).toBe('ballot_preparation');
+
+    await advanceBallotPreparationToVoting(pool, app, { signalId, processId });
 
     await Promise.all([
       pool.query(
@@ -1241,6 +1381,8 @@ describe('civic process confirmation integration', () => {
         ),
       ),
     );
+
+    await advanceBallotPreparationToVoting(pool, app, { signalId, processId });
 
     await Promise.all([
       pool.query(

@@ -14,17 +14,24 @@ import {
   findActiveCivicActorByAccountId,
   findConfirmationByActorAndSignal,
 } from '../db/repositories/confirmations.js';
+import { countCivicBallotEligibleActors } from '../db/repositories/civic-ballot.js';
 import { countDistinctCivicDeliberationParticipants } from '../db/repositories/civic-deliberation.js';
 import { markCivicProcessViewed } from '../db/repositories/civic-inbox.js';
 import { closeVotingWindowIfElapsed } from '../db/repositories/civic-mandates.js';
-import { countCivicProposalsForProcess } from '../db/repositories/civic-proposals.js';
+import {
+  countCivicProposalsForProcess,
+  listCivicProposals,
+} from '../db/repositories/civic-proposals.js';
 import { countCivicVotesForProcess } from '../db/repositories/civic-votes.js';
 import {
+  CIVIC_BALLOT_QUESTION,
+  CIVIC_BALLOT_QUORUM,
   CIVIC_CONFIRMATION_THRESHOLD,
   CIVIC_DELIBERATION_THRESHOLD,
   CIVIC_PROPOSAL_THRESHOLD,
   findCivicProcessBySignalId,
   listPublicCivicProcessEvents,
+  openVotingIfBallotPreparationElapsed,
   provisionMissingCivicProcess,
 } from '../db/repositories/civic-processes.js';
 import { findPublishedSignalById } from '../db/repositories/signals.js';
@@ -194,6 +201,12 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
           throw new Error('Visible signal is missing its canonical civic process');
         }
       }
+      if (initialProcess.currentStage === 'ballot_preparation') {
+        await openVotingIfBallotPreparationElapsed(app.database.db, {
+          processId: initialProcess.id,
+          now: now(),
+        });
+      }
       if (initialProcess.currentStage === 'voting') {
         await closeVotingWindowIfElapsed(app.database.db, {
           processId: initialProcess.id,
@@ -212,6 +225,8 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
         voteCount,
         timeline,
         accountId,
+        ballotPreviewProposals,
+        eligibleVoterCount,
       ] = await Promise.all([
         countConfirmationsForSignal(app.database.db, published.signal.id),
         countCivicProposalsForProcess(app.database.db, process.id),
@@ -219,6 +234,12 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
         countCivicVotesForProcess(app.database.db, process.id),
         listPublicCivicProcessEvents(app.database.db, process.id),
         resolveOptionalSessionAccountId(request),
+        process.currentStage === 'ballot_preparation'
+          ? listCivicProposals(app.database.db, process.id)
+          : Promise.resolve([]),
+        process.currentStage === 'ballot_preparation'
+          ? countCivicBallotEligibleActors(app.database.db, process.id)
+          : Promise.resolve(0),
       ]);
 
       let hasConfirmed = false;
@@ -333,6 +354,28 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
                       reached: deliberationParticipantCount >= CIVIC_DELIBERATION_THRESHOLD,
                     }
                   : null,
+          ballotPreview:
+            process.currentStage === 'ballot_preparation' &&
+            process.votingOpensAt &&
+            process.votingClosesAt
+              ? {
+                  question: CIVIC_BALLOT_QUESTION,
+                  proposals: ballotPreviewProposals
+                    .filter((proposal) => proposal.lifecycleState === 'frozen')
+                    .map((proposal) => ({
+                      id: proposal.id,
+                      authorDisplayName: proposal.authorDisplayName,
+                      title: proposal.title,
+                      body: proposal.body,
+                    })),
+                  votingOpensAt: toIsoTimestamp(process.votingOpensAt),
+                  votingClosesAt: toIsoTimestamp(process.votingClosesAt),
+                  ballotType: 'approval' as const,
+                  quorum: CIVIC_BALLOT_QUORUM,
+                  eligibleVoterCount: eligibleVoterCount,
+                  winRuleKey: 'most_approvals_no_tiebreak' as const,
+                }
+              : null,
           timeline: timeline.map((event) => ({
             type: event.eventType,
             occurredAt: toIsoTimestamp(event.occurredAt),

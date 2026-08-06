@@ -230,11 +230,14 @@ export const civicProposalRoutes: FastifyPluginCallbackTypebox<CivicProposalRout
       lifecycleState: proposal.lifecycleState,
       revisedAt: proposal.revisedAt ? toIsoTimestamp(proposal.revisedAt) : null,
       withdrawnAt: proposal.withdrawnAt ? toIsoTimestamp(proposal.withdrawnAt) : null,
+      frozenAt: proposal.frozenAt ? toIsoTimestamp(proposal.frozenAt) : null,
       createdAt: toIsoTimestamp(proposal.createdAt),
       isMine,
       canRevise:
         isMine && proposal.lifecycleState === 'published' && context.currentStage === 'proposals',
-      canWithdraw: isMine && proposal.lifecycleState !== 'withdrawn',
+      canWithdraw:
+        isMine &&
+        (proposal.lifecycleState === 'published' || proposal.lifecycleState === 'revised'),
     };
   }
 
@@ -358,6 +361,7 @@ export const civicProposalRoutes: FastifyPluginCallbackTypebox<CivicProposalRout
           lifecycleState: 'published' as const,
           revisedAt: null,
           withdrawnAt: null,
+          frozenAt: null,
           createdAt: toIsoTimestamp(createdAt),
           isMine: true,
           canRevise: true,

@@ -19593,6 +19593,99 @@
                     "data": {
                       "additionalProperties": false,
                       "properties": {
+                        "ballotPreview": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "ballotType": {
+                                  "enum": [
+                                    "approval"
+                                  ],
+                                  "type": "string"
+                                },
+                                "eligibleVoterCount": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "proposals": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "authorDisplayName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "body": {
+                                        "maxLength": 2000,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "title": {
+                                        "maxLength": 160,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "authorDisplayName",
+                                      "title",
+                                      "body"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 100,
+                                  "type": "array"
+                                },
+                                "question": {
+                                  "enum": [
+                                    "Which proposal should this signal's mandate be?"
+                                  ],
+                                  "type": "string"
+                                },
+                                "quorum": {
+                                  "maximum": 5,
+                                  "minimum": 5,
+                                  "type": "integer"
+                                },
+                                "votingClosesAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "votingOpensAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "winRuleKey": {
+                                  "enum": [
+                                    "most_approvals_no_tiebreak"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "question",
+                                "proposals",
+                                "votingOpensAt",
+                                "votingClosesAt",
+                                "ballotType",
+                                "quorum",
+                                "eligibleVoterCount",
+                                "winRuleKey"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "CivicBallotPreview"
+                        },
                         "canConfirm": {
                           "type": "boolean"
                         },
@@ -19826,6 +19919,7 @@
                         "nextStage",
                         "closingAt",
                         "transitionRule",
+                        "ballotPreview",
                         "timeline",
                         "createdAt",
                         "updatedAt"
@@ -21601,6 +21695,17 @@
                                   }
                                 ]
                               },
+                              "frozenAt": {
+                                "anyOf": [
+                                  {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "id": {
                                 "format": "uuid",
                                 "type": "string"
@@ -21636,6 +21741,12 @@
                                   {
                                     "enum": [
                                       "withdrawn"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "frozen"
                                     ],
                                     "type": "string"
                                   }
@@ -21693,6 +21804,7 @@
                               "lifecycleState",
                               "revisedAt",
                               "withdrawnAt",
+                              "frozenAt",
                               "createdAt",
                               "isMine",
                               "canRevise",
@@ -21914,6 +22026,17 @@
                             }
                           ]
                         },
+                        "frozenAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "id": {
                           "format": "uuid",
                           "type": "string"
@@ -21949,6 +22072,12 @@
                             {
                               "enum": [
                                 "withdrawn"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "frozen"
                               ],
                               "type": "string"
                             }
@@ -22006,6 +22135,7 @@
                         "lifecycleState",
                         "revisedAt",
                         "withdrawnAt",
+                        "frozenAt",
                         "createdAt",
                         "isMine",
                         "canRevise",
@@ -22341,6 +22471,17 @@
                             }
                           ]
                         },
+                        "frozenAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "id": {
                           "format": "uuid",
                           "type": "string"
@@ -22376,6 +22517,12 @@
                             {
                               "enum": [
                                 "withdrawn"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "frozen"
                               ],
                               "type": "string"
                             }
@@ -22433,6 +22580,7 @@
                         "lifecycleState",
                         "revisedAt",
                         "withdrawnAt",
+                        "frozenAt",
                         "createdAt",
                         "isMine",
                         "canRevise",
@@ -22721,6 +22869,17 @@
                             }
                           ]
                         },
+                        "frozenAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "id": {
                           "format": "uuid",
                           "type": "string"
@@ -22756,6 +22915,12 @@
                             {
                               "enum": [
                                 "withdrawn"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "frozen"
                               ],
                               "type": "string"
                             }
@@ -22813,6 +22978,7 @@
                         "lifecycleState",
                         "revisedAt",
                         "withdrawnAt",
+                        "frozenAt",
                         "createdAt",
                         "isMine",
                         "canRevise",
