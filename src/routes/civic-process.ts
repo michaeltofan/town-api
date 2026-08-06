@@ -25,6 +25,7 @@ import {
   CIVIC_PROPOSAL_THRESHOLD,
   findCivicProcessBySignalId,
   listPublicCivicProcessEvents,
+  provisionMissingCivicProcess,
 } from '../db/repositories/civic-processes.js';
 import { findPublishedSignalById } from '../db/repositories/signals.js';
 import {
@@ -175,9 +176,23 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
         throw signalNotFoundError();
       }
 
-      const initialProcess = await findCivicProcessBySignalId(app.database.db, published.signal.id);
+      let initialProcess = await findCivicProcessBySignalId(app.database.db, published.signal.id);
       if (initialProcess?.communityId !== published.signal.communityId) {
-        throw new Error('Visible signal is missing its canonical civic process');
+        // A published signal must always have a canonical civic process; the
+        // AFTER INSERT trigger normally guarantees this, but a signal upserted
+        // via ON CONFLICT DO UPDATE (e.g. re-seeding foundation content) does
+        // not re-fire that trigger, so backfill it here instead of failing.
+        await provisionMissingCivicProcess(app.database.db, {
+          processId: generateId(),
+          eventId: generateId(),
+          signalId: published.signal.id,
+          communityId: published.signal.communityId,
+          createdAt: published.signal.createdAt,
+        });
+        initialProcess = await findCivicProcessBySignalId(app.database.db, published.signal.id);
+        if (initialProcess?.communityId !== published.signal.communityId) {
+          throw new Error('Visible signal is missing its canonical civic process');
+        }
       }
       if (initialProcess.currentStage === 'voting') {
         await closeVotingWindowIfElapsed(app.database.db, {

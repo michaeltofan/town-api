@@ -274,6 +274,86 @@ describe('civic process confirmation integration', () => {
     ]);
   });
 
+  it('self-heals a published signal whose civic process was never provisioned', async () => {
+    // Reproduces a real production gap: signals upserted via
+    // ON CONFLICT DO UPDATE (e.g. re-seeding foundation content against rows
+    // that already exist) do not re-fire the AFTER INSERT trigger, so some
+    // published signals ended up with no matching civic_processes row and the
+    // read endpoint threw a 500. Simulate that gap directly by disabling the
+    // trigger for one insert, then confirm the read endpoint backfills the
+    // missing process instead of failing.
+    const signalId = randomUUID();
+    await pool.query('ALTER TABLE town.signals DISABLE TRIGGER signals_provision_civic_process');
+    try {
+      await pool.query(
+        `INSERT INTO town.signals
+         SELECT (jsonb_populate_record(
+           NULL::town.signals,
+           to_jsonb(source) || jsonb_build_object(
+             'id', $1::uuid,
+             'slug', 'civic-process-missing-trigger-test',
+             'position', 32009,
+             'created_at', now(),
+             'updated_at', now(),
+             'published_at', now()
+           )
+         )).*
+         FROM town.signals source
+         ORDER BY position
+         LIMIT 1`,
+        [signalId],
+      );
+    } finally {
+      await pool.query('ALTER TABLE town.signals ENABLE TRIGGER signals_provision_civic_process');
+    }
+
+    const beforeHeal = await pool.query(
+      'SELECT id FROM town.civic_processes WHERE signal_id = $1',
+      [signalId],
+    );
+    expect(beforeHeal.rows).toHaveLength(0);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process`,
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ data: { id: string } }>();
+    expect(response.json()).toMatchObject({
+      data: {
+        signalId,
+        currentStage: 'confirmation',
+        nextStage: 'proposals',
+        confirmationCount: 0,
+      },
+    });
+
+    const healed = await pool.query<{
+      id: string;
+      event_type: string;
+      event_count: string;
+    }>(
+      `SELECT p.id, min(e.event_type) AS event_type, count(e.id)::text AS event_count
+       FROM town.civic_processes p
+       JOIN town.civic_process_events e ON e.process_id = p.id
+       WHERE p.signal_id = $1
+       GROUP BY p.id`,
+      [signalId],
+    );
+    expect(healed.rows).toEqual([
+      { id: body.data.id, event_type: 'process_created', event_count: '1' },
+    ]);
+
+    // A second read must not crash or duplicate the ledger — the process
+    // already exists now, so this exercises the ordinary (non-healing) path.
+    const secondResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process`,
+    });
+    expect(secondResponse.statusCode).toBe(200);
+    expect(secondResponse.json<{ data: { id: string } }>().data.id).toBe(body.data.id);
+  });
+
   it('rejects duplicate provisioning, ledger mutation, and direct stage changes', async () => {
     const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal1;
     const process = await pool.query<{ id: string; community_id: string }>(
