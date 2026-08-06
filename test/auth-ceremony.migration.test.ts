@@ -16,6 +16,7 @@ const EXPECTED_TABLES = [
   'civic_process_transitions',
   'civic_process_views',
   'civic_processes',
+  'civic_proposal_revisions',
   'civic_proposals',
   'civic_verification_confirmations',
   'civic_verification_evidence',
