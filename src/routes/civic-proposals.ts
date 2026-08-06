@@ -11,8 +11,12 @@ import {
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
 import {
   findCivicProposalByProcessAndActor,
+  findCivicProposalById,
   insertCivicProposal,
   listCivicProposals,
+  reviseCivicProposal,
+  withdrawCivicProposal,
+  type CivicProposalView,
 } from '../db/repositories/civic-proposals.js';
 import { findCivicProcessBySignalId } from '../db/repositories/civic-processes.js';
 import { findActiveCivicActorByAccountId } from '../db/repositories/confirmations.js';
@@ -34,6 +38,7 @@ import {
   CivicProposalBodySchema,
   CivicProposalRouteResponses,
 } from '../schemas/civic-proposals.js';
+import { SignalProposalIdParamsSchema } from '../schemas/civic-deliberation.js';
 import { ERROR_CODE } from '../schemas/error.js';
 import { SignalIdParamsSchema } from '../schemas/signals.js';
 
@@ -61,6 +66,30 @@ function alreadySubmittedError(): AppError {
     409,
     'CIVIC_PROPOSAL_ALREADY_SUBMITTED',
     'This member has already submitted a proposal.',
+  );
+}
+
+function proposalNotFoundError(): AppError {
+  return new AppError(404, ERROR_CODE.NOT_FOUND, 'Proposal not found.');
+}
+
+function notProposalAuthorError(): AppError {
+  return new AppError(403, 'CIVIC_PROPOSAL_NOT_AUTHOR', 'Only the proposal author may do this.');
+}
+
+function alreadyRevisedError(): AppError {
+  return new AppError(
+    409,
+    'CIVIC_PROPOSAL_ALREADY_REVISED',
+    'A proposal can only be revised once.',
+  );
+}
+
+function alreadyWithdrawnError(): AppError {
+  return new AppError(
+    409,
+    'CIVIC_PROPOSAL_ALREADY_WITHDRAWN',
+    'This proposal has already been withdrawn.',
   );
 }
 
@@ -184,6 +213,37 @@ export const civicProposalRoutes: FastifyPluginCallbackTypebox<CivicProposalRout
     return { published, process };
   }
 
+  function toProposalResponse(
+    proposal: CivicProposalView,
+    context: { actorId: string | null; currentStage: string },
+  ) {
+    const isMine = context.actorId === proposal.authorActorId;
+    return {
+      id: proposal.id,
+      authorDisplayName: proposal.authorDisplayName,
+      title: proposal.title,
+      body: proposal.body,
+      targetInstitution: proposal.targetInstitution,
+      expectedOutcome: proposal.expectedOutcome,
+      estimatedResources: proposal.estimatedResources,
+      indicativeDeadline: proposal.indicativeDeadline,
+      lifecycleState: proposal.lifecycleState,
+      revisedAt: proposal.revisedAt ? toIsoTimestamp(proposal.revisedAt) : null,
+      withdrawnAt: proposal.withdrawnAt ? toIsoTimestamp(proposal.withdrawnAt) : null,
+      createdAt: toIsoTimestamp(proposal.createdAt),
+      isMine,
+      canRevise:
+        isMine && proposal.lifecycleState === 'published' && context.currentStage === 'proposals',
+      canWithdraw: isMine && proposal.lifecycleState !== 'withdrawn',
+    };
+  }
+
+  function normalizeOptionalField(value: string | undefined): string | null {
+    if (value === undefined) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
   app.get(
     '/v1/signals/:signalId/civic-process/proposals',
     {
@@ -191,7 +251,7 @@ export const civicProposalRoutes: FastifyPluginCallbackTypebox<CivicProposalRout
         tags: ['Civic Process'],
         summary: 'List structured proposals for a civic process',
         description:
-          'Public ordered proposals for a visible signal. Optional session state derives only canPropose and isMine. Never exposes account or actor identifiers.',
+          'Public ordered proposals for a visible signal. Optional session state derives only canPropose, isMine, canRevise, canWithdraw. Never exposes account or actor identifiers.',
         params: SignalIdParamsSchema,
         response: CivicProposalRouteResponses.read,
       },
@@ -215,14 +275,12 @@ export const civicProposalRoutes: FastifyPluginCallbackTypebox<CivicProposalRout
           processId: process.id,
           currentStage: process.currentStage,
           canPropose: process.currentStage === 'proposals' && actor !== null && own === null,
-          proposals: proposals.map((proposal) => ({
-            id: proposal.id,
-            authorDisplayName: proposal.authorDisplayName,
-            title: proposal.title,
-            body: proposal.body,
-            createdAt: toIsoTimestamp(proposal.createdAt),
-            isMine: actor?.id === proposal.authorActorId,
-          })),
+          proposals: proposals.map((proposal) =>
+            toProposalResponse(proposal, {
+              actorId: actor?.id ?? null,
+              currentStage: process.currentStage,
+            }),
+          ),
         },
       });
     },
@@ -251,7 +309,11 @@ export const civicProposalRoutes: FastifyPluginCallbackTypebox<CivicProposalRout
       if (!actor) throw civicParticipationNotAuthorizedError();
       const title = request.body.title.trim();
       const body = request.body.body.trim();
-      if (!title || !body || title.length > 160 || body.length > 2000) throw validationError();
+      const expectedOutcome = request.body.expectedOutcome.trim();
+      if (!title || !body || !expectedOutcome) throw validationError();
+      const targetInstitution = normalizeOptionalField(request.body.targetInstitution);
+      const estimatedResources = normalizeOptionalField(request.body.estimatedResources);
+      const indicativeDeadline = request.body.indicativeDeadline ?? null;
       const existing = await findCivicProposalByProcessAndActor(app.database.db, {
         processId: process.id,
         actorId: actor.id,
@@ -266,6 +328,10 @@ export const civicProposalRoutes: FastifyPluginCallbackTypebox<CivicProposalRout
           actorId: actor.id,
           title,
           body,
+          targetInstitution,
+          expectedOutcome,
+          estimatedResources,
+          indicativeDeadline,
           createdAt,
         });
       } catch (error: unknown) {
@@ -285,9 +351,107 @@ export const civicProposalRoutes: FastifyPluginCallbackTypebox<CivicProposalRout
           authorDisplayName: actor.displayLabel,
           title,
           body,
+          targetInstitution,
+          expectedOutcome,
+          estimatedResources,
+          indicativeDeadline,
+          lifecycleState: 'published' as const,
+          revisedAt: null,
+          withdrawnAt: null,
           createdAt: toIsoTimestamp(createdAt),
           isMine: true,
+          canRevise: true,
+          canWithdraw: true,
         },
+      });
+    },
+  );
+
+  app.put(
+    '/v1/signals/:signalId/civic-process/proposals/:proposalId',
+    {
+      schema: {
+        tags: ['Civic Process'],
+        summary: "Revise the author's own proposal exactly once",
+        description:
+          'A proposal may be revised exactly once, only by its author, only while the process is still in the proposals stage. The prior content is preserved in the append-only revision ledger. Enforced at the database level, not just here.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: SignalProposalIdParamsSchema,
+        body: CivicProposalBodySchema,
+        response: CivicProposalRouteResponses.revise,
+      },
+    },
+    async (request, reply) => {
+      const { published, process } = await visibleProcess(request.params.signalId);
+      const session = await resolveSession(request, true, true);
+      if (!session) throw sessionNotAuthorizedError();
+      const actor = await participantActor(session.accountId, published.signal.communityId);
+      if (!actor) throw civicParticipationNotAuthorizedError();
+      const title = request.body.title.trim();
+      const body = request.body.body.trim();
+      const expectedOutcome = request.body.expectedOutcome.trim();
+      if (!title || !body || !expectedOutcome) throw validationError();
+      const targetInstitution = normalizeOptionalField(request.body.targetInstitution);
+      const estimatedResources = normalizeOptionalField(request.body.estimatedResources);
+      const indicativeDeadline = request.body.indicativeDeadline ?? null;
+      const outcome = await reviseCivicProposal(app.database.db, {
+        proposalId: request.params.proposalId,
+        actorId: actor.id,
+        title,
+        body,
+        targetInstitution,
+        expectedOutcome,
+        estimatedResources,
+        indicativeDeadline,
+      });
+      if (outcome === 'not_found') throw proposalNotFoundError();
+      if (outcome === 'not_author') throw notProposalAuthorError();
+      if (outcome === 'db_rejected') throw alreadyRevisedError();
+      const revised = await findCivicProposalById(app.database.db, request.params.proposalId);
+      if (!revised) throw proposalNotFoundError();
+      return await reply.status(200).send({
+        data: toProposalResponse(revised, {
+          actorId: actor.id,
+          currentStage: process.currentStage,
+        }),
+      });
+    },
+  );
+
+  app.post(
+    '/v1/signals/:signalId/civic-process/proposals/:proposalId/withdraw',
+    {
+      schema: {
+        tags: ['Civic Process'],
+        summary: "Withdraw the author's own proposal",
+        description:
+          'Withdrawal is author-only and permanent — a withdrawn proposal keeps its full history visible but is excluded once the process moves past proposals. Allowed at any stage; content cannot change on withdrawal.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: SignalProposalIdParamsSchema,
+        response: CivicProposalRouteResponses.withdraw,
+      },
+    },
+    async (request, reply) => {
+      const { published, process } = await visibleProcess(request.params.signalId);
+      const session = await resolveSession(request, true, true);
+      if (!session) throw sessionNotAuthorizedError();
+      const actor = await participantActor(session.accountId, published.signal.communityId);
+      if (!actor) throw civicParticipationNotAuthorizedError();
+      const outcome = await withdrawCivicProposal(app.database.db, {
+        proposalId: request.params.proposalId,
+        actorId: actor.id,
+        withdrawnAt: now(),
+      });
+      if (outcome === 'not_found') throw proposalNotFoundError();
+      if (outcome === 'not_author') throw notProposalAuthorError();
+      if (outcome === 'db_rejected') throw alreadyWithdrawnError();
+      const withdrawn = await findCivicProposalById(app.database.db, request.params.proposalId);
+      if (!withdrawn) throw proposalNotFoundError();
+      return await reply.status(200).send({
+        data: toProposalResponse(withdrawn, {
+          actorId: actor.id,
+          currentStage: process.currentStage,
+        }),
       });
     },
   );

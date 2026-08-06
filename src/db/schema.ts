@@ -2053,6 +2053,13 @@ export const civicProposals = town.table(
     authorActorId: uuid('author_actor_id').notNull(),
     title: text('title').notNull(),
     body: text('body').notNull(),
+    targetInstitution: text('target_institution'),
+    expectedOutcome: text('expected_outcome'),
+    estimatedResources: text('estimated_resources'),
+    indicativeDeadline: date('indicative_deadline', { mode: 'string' }),
+    lifecycleState: text('lifecycle_state').notNull().default('published'),
+    revisedAt: timestamp('revised_at', { withTimezone: true, mode: 'string' }),
+    withdrawnAt: timestamp('withdrawn_at', { withTimezone: true, mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -2069,7 +2076,46 @@ export const civicProposals = town.table(
     unique('civic_proposals_process_actor_unique').on(table.processId, table.authorActorId),
     check('civic_proposals_title_valid', sql`char_length(btrim(${table.title})) between 1 and 160`),
     check('civic_proposals_body_valid', sql`char_length(btrim(${table.body})) between 1 and 2000`),
+    check(
+      'civic_proposals_target_institution_valid',
+      sql`${table.targetInstitution} IS NULL OR char_length(btrim(${table.targetInstitution})) BETWEEN 1 AND 200`,
+    ),
+    check(
+      'civic_proposals_expected_outcome_valid',
+      sql`${table.expectedOutcome} IS NULL OR char_length(btrim(${table.expectedOutcome})) BETWEEN 1 AND 500`,
+    ),
+    check(
+      'civic_proposals_estimated_resources_valid',
+      sql`${table.estimatedResources} IS NULL OR char_length(btrim(${table.estimatedResources})) BETWEEN 1 AND 500`,
+    ),
+    check(
+      'civic_proposals_lifecycle_state_valid',
+      sql`${table.lifecycleState} IN ('published', 'revised', 'withdrawn')`,
+    ),
     index('civic_proposals_process_created_idx').on(table.processId, table.createdAt, table.id),
+  ],
+);
+
+export const civicProposalRevisions = town.table(
+  'civic_proposal_revisions',
+  {
+    id: uuid('id').primaryKey(),
+    proposalId: uuid('proposal_id').notNull(),
+    previousTitle: text('previous_title').notNull(),
+    previousBody: text('previous_body').notNull(),
+    previousTargetInstitution: text('previous_target_institution'),
+    previousExpectedOutcome: text('previous_expected_outcome'),
+    previousEstimatedResources: text('previous_estimated_resources'),
+    previousIndicativeDeadline: date('previous_indicative_deadline', { mode: 'string' }),
+    revisedAt: timestamp('revised_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.proposalId],
+      foreignColumns: [civicProposals.id],
+      name: 'civic_proposal_revisions_proposal_id_fkey',
+    }).onDelete('restrict'),
+    index('civic_proposal_revisions_proposal_idx').on(table.proposalId, table.revisedAt),
   ],
 );
 
@@ -2427,6 +2473,7 @@ export const civicProcessViews = town.table(
 
 export type CivicProcessRow = typeof civicProcesses.$inferSelect;
 export type CivicProposalRow = typeof civicProposals.$inferSelect;
+export type CivicProposalRevisionRow = typeof civicProposalRevisions.$inferSelect;
 export type CivicDeliberationContributionRow = typeof civicDeliberationContributions.$inferSelect;
 export type CivicVoteRow = typeof civicVotes.$inferSelect;
 export type CivicProcessTransitionRow = typeof civicProcessTransitions.$inferSelect;
