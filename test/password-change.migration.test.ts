@@ -237,7 +237,7 @@ describe('password change migration 0028', () => {
     const ordered = await pool.query<{ id: number }>(
       `SELECT id FROM drizzle.__drizzle_migrations ORDER BY id ASC`,
     );
-    expect(ordered.rows).toHaveLength(51);
+    expect(ordered.rows).toHaveLength(52);
 
     const afterRateLimit = await pool.query(
       `SELECT id, scope, subject_hash, attempt_count, created_at, updated_at
