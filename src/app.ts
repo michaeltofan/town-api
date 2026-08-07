@@ -347,6 +347,9 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(civicMandateRoutes, {
     env: options.env,
     ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
+    ...(options.membership?.localEligibilityResolver !== undefined
+      ? { localEligibilityResolver: options.membership.localEligibilityResolver }
+      : {}),
   });
   await app.register(civicActionRoutes, {
     env: options.env,

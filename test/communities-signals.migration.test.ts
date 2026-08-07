@@ -37,6 +37,7 @@ describe('communities and signals migration', () => {
 
       'civic_ballot_tokens',
       'civic_deliberation_contributions',
+      'civic_mandate_contestations',
       'civic_mandates',
       'civic_process_events',
       'civic_process_transitions',
@@ -156,6 +157,7 @@ describe('communities and signals migration', () => {
 
       'civic_ballot_tokens',
       'civic_deliberation_contributions',
+      'civic_mandate_contestations',
       'civic_mandates',
       'civic_process_events',
       'civic_process_transitions',

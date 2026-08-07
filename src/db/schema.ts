@@ -2398,6 +2398,48 @@ export const civicMandates = town.table(
   ],
 );
 
+export const civicMandateContestations = town.table(
+  'civic_mandate_contestations',
+  {
+    id: uuid('id').primaryKey(),
+    processId: uuid('process_id').notNull(),
+    filerActorId: uuid('filer_actor_id').notNull(),
+    reasonKey: text('reason_key').notNull(),
+    elaboration: text('elaboration'),
+    status: text('status').notNull().default('pending'),
+    filedAt: timestamp('filed_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_mandate_contestations_process_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.filerActorId],
+      foreignColumns: [actors.id],
+      name: 'civic_mandate_contestations_filer_actor_id_fkey',
+    }).onDelete('restrict'),
+    unique('civic_mandate_contestations_process_filer_unique').on(
+      table.processId,
+      table.filerActorId,
+    ),
+    check(
+      'civic_mandate_contestations_reason_key_supported',
+      sql`${table.reasonKey} in ('eligibility_error', 'ballot_tampering_suspected', 'count_discrepancy')`,
+    ),
+    check(
+      'civic_mandate_contestations_status_supported',
+      sql`${table.status} in ('pending', 'upheld', 'rejected')`,
+    ),
+    check(
+      'civic_mandate_contestations_elaboration_valid',
+      sql`${table.elaboration} is null or char_length(btrim(${table.elaboration})) between 1 and 1000`,
+    ),
+    index('civic_mandate_contestations_process_idx').on(table.processId),
+  ],
+);
+
 export const civicActionUpdates = town.table(
   'civic_action_updates',
   {
@@ -2559,6 +2601,7 @@ export type CivicVoteRow = typeof civicVotes.$inferSelect;
 export type CivicProcessTransitionRow = typeof civicProcessTransitions.$inferSelect;
 export type CivicProcessEventRow = typeof civicProcessEvents.$inferSelect;
 export type CivicMandateRow = typeof civicMandates.$inferSelect;
+export type CivicMandateContestationRow = typeof civicMandateContestations.$inferSelect;
 export type CivicActionUpdateRow = typeof civicActionUpdates.$inferSelect;
 export type CivicVerificationEvidenceRow = typeof civicVerificationEvidence.$inferSelect;
 export type CivicVerificationConfirmationRow = typeof civicVerificationConfirmations.$inferSelect;

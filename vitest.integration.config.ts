@@ -21,6 +21,7 @@ export default defineConfig({
       'test/civic-proposals-lifecycle.integration.test.ts',
       'test/civic-deliberation-intents.integration.test.ts',
       'test/civic-secret-ballot.integration.test.ts',
+      'test/civic-mandate-extensions.integration.test.ts',
       'test/account-identity.migration.test.ts',
       'test/account-identity.repository.test.ts',
       'test/account-identity.fixtures.test.ts',

@@ -386,6 +386,13 @@
       "when": 1787942400000,
       "tag": "0054_civic_secret_ballot",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1788028800000,
+      "tag": "0055_civic_mandate_extensions",
+      "breakpoints": true
     }
   ]
 }

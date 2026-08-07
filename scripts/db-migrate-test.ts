@@ -24,6 +24,7 @@ const EXPECTED_TOWN_TABLES = [
   'civic_ballot_eligible_actors',
   'civic_ballot_tokens',
   'civic_deliberation_contributions',
+  'civic_mandate_contestations',
   'civic_mandates',
   'civic_process_events',
   'civic_process_transitions',

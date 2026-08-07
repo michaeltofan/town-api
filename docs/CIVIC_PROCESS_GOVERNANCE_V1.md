@@ -265,7 +265,7 @@ ballot_preparation ⇄ voting` edges more than once for one process, each
     to be more than it is — matching the owner's own stated principle that
     TOWN must not claim secrecy it cannot back.
 
-## 10. Cancellation and contestation
+## 10. Cancellation and contestation **[V2 filing — implemented; review — pending §14]**
 
 **[V1 — implemented]** A tied/no-winner mandate is reported `contested`,
 never resolved by an invented rule (§9 extends this to quorum failure and
@@ -277,14 +277,21 @@ never resolved by an invented rule (§9 extends this to quorum failure and
   vote within **72 hours** of `voting_closes_at`, citing one of a fixed
   reason set: `eligibility_error`, `ballot_tampering_suspected`,
   `count_discrepancy`. Free-text elaboration is stored but the reason code
-  drives routing.
+  drives routing. **[Implemented]** — filing is a real, atomic, eligibility-
+  checked write (`POST /civic-process/mandate/contest`); a contestation is
+  filed openly under the filer's own identity (no secrecy requirement here,
+  unlike a vote), and the public record only ever reports a boolean
+  `contestationPending` sub-flag — never who filed.
 - A filed contestation moves the process to a `verification_pending`
   **sub-flag** on the mandate stage (not a new top-level stage — the
   canonical 9-state sequence in §1 does not change) and requires an operator
   with the new `moderate_civic_process` capability (§14) to record a
   procedural review outcome: `upheld` (recount from the untouched
   `civic_votes` table, published) or `rejected` (with reason). Both outcomes
-  are public and permanent.
+  are public and permanent. **[Pending]** — every contestation currently
+  reports `status: 'pending'` forever, honestly, because the review capability
+  and route do not exist yet; this is the next PR in the sequence (§14), not
+  an invented resolution.
 - A **civic jury** (a small panel of randomly-selected eligible actors from
   the same community, outside the disputing parties) is the V2 design intent
   for contestations an operator cannot resolve procedurally (i.e. a dispute
@@ -295,10 +302,13 @@ never resolved by an invented rule (§9 extends this to quorum failure and
 
 A decided mandate is a permanent record: question, voted proposals, rule
 applied, eligible-voter count, participation, aggregated results, winning
-proposal, adoption date. **[V2]** adds: minority position (from §7), any
-contestation outcome (§10), and is still never edited retroactively —
-corrections are published as a linked amendment record, never an in-place
-edit, exactly as specified.
+proposal, adoption date. **[V2 — implemented]** adds: minority position (from
+§7) surfaced verbatim on the decided mandate's read (`minorityPositions`,
+sourced from the `minority_position`-intent deliberation contributions —
+never a new voting mechanism), any contestation outcome (§10, currently
+always `pending` until §14 ships review), and the mandate is still never
+edited retroactively — corrections are published as a linked amendment
+record, never an in-place edit, exactly as specified.
 
 ## 12. Civic action **[V1 — implemented]**
 
@@ -357,24 +367,24 @@ same existing audit mechanisms, no new logging system.
 
 Matches the owner's PR plan, one slice per PR, API before its dependent UI:
 
-| #   | Repo                                | Delivers                                                       |
-| --- | ----------------------------------- | -------------------------------------------------------------- |
-| 1   | town-api (this doc)                 | This governance specification                                  |
-| 2   | town-api                            | _(done — confirmation-stage nucleus, PR #94 and earlier)_      |
-| 3   | town-public                         | _(done — confirmation-stage right panel, PR #99–#101)_         |
-| 4   | town-api                            | Rich proposal object + lifecycle (§6)                          |
-| 5   | town-public                         | Proposal authoring/list UI for the new fields                  |
-| 6   | town-api                            | Extended deliberation intents + reply threading (§7)           |
-| 7   | town-public                         | Deliberation UI for the new intents                            |
-| 8   | town-api                            | Real ballot-preparation gate + freeze snapshot (§8)            |
-| 9   | town-api + town-public, coordinated | Secret-ballot vote table + approval ballot (§9)                |
-| 10  | town-api + town-public              | Mandate extensions: minority position, contestation (§10, §11) |
-| 11  | town-api + town-public              | Action extensions (§12)                                        |
-| 12  | town-api + town-public              | Verification dispute routing (§13)                             |
-| 13  | town-api + platform console         | `moderate_civic_process` + contestation review UI (§14)        |
-| 14  | town-public                         | HOME civic center surfacing real process state                 |
-| 15  | town-api + town-public              | Notifications / Civic Inbox / civic profile extensions         |
-| 16  | town-public                         | Mobile parity pass                                             |
+| #   | Repo                                | Delivers                                                             |
+| --- | ----------------------------------- | -------------------------------------------------------------------- |
+| 1   | town-api (this doc)                 | This governance specification                                        |
+| 2   | town-api                            | _(done — confirmation-stage nucleus, PR #94 and earlier)_            |
+| 3   | town-public                         | _(done — confirmation-stage right panel, PR #99–#101)_               |
+| 4   | town-api                            | Rich proposal object + lifecycle (§6)                                |
+| 5   | town-public                         | Proposal authoring/list UI for the new fields                        |
+| 6   | town-api                            | Extended deliberation intents + reply threading (§7)                 |
+| 7   | town-public                         | Deliberation UI for the new intents                                  |
+| 8   | town-api                            | Real ballot-preparation gate + freeze snapshot (§8)                  |
+| 9   | town-api + town-public, coordinated | _(done — secret-ballot voting + quorum retry, §9)_                   |
+| 10  | town-api + town-public              | _(done — mandate minority position + contestation filing, §10, §11)_ |
+| 11  | town-api + town-public              | Action extensions (§12)                                              |
+| 12  | town-api + town-public              | Verification dispute routing (§13)                                   |
+| 13  | town-api + platform console         | `moderate_civic_process` + contestation review UI (§14)              |
+| 14  | town-public                         | HOME civic center surfacing real process state                       |
+| 15  | town-api + town-public              | Notifications / Civic Inbox / civic profile extensions               |
+| 16  | town-public                         | Mobile parity pass                                                   |
 
 Each PR must update this document in the same PR if it changes a decision
 recorded here — this file is the contract, not the README.
