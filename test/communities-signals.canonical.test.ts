@@ -7,7 +7,7 @@ import {
 
 describe('canonical foundation content lock', () => {
   it('locks community identifiers and metadata', () => {
-    expect(FOUNDATION_COMMUNITIES).toHaveLength(3);
+    expect(FOUNDATION_COMMUNITIES).toHaveLength(7);
     expect(FOUNDATION_COMMUNITIES[0]).toMatchObject({
       id: '00000000-0000-4000-8000-000000000001',
       slug: 'milano-it',
@@ -44,7 +44,7 @@ describe('canonical foundation content lock', () => {
   });
 
   it('locks Italian, German, and Romanian signal identity and approved copy fields', () => {
-    expect(FOUNDATION_SIGNALS).toHaveLength(9);
+    expect(FOUNDATION_SIGNALS).toHaveLength(21);
 
     const milanoOne = FOUNDATION_SIGNALS.find(
       (signal) => signal.id === FOUNDATION_SIGNAL_IDS.milanoSignal1,
@@ -113,6 +113,52 @@ describe('canonical foundation content lock', () => {
     for (const signal of FOUNDATION_SIGNALS) {
       expect(signal.latestUpdate).not.toMatch(/prototip|Prototyp/i);
       expect(JSON.stringify(signal)).not.toMatch(/prototip|Prototyp/i);
+    }
+  });
+
+  it('locks the Romanian city-expansion communities and signal identity', () => {
+    const clujCommunity = FOUNDATION_COMMUNITIES.find((c) => c.slug === 'cluj-napoca-ro');
+    const sibiuCommunity = FOUNDATION_COMMUNITIES.find((c) => c.slug === 'sibiu-ro');
+    const iasiCommunity = FOUNDATION_COMMUNITIES.find((c) => c.slug === 'iasi-ro');
+    const timisoaraCommunity = FOUNDATION_COMMUNITIES.find((c) => c.slug === 'timisoara-ro');
+    expect(clujCommunity).toMatchObject({
+      position: 4,
+      countryCode: 'RO',
+      cityName: 'Cluj-Napoca',
+      defaultLocale: 'ro-RO',
+      timezone: 'Europe/Bucharest',
+      status: 'active',
+    });
+    expect(sibiuCommunity).toMatchObject({ position: 5, countryCode: 'RO', cityName: 'Sibiu' });
+    expect(iasiCommunity).toMatchObject({ position: 6, countryCode: 'RO', cityName: 'Iași' });
+    expect(timisoaraCommunity).toMatchObject({
+      position: 7,
+      countryCode: 'RO',
+      cityName: 'Timișoara',
+    });
+
+    const clujOne = FOUNDATION_SIGNALS.find(
+      (signal) => signal.id === FOUNDATION_SIGNAL_IDS.clujNapocaSignal1,
+    );
+    expect(clujOne).toMatchObject({
+      communityId: clujCommunity?.id,
+      slug: 'cluj-napoca-signal-1',
+      position: 1,
+      locale: 'ro-RO',
+      category: 'MEDIU',
+      area: 'Zorilor',
+    });
+
+    for (const cityId of [
+      FOUNDATION_SIGNAL_IDS.clujNapocaSignal1,
+      FOUNDATION_SIGNAL_IDS.sibiuSignal1,
+      FOUNDATION_SIGNAL_IDS.iasiSignal1,
+      FOUNDATION_SIGNAL_IDS.timisoaraSignal1,
+    ]) {
+      const signal = FOUNDATION_SIGNALS.find((s) => s.id === cityId);
+      expect(signal).toBeDefined();
+      expect(signal?.locale).toBe('ro-RO');
+      expect(signal?.publicationStatus).toBe('published');
     }
   });
 });

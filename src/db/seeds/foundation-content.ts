@@ -92,6 +92,58 @@ export const FOUNDATION_COMMUNITIES = [
     createdAt: '2026-07-01T08:00:00.000Z',
     updatedAt: '2026-07-01T08:00:00.000Z',
   },
+  {
+    id: '00000000-0000-4000-8000-000000000004',
+    slug: 'cluj-napoca-ro',
+    position: 4,
+    countryCode: 'RO',
+    cityName: 'Cluj-Napoca',
+    displayName: 'Cluj-Napoca',
+    defaultLocale: 'ro-RO',
+    timezone: 'Europe/Bucharest',
+    status: 'active',
+    createdAt: '2026-08-07T08:00:00.000Z',
+    updatedAt: '2026-08-07T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000005',
+    slug: 'sibiu-ro',
+    position: 5,
+    countryCode: 'RO',
+    cityName: 'Sibiu',
+    displayName: 'Sibiu',
+    defaultLocale: 'ro-RO',
+    timezone: 'Europe/Bucharest',
+    status: 'active',
+    createdAt: '2026-08-07T08:00:00.000Z',
+    updatedAt: '2026-08-07T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000006',
+    slug: 'iasi-ro',
+    position: 6,
+    countryCode: 'RO',
+    cityName: 'Iași',
+    displayName: 'Iași',
+    defaultLocale: 'ro-RO',
+    timezone: 'Europe/Bucharest',
+    status: 'active',
+    createdAt: '2026-08-07T08:00:00.000Z',
+    updatedAt: '2026-08-07T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000007',
+    slug: 'timisoara-ro',
+    position: 7,
+    countryCode: 'RO',
+    cityName: 'Timișoara',
+    displayName: 'Timișoara',
+    defaultLocale: 'ro-RO',
+    timezone: 'Europe/Bucharest',
+    status: 'active',
+    createdAt: '2026-08-07T08:00:00.000Z',
+    updatedAt: '2026-08-07T08:00:00.000Z',
+  },
 ] as const satisfies readonly CanonicalCommunity[];
 
 export const FOUNDATION_SIGNALS = [
@@ -397,12 +449,425 @@ export const FOUNDATION_SIGNALS = [
     createdAt: '2026-07-21T08:00:00.000Z',
     updatedAt: '2026-07-21T08:00:00.000Z',
   },
+  {
+    id: '00000000-0000-4000-8000-000000000501',
+    communityId: '00000000-0000-4000-8000-000000000004',
+    slug: 'cluj-napoca-signal-1',
+    position: 1,
+    locale: 'ro-RO',
+    category: 'MEDIU',
+    area: 'Zorilor',
+    headline: 'Spațiul verde din Parcul Rozelor, năpădit de vegetație necontrolată',
+    summary:
+      'Iarba și tufișurile netunse de peste două luni acoperă aleile secundare. Locuitorii cer reluarea programului de întreținere.',
+    description:
+      'În Parcul Rozelor din cartierul Zorilor, aleile secundare sunt acoperite de vegetație netunsă încă de la începutul verii. Băncile și coșurile de gunoi devin greu accesibile, iar iarba înaltă ascunde denivelările terenului.',
+    whyItMatters:
+      'Parcul Rozelor este unul dintre puținele spații verzi extinse din Zorilor, folosit zilnic de familii, sportivi și persoane în vârstă. Lipsa întreținerii reduce siguranța și utilitatea unui spațiu public esențial pentru cartier.',
+    whoIsAffected:
+      'Familii cu copii, persoane în vârstă, sportivi și locuitorii cartierului Zorilor care folosesc parcul pentru plimbări zilnice.',
+    latestUpdate:
+      'Semnalul rămâne local și deschis. Nu există încă o confirmare a reluării programului de întreținere.',
+    statusLabel: 'Stare civică: observat — în așteptarea atenției locale',
+    statusNote:
+      '„Observat” înseamnă că problema a fost recunoscută de comunitatea locală. Nu implică o procedură oficială și nici o intervenție deja începută.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-08-03',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Cluj-Napoca',
+    imageKey: 'assets/feed/cluj_napoca_parcul_rozelor.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-08-03T08:00:00.000Z',
+    createdAt: '2026-08-03T08:00:00.000Z',
+    updatedAt: '2026-08-03T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000502',
+    communityId: '00000000-0000-4000-8000-000000000004',
+    slug: 'cluj-napoca-signal-2',
+    position: 2,
+    locale: 'ro-RO',
+    category: 'INFRASTRUCTURĂ',
+    area: 'Mănăștur',
+    headline: 'Carosabilul de pe strada Fabricii de Zahăr rămâne plin de gropi',
+    summary:
+      'Denivelările s-au adâncit după ploile din iulie. Autobuzele de transport public evită acum banda din dreapta.',
+    description:
+      'Pe strada Fabricii de Zahăr, în Mănăștur, mai multe gropi extinse afectează ambele benzi de circulație. Ploile din iulie au adâncit denivelările existente, iar șoferii de autobuz raportează că evită banda din dreapta pe tot traseul.',
+    whyItMatters:
+      'Strada este un traseu zilnic pentru transportul public și pentru mii de locuitori ai celui mai populat cartier al orașului. Gropile adânci cresc riscul de accidente și uzura prematură a vehiculelor.',
+    whoIsAffected:
+      'Locuitorii cartierului Mănăștur, pasagerii liniilor de autobuz care circulă pe strada Fabricii de Zahăr, bicicliști și șoferi.',
+    latestUpdate:
+      'Semnalul rămâne local și deschis. Nu a fost confirmată încă o dată pentru lucrări de reparație.',
+    statusLabel: 'Stare civică: semnalat — monitorizare locală',
+    statusNote:
+      '„Semnalat” indică faptul că problema a fost adusă la cunoștința comunității locale. Nu confirmă reparație, preluare formală sau termene de intervenție.',
+    observedLabel: 'Semnalat acum două zile',
+    observedOn: '2026-08-01',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Cluj-Napoca',
+    imageKey: 'assets/feed/cluj_napoca_fabricii_de_zahar.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-08-01T08:00:00.000Z',
+    createdAt: '2026-08-01T08:00:00.000Z',
+    updatedAt: '2026-08-01T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000503',
+    communityId: '00000000-0000-4000-8000-000000000004',
+    slug: 'cluj-napoca-signal-3',
+    position: 3,
+    locale: 'ro-RO',
+    category: 'SPAȚIU PUBLIC',
+    area: 'Centrul Vechi',
+    headline: 'Zona pietonală din jurul Bisericii Sfântul Mihail, blocată de terase neautorizate',
+    summary:
+      'Mese și scaune ocupă trotuarul pe o lățime de peste doi metri. Persoanele cu cărucior sau cu mobilitate redusă sunt nevoite să coboare pe carosabil.',
+    description:
+      'În jurul Pieței Unirii, mai multe terase depășesc perimetrul autorizat și ocupă trotuarul aproape în întregime, în special seara. Spațiul pietonal rămas este insuficient pentru fluxul de trecere, mai ales în zilele de weekend.',
+    whyItMatters:
+      'Centrul Vechi este cea mai circulată zonă pietonală a orașului. Un trotuar blocat afectează direct accesibilitatea pentru persoane cu cărucioare, cărucioare de copii sau mobilitate redusă.',
+    whoIsAffected:
+      'Persoane cu mobilitate redusă, părinți cu cărucioare, turiști și locuitorii care traversează zilnic Piața Unirii pe jos.',
+    latestUpdate:
+      'Semnalul rămâne deschis. Nu există încă o verificare confirmată a respectării perimetrelor autorizate.',
+    statusLabel: 'Stare civică: deschis — necesită clarificare locală',
+    statusNote:
+      '„Deschis” înseamnă că situația rămâne de clarificat pentru comunitate. Nu implică o decizie administrativă deja încheiată.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-08-04',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Cluj-Napoca',
+    imageKey: 'assets/feed/cluj_napoca_centrul_vechi.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-08-04T08:00:00.000Z',
+    createdAt: '2026-08-04T08:00:00.000Z',
+    updatedAt: '2026-08-04T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000601',
+    communityId: '00000000-0000-4000-8000-000000000005',
+    slug: 'sibiu-signal-1',
+    position: 1,
+    locale: 'ro-RO',
+    category: 'SPAȚIU PUBLIC',
+    area: 'Piața Mică',
+    headline: 'Pavajul istoric din Piața Mică s-a deplasat lângă Pasajul Scărilor',
+    summary:
+      'Câteva zeci de pietre de pavaj s-au ridicat și s-au deplasat. Zona rămâne instabilă la pas, mai ales pe timp de ploaie.',
+    description:
+      'Lângă intrarea în Pasajul Scărilor, o porțiune din pavajul istoric al Pieței Mici s-a deplasat, lăsând pietre ridicate și goluri între ele. Traficul pietonal intens din zonă, combinat cu ploile de vară, a accelerat degradarea.',
+    whyItMatters:
+      'Piața Mică este inima turistică și pietonală a orașului, traversată zilnic de mii de locuitori și vizitatori. Pavajul instabil crește riscul de accidentare, în special pentru persoanele în vârstă.',
+    whoIsAffected:
+      'Locuitorii din Centrul Istoric, comercianții din piață, turiștii și persoanele în vârstă care traversează zona zilnic.',
+    latestUpdate:
+      'Semnalul rămâne local și deschis. Nu este confirmată încă o intervenție de refacere a pavajului.',
+    statusLabel: 'Stare civică: observat — în așteptarea atenției locale',
+    statusNote:
+      '„Observat” înseamnă că problema a fost recunoscută de comunitatea locală. Nu implică o procedură oficială și nici o intervenție deja începută.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-08-02',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Sibiu',
+    imageKey: 'assets/feed/sibiu_piata_mica.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-08-02T08:00:00.000Z',
+    createdAt: '2026-08-02T08:00:00.000Z',
+    updatedAt: '2026-08-02T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000602',
+    communityId: '00000000-0000-4000-8000-000000000005',
+    slug: 'sibiu-signal-2',
+    position: 2,
+    locale: 'ro-RO',
+    category: 'INFRASTRUCTURĂ',
+    area: 'Hipodrom',
+    headline: 'Stâlpii de iluminat din cartierul Hipodrom III rămân stinși de trei săptămâni',
+    summary:
+      'Un tronson de aproape un kilometru pe strada Ceferiștilor este întunecat seara. Locuitorii au depus deja o sesizare la Primărie.',
+    description:
+      'Pe strada Ceferiștilor, în cartierul Hipodrom III, un tronson de aproape un kilometru rămâne fără iluminat public de la începutul lunii. Locuitorii spun că problema a fost deja semnalată furnizorului de energie, fără o dată clară de remediere.',
+    whyItMatters:
+      'Iluminatul public face parte din siguranța zilnică a unui cartier rezidențial dens. Un tronson întunecat afectează atât siguranța pietonilor, cât și percepția generală de siguranță a zonei.',
+    whoIsAffected:
+      'Locuitorii cartierului Hipodrom III, elevi care se întorc seara de la activități, persoane care folosesc strada Ceferiștilor pentru a ajunge la stațiile de transport public.',
+    latestUpdate:
+      'Locuitorii confirmă că au depus deja o sesizare. Semnalul rămâne în monitorizare locală.',
+    statusLabel: 'Stare civică: semnalat — monitorizare locală',
+    statusNote:
+      '„Semnalat” indică faptul că problema a fost adusă la cunoștința comunității locale. Nu confirmă reparație, preluare formală sau termene de intervenție.',
+    observedLabel: 'Semnalat acum trei săptămâni',
+    observedOn: '2026-07-17',
+    observedPrecision: 'week',
+    authorDisplayName: 'Redacția TOWN Sibiu',
+    imageKey: 'assets/feed/sibiu_hipodrom_iluminat.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-07-17T08:00:00.000Z',
+    createdAt: '2026-07-17T08:00:00.000Z',
+    updatedAt: '2026-07-17T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000603',
+    communityId: '00000000-0000-4000-8000-000000000005',
+    slug: 'sibiu-signal-3',
+    position: 3,
+    locale: 'ro-RO',
+    category: 'MEDIU',
+    area: 'Pădurea Dumbrava',
+    headline: 'Cărările din Pădurea Dumbrava, blocate de crengi căzute după furtuna din iulie',
+    summary:
+      'Mai multe cărări principale spre Zoo și Muzeul Astra rămân impracticabile. Curățarea nu a fost încă anunțată.',
+    description:
+      'Furtuna puternică din a doua jumătate a lunii iulie a doborât mai multe crengi mari pe cărările principale din Pădurea Dumbrava, blocând accesul pietonal spre zona Zoo și spre traseele care duc către Muzeul Astra.',
+    whyItMatters:
+      'Pădurea Dumbrava este cea mai folosită zonă de agrement din apropierea orașului, vizitată zilnic de familii, alergători și turiști. Cărările blocate reduc accesul la un spațiu natural esențial pentru comunitate.',
+    whoIsAffected:
+      'Familii care vizitează Zoo, alergători, turiști care merg spre Muzeul Astra și locuitorii din apropiere care folosesc pădurea pentru plimbări zilnice.',
+    latestUpdate:
+      'Semnalul rămâne local și deschis. Nu a fost anunțată încă o dată pentru curățarea cărărilor afectate.',
+    statusLabel: 'Stare civică: observat — în așteptarea atenției locale',
+    statusNote:
+      '„Observat” înseamnă că problema a fost recunoscută de comunitatea locală. Nu implică o procedură oficială și nici o intervenție deja începută.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-08-05',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Sibiu',
+    imageKey: 'assets/feed/sibiu_padurea_dumbrava.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-08-05T08:00:00.000Z',
+    createdAt: '2026-08-05T08:00:00.000Z',
+    updatedAt: '2026-08-05T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000701',
+    communityId: '00000000-0000-4000-8000-000000000006',
+    slug: 'iasi-signal-1',
+    position: 1,
+    locale: 'ro-RO',
+    category: 'INFRASTRUCTURĂ',
+    area: 'Tătărași',
+    headline: 'Asfaltul de pe strada Moara de Vânt s-a surpat pe o porțiune de zece metri',
+    summary:
+      'O conductă de apă spartă a subminat carosabilul. Circulația pe bandă unică este dirijată manual de un agent de pază local.',
+    description:
+      'Pe strada Moara de Vânt, în Tătărași, o avarie la conducta de apă a dus la surparea asfaltului pe o porțiune de aproximativ zece metri. Circulația se desfășoară pe o singură bandă, iar în orele de vârf apar ambuteiaje.',
+    whyItMatters:
+      'Strada Moara de Vânt este un traseu principal de acces spre zona rezidențială Tătărași. Surparea carosabilului reprezintă un pericol real pentru vehicule și pietoni deopotrivă.',
+    whoIsAffected:
+      'Locuitorii cartierului Tătărași, șoferii care folosesc strada ca rută zilnică, pietonii care traversează zona.',
+    latestUpdate:
+      'Semnalul rămâne local și deschis. Nu este confirmată încă o dată pentru repararea conductei și a carosabilului.',
+    statusLabel: 'Stare civică: semnalat — monitorizare locală',
+    statusNote:
+      '„Semnalat” indică faptul că problema a fost adusă la cunoștința comunității locale. Nu confirmă reparație, preluare formală sau termene de intervenție.',
+    observedLabel: 'Semnalat ieri',
+    observedOn: '2026-08-06',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Iași',
+    imageKey: 'assets/feed/iasi_moara_de_vant.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-08-06T08:00:00.000Z',
+    createdAt: '2026-08-06T08:00:00.000Z',
+    updatedAt: '2026-08-06T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000702',
+    communityId: '00000000-0000-4000-8000-000000000006',
+    slug: 'iasi-signal-2',
+    position: 2,
+    locale: 'ro-RO',
+    category: 'SPAȚIU PUBLIC',
+    area: 'Copou',
+    headline: 'Aleea principală din Parcul Copou rămâne fără bănci funcționale',
+    summary:
+      'Majoritatea băncilor de pe aleea centrală au scândurile rupte sau lipsă. Vizitatorii se așază pe marginea aleii.',
+    description:
+      'Pe aleea principală a Parcului Copou, aproape de Teiul lui Eminescu, majoritatea băncilor au scândurile rupte sau complet lipsă. Vizitatorii, mai ales persoanele în vârstă, se văd nevoiți să se așeze pe marginea aleii sau pe iarbă.',
+    whyItMatters:
+      'Parcul Copou este un reper istoric și un spațiu de recreere folosit zilnic de mii de ieșeni. Lipsa mobilierului urban funcțional reduce accesibilitatea unui spațiu public esențial pentru oraș.',
+    whoIsAffected:
+      'Persoane în vârstă, familii cu copii, studenți din campusurile din apropiere și turiști care vizitează Teiul lui Eminescu.',
+    latestUpdate:
+      'Semnalul rămâne local și deschis. Nu există încă o confirmare a înlocuirii mobilierului urban.',
+    statusLabel: 'Stare civică: observat — în așteptarea atenției locale',
+    statusNote:
+      '„Observat” înseamnă că problema a fost recunoscută de comunitatea locală. Nu implică o procedură oficială și nici o intervenție deja începută.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-08-04',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Iași',
+    imageKey: 'assets/feed/iasi_parcul_copou.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-08-04T08:00:00.000Z',
+    createdAt: '2026-08-04T08:00:00.000Z',
+    updatedAt: '2026-08-04T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000703',
+    communityId: '00000000-0000-4000-8000-000000000006',
+    slug: 'iasi-signal-3',
+    position: 3,
+    locale: 'ro-RO',
+    category: 'MEDIU',
+    area: 'Nicolina',
+    headline: 'Malul Bahluiului din Nicolina, acoperit de deșeuri aduse de apele mari',
+    summary:
+      'Apele crescute din iulie au împins gunoaie și resturi vegetale pe mal. Mirosul afectează blocurile din apropiere.',
+    description:
+      'Pe malul Bahluiului, în dreptul cartierului Nicolina, creșterea nivelului apei din iulie a împins pe mal cantități mari de deșeuri plutitoare și resturi vegetale. Zona nu a fost curățată de la momentul retragerii apelor.',
+    whyItMatters:
+      'Malul Bahluiului este folosit ca traseu pietonal și de agrement pentru locuitorii din Nicolina. Deșeurile acumulate afectează atât mediul, cât și calitatea vieții în blocurile din apropiere.',
+    whoIsAffected:
+      'Locuitorii blocurilor din apropierea malului, persoane care folosesc traseul pietonal de-a lungul Bahluiului, familii cu copii.',
+    latestUpdate:
+      'Semnalul rămâne local și deschis. Nu este confirmată încă o dată pentru operațiunea de curățare.',
+    statusLabel: 'Stare civică: observat — în așteptarea atenției locale',
+    statusNote:
+      '„Observat” înseamnă că problema a fost recunoscută de comunitatea locală. Nu implică o procedură oficială și nici o intervenție deja începută.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-08-05',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Iași',
+    imageKey: 'assets/feed/iasi_malul_bahluiului.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-08-05T08:00:00.000Z',
+    createdAt: '2026-08-05T08:00:00.000Z',
+    updatedAt: '2026-08-05T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000801',
+    communityId: '00000000-0000-4000-8000-000000000007',
+    slug: 'timisoara-signal-1',
+    position: 1,
+    locale: 'ro-RO',
+    category: 'SPAȚIU PUBLIC',
+    area: 'Iosefin',
+    headline: 'Trotuarul din fața Gării de Nord rămâne blocat de biciclete abandonate',
+    summary:
+      'Peste zece biciclete fără roți sau șa stau prinse de gard de luni de zile. Spațiul pietonal s-a redus la jumătate.',
+    description:
+      'În fața Gării de Nord, dinspre Iosefin, mai multe biciclete abandonate — unele fără roți, altele fără șa — ocupă gardul și trotuarul de câteva luni. Spațiul rămas pentru pietoni s-a redus considerabil, mai ales în orele de vârf ale traficului feroviar.',
+    whyItMatters:
+      'Zona Gării de Nord este un punct intens de tranzit zilnic pentru navetiști și călători. Un trotuar blocat afectează direct fluxul pietonal într-una dintre cele mai aglomerate zone ale orașului.',
+    whoIsAffected:
+      'Navetiști, călători cu bagaje, persoane cu mobilitate redusă și locuitorii din Iosefin care trec zilnic prin zonă.',
+    latestUpdate:
+      'Semnalul rămâne local și deschis. Nu este confirmată încă o operațiune de ridicare a bicicletelor abandonate.',
+    statusLabel: 'Stare civică: observat — în așteptarea atenției locale',
+    statusNote:
+      '„Observat” înseamnă că problema a fost recunoscută de comunitatea locală. Nu implică o procedură oficială și nici o intervenție deja începută.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-08-03',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Timișoara',
+    imageKey: 'assets/feed/timisoara_gara_de_nord.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-08-03T08:00:00.000Z',
+    createdAt: '2026-08-03T08:00:00.000Z',
+    updatedAt: '2026-08-03T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000802',
+    communityId: '00000000-0000-4000-8000-000000000007',
+    slug: 'timisoara-signal-2',
+    position: 2,
+    locale: 'ro-RO',
+    category: 'INFRASTRUCTURĂ',
+    area: 'Fabric',
+    headline:
+      'Pista de biciclete de pe strada Take Ionescu se întrerupe brusc lângă intersecția cu Circumvalațiunii',
+    summary:
+      'Marcajul dispare fără avertisment, iar bicicliștii sunt nevoiți să intre direct în traficul auto.',
+    description:
+      'Pe strada Take Ionescu, în apropierea intersecției cu Circumvalațiunii, pista de biciclete se întrerupe brusc, fără o zonă de tranziție marcată. Bicicliștii care circulă spre centru sunt nevoiți să intre direct pe banda auto, fără avertisment vizual pentru șoferi.',
+    whyItMatters:
+      'Take Ionescu este una dintre principalele artere folosite de bicicliști pentru a ajunge în centrul orașului. O întrerupere neclară a pistei crește riscul de accident chiar la intrarea într-o intersecție aglomerată.',
+    whoIsAffected:
+      'Bicicliști navetiști, elevi și studenți care folosesc bicicleta zilnic, șoferii care circulă pe Take Ionescu.',
+    latestUpdate:
+      'Semnalul rămâne local și deschis. Nu este confirmată încă o soluție de continuare sau marcare a pistei.',
+    statusLabel: 'Stare civică: semnalat — monitorizare locală',
+    statusNote:
+      '„Semnalat” indică faptul că problema a fost adusă la cunoștința comunității locale. Nu confirmă reparație, preluare formală sau termene de intervenție.',
+    observedLabel: 'Semnalat acum o săptămână',
+    observedOn: '2026-07-31',
+    observedPrecision: 'week',
+    authorDisplayName: 'Redacția TOWN Timișoara',
+    imageKey: 'assets/feed/timisoara_take_ionescu.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-07-31T08:00:00.000Z',
+    createdAt: '2026-07-31T08:00:00.000Z',
+    updatedAt: '2026-07-31T08:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000803',
+    communityId: '00000000-0000-4000-8000-000000000007',
+    slug: 'timisoara-signal-3',
+    position: 3,
+    locale: 'ro-RO',
+    category: 'MEDIU',
+    area: 'Pădurea Verde',
+    headline: 'Zona de picnic din Pădurea Verde rămâne fără coșuri de gunoi funcționale',
+    summary:
+      'Coșurile existente sunt pline sau răsturnate de câteva săptămâni. Deșeurile se acumulează în jurul meselor de picnic.',
+    description:
+      'În zona de picnic din Pădurea Verde, coșurile de gunoi existente sunt fie pline la capacitate, fie răsturnate, de câteva săptămâni. Deșeurile se acumulează în jurul meselor de picnic, mai ales după weekendurile aglomerate.',
+    whyItMatters:
+      'Pădurea Verde este principalul spațiu de agrement de la marginea orașului, folosit intens vara de familii și grupuri. Lipsa gestionării deșeurilor afectează atât igiena, cât și atractivitatea zonei.',
+    whoIsAffected:
+      'Familii care vin la picnic, alergători și cicliști care folosesc traseele din pădure, locuitorii din apropiere.',
+    latestUpdate:
+      'Semnalul rămâne local și deschis. Nu este confirmată încă o dată pentru golirea și înlocuirea coșurilor.',
+    statusLabel: 'Stare civică: observat — în așteptarea atenției locale',
+    statusNote:
+      '„Observat” înseamnă că problema a fost recunoscută de comunitatea locală. Nu implică o procedură oficială și nici o intervenție deja începută.',
+    observedLabel: 'Observat săptămâna aceasta',
+    observedOn: '2026-08-06',
+    observedPrecision: 'day',
+    authorDisplayName: 'Redacția TOWN Timișoara',
+    imageKey: 'assets/feed/timisoara_padurea_verde.jpg',
+    imageFocusX: 50,
+    imageFocusY: 45,
+    publicationStatus: 'published',
+    publishedAt: '2026-08-06T08:00:00.000Z',
+    createdAt: '2026-08-06T08:00:00.000Z',
+    updatedAt: '2026-08-06T08:00:00.000Z',
+  },
 ] as const satisfies readonly CanonicalSignal[];
 
 export const FOUNDATION_COMMUNITY_IDS = {
   milanoIt: '00000000-0000-4000-8000-000000000001',
   munichDe: '00000000-0000-4000-8000-000000000002',
   aradRo: '00000000-0000-4000-8000-000000000003',
+  clujNapocaRo: '00000000-0000-4000-8000-000000000004',
+  sibiuRo: '00000000-0000-4000-8000-000000000005',
+  iasiRo: '00000000-0000-4000-8000-000000000006',
+  timisoaraRo: '00000000-0000-4000-8000-000000000007',
 } as const;
 
 export const FOUNDATION_SIGNAL_IDS = {
@@ -415,4 +880,16 @@ export const FOUNDATION_SIGNAL_IDS = {
   aradSignal1: '00000000-0000-4000-8000-000000000401',
   aradSignal2: '00000000-0000-4000-8000-000000000402',
   aradSignal3: '00000000-0000-4000-8000-000000000403',
+  clujNapocaSignal1: '00000000-0000-4000-8000-000000000501',
+  clujNapocaSignal2: '00000000-0000-4000-8000-000000000502',
+  clujNapocaSignal3: '00000000-0000-4000-8000-000000000503',
+  sibiuSignal1: '00000000-0000-4000-8000-000000000601',
+  sibiuSignal2: '00000000-0000-4000-8000-000000000602',
+  sibiuSignal3: '00000000-0000-4000-8000-000000000603',
+  iasiSignal1: '00000000-0000-4000-8000-000000000701',
+  iasiSignal2: '00000000-0000-4000-8000-000000000702',
+  iasiSignal3: '00000000-0000-4000-8000-000000000703',
+  timisoaraSignal1: '00000000-0000-4000-8000-000000000801',
+  timisoaraSignal2: '00000000-0000-4000-8000-000000000802',
+  timisoaraSignal3: '00000000-0000-4000-8000-000000000803',
 } as const;
