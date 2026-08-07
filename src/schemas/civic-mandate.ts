@@ -8,6 +8,9 @@ export const CivicMandateWinnerSchema = Type.Object(
     title: Type.String({ minLength: 1, maxLength: 160 }),
     body: Type.String({ minLength: 1, maxLength: 2000 }),
     voteCount: Type.Integer({ minimum: 0 }),
+    targetInstitution: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    objective: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    indicativeDeadline: Type.Union([Type.String({ format: 'date' }), Type.Null()]),
   },
   { additionalProperties: false, $id: 'CivicMandateWinner' },
 );
