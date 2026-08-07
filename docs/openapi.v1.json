@@ -20040,8 +20040,63 @@
                     "data": {
                       "additionalProperties": false,
                       "properties": {
+                        "actionStatus": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "not_started"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "in_progress"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "blocked"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "completed"
+                              ],
+                              "type": "string"
+                            }
+                          ],
+                          "title": "CivicActionStatus"
+                        },
                         "canPost": {
                           "type": "boolean"
+                        },
+                        "canTakeStep": {
+                          "type": "boolean"
+                        },
+                        "collaborators": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "actorId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "actorId",
+                              "displayName"
+                            ],
+                            "title": "CivicActionCollaborator",
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "type": "array"
                         },
                         "currentStage": {
                           "anyOf": [
@@ -20075,6 +20130,31 @@
                           "format": "uuid",
                           "type": "string"
                         },
+                        "responsibleActor": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "actorId": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "displayName": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "actorId",
+                                "displayName"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "updates": {
                           "items": {
                             "additionalProperties": false,
@@ -20082,6 +20162,42 @@
                               "authorDisplayName": {
                                 "minLength": 1,
                                 "type": "string"
+                              },
+                              "blockedReasonKey": {
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "enum": [
+                                          "awaiting_institution_response"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "awaiting_resources"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "awaiting_volunteers"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "enum": [
+                                          "other"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    ],
+                                    "title": "CivicActionBlockedReasonKey"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "createdAt": {
                                 "format": "date-time",
@@ -20094,15 +20210,64 @@
                               "isMine": {
                                 "type": "boolean"
                               },
+                              "kind": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "status_update"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "take_step"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "offer_help"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "evidence"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "enum": [
+                                      "institution_response"
+                                    ],
+                                    "type": "string"
+                                  }
+                                ],
+                                "title": "CivicActionUpdateKind"
+                              },
                               "text": {
                                 "minLength": 1,
                                 "type": "string"
+                              },
+                              "url": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               }
                             },
                             "required": [
                               "id",
                               "authorDisplayName",
                               "text",
+                              "kind",
+                              "blockedReasonKey",
+                              "url",
                               "createdAt",
                               "isMine"
                             ],
@@ -20126,9 +20291,42 @@
                                   "minLength": 1,
                                   "type": "string"
                                 },
+                                "indicativeDeadline": {
+                                  "anyOf": [
+                                    {
+                                      "format": "date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "objective": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
                                 "proposalId": {
                                   "format": "uuid",
                                   "type": "string"
+                                },
+                                "targetInstitution": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 },
                                 "title": {
                                   "maxLength": 160,
@@ -20145,7 +20343,10 @@
                                 "authorDisplayName",
                                 "title",
                                 "body",
-                                "voteCount"
+                                "voteCount",
+                                "targetInstitution",
+                                "objective",
+                                "indicativeDeadline"
                               ],
                               "type": "object"
                             },
@@ -20159,7 +20360,11 @@
                         "processId",
                         "currentStage",
                         "winner",
+                        "actionStatus",
+                        "responsibleActor",
+                        "collaborators",
                         "canPost",
+                        "canTakeStep",
                         "updates"
                       ],
                       "type": "object"
@@ -20273,9 +20478,76 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "blockedReasonKey": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "awaiting_institution_response"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "awaiting_resources"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "awaiting_volunteers"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "other"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "status_update"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "take_step"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "offer_help"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "evidence"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "institution_response"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  },
                   "text": {
                     "maxLength": 480,
                     "minLength": 12,
+                    "type": "string"
+                  },
+                  "url": {
+                    "maxLength": 500,
+                    "minLength": 1,
                     "type": "string"
                   }
                 },
@@ -20302,6 +20574,41 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "blockedReasonKey": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "awaiting_institution_response"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "awaiting_resources"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "awaiting_volunteers"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "enum": [
+                                    "other"
+                                  ],
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "createdAt": {
                           "format": "date-time",
                           "type": "string"
@@ -20313,15 +20620,63 @@
                         "isMine": {
                           "type": "boolean"
                         },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "status_update"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "take_step"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "offer_help"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "evidence"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "institution_response"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
                         "text": {
                           "minLength": 1,
                           "type": "string"
+                        },
+                        "url": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
                         "id",
                         "authorDisplayName",
                         "text",
+                        "kind",
+                        "blockedReasonKey",
+                        "url",
                         "createdAt",
                         "isMine"
                       ],
@@ -21562,9 +21917,42 @@
                                   "minLength": 1,
                                   "type": "string"
                                 },
+                                "indicativeDeadline": {
+                                  "anyOf": [
+                                    {
+                                      "format": "date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "objective": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
                                 "proposalId": {
                                   "format": "uuid",
                                   "type": "string"
+                                },
+                                "targetInstitution": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 },
                                 "title": {
                                   "maxLength": 160,
@@ -21581,7 +21969,10 @@
                                 "authorDisplayName",
                                 "title",
                                 "body",
-                                "voteCount"
+                                "voteCount",
+                                "targetInstitution",
+                                "objective",
+                                "indicativeDeadline"
                               ],
                               "title": "CivicMandateWinner",
                               "type": "object"
@@ -23810,9 +24201,42 @@
                                   "minLength": 1,
                                   "type": "string"
                                 },
+                                "indicativeDeadline": {
+                                  "anyOf": [
+                                    {
+                                      "format": "date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "objective": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
                                 "proposalId": {
                                   "format": "uuid",
                                   "type": "string"
+                                },
+                                "targetInstitution": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 },
                                 "title": {
                                   "maxLength": 160,
@@ -23829,7 +24253,10 @@
                                 "authorDisplayName",
                                 "title",
                                 "body",
-                                "voteCount"
+                                "voteCount",
+                                "targetInstitution",
+                                "objective",
+                                "indicativeDeadline"
                               ],
                               "type": "object"
                             },

@@ -10,8 +10,12 @@ import {
 } from '../ceremony/passkey-authentication/session-transport.js';
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
 import {
+  findCivicActionResponsibleActor,
   insertCivicActionUpdate,
+  listCivicActionCollaborators,
   listCivicActionUpdatesForProcess,
+  type CivicActionBlockedReasonKey,
+  type CivicActionUpdateKind,
 } from '../db/repositories/civic-action.js';
 import { closeVotingWindowIfElapsed, findCivicMandate } from '../db/repositories/civic-mandates.js';
 import {
@@ -55,6 +59,22 @@ function validationError(): AppError {
 
 function stageClosedError(): AppError {
   return new AppError(409, 'CIVIC_ACTION_STAGE_CLOSED', 'The action stage is not open.');
+}
+
+function alreadyHasResponsibleActorError(): AppError {
+  return new AppError(
+    409,
+    'CIVIC_ACTION_ALREADY_HAS_RESPONSIBLE_ACTOR',
+    'Another actor has already taken responsibility for this action.',
+  );
+}
+
+/** Postgres driver errors reach here wrapped in a DrizzleQueryError — the real code lives on .cause. */
+function postgresErrorCode(error: unknown): string | undefined {
+  const direct = error as { code?: unknown; cause?: unknown } | null;
+  if (typeof direct?.code === 'string') return direct.code;
+  const cause = direct?.cause as { code?: unknown } | null;
+  return typeof cause?.code === 'string' ? cause.code : undefined;
 }
 
 function singleHeader(value: string | string[] | undefined): string | undefined {
@@ -216,16 +236,36 @@ export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOp
         process.currentStage === 'action' ||
         process.currentStage === 'verification' ||
         process.currentStage === 'archived';
+      const isPastAction =
+        process.currentStage === 'verification' || process.currentStage === 'archived';
       const mandate =
         process.currentStage === 'mandate' || hasReachedAction
           ? await findCivicMandate(app.database.db, process.id)
           : null;
-      const [winnerProposal, updates] = await Promise.all([
+      const [winnerProposal, updates, responsibleActor, collaborators] = await Promise.all([
         mandate?.proposalId ? findCivicProposalById(app.database.db, mandate.proposalId) : null,
         hasReachedAction
           ? listCivicActionUpdatesForProcess(app.database.db, process.id)
           : Promise.resolve([]),
+        hasReachedAction
+          ? findCivicActionResponsibleActor(app.database.db, process.id)
+          : Promise.resolve(null),
+        hasReachedAction
+          ? listCivicActionCollaborators(app.database.db, process.id)
+          : Promise.resolve([]),
       ]);
+      // Derived, never stored: not_started/in_progress/blocked are read from
+      // the update history the same way every other stage in this schema
+      // derives state from its event log — completed simply means the
+      // process has already moved past action.
+      const lastUpdate = updates[updates.length - 1] ?? null;
+      const actionStatus = isPastAction
+        ? 'completed'
+        : lastUpdate?.kind === 'status_update' && lastUpdate.blockedReasonKey !== null
+          ? 'blocked'
+          : updates.length > 0 || responsibleActor !== null
+            ? 'in_progress'
+            : 'not_started';
       return await reply.status(200).send({
         data: {
           processId: process.id,
@@ -243,13 +283,29 @@ export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOp
                 title: winnerProposal.title,
                 body: winnerProposal.body,
                 voteCount: mandate?.voteCount ?? 0,
+                targetInstitution: winnerProposal.targetInstitution,
+                objective: winnerProposal.expectedOutcome,
+                indicativeDeadline: winnerProposal.indicativeDeadline,
               }
             : null,
+          actionStatus,
+          responsibleActor: responsibleActor
+            ? { actorId: responsibleActor.actorId, displayName: responsibleActor.displayName }
+            : null,
+          collaborators: collaborators.map((collaborator) => ({
+            actorId: collaborator.actorId,
+            displayName: collaborator.displayName,
+          })),
           canPost: process.currentStage === 'action' && actor !== null,
+          canTakeStep:
+            process.currentStage === 'action' && actor !== null && responsibleActor === null,
           updates: updates.map((update) => ({
             id: update.id,
             authorDisplayName: update.authorDisplayName,
             text: update.text,
+            kind: update.kind,
+            blockedReasonKey: update.blockedReasonKey,
+            url: update.url,
             createdAt: toIsoTimestamp(update.createdAt),
             isMine: actor?.id === update.authorActorId,
           })),
@@ -281,6 +337,22 @@ export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOp
       if (!actor) throw civicParticipationNotAuthorizedError();
       const text = request.body.text.trim();
       if (text.length < 12 || text.length > 480) throw validationError();
+      const kind: CivicActionUpdateKind = request.body.kind ?? 'status_update';
+      const blockedReasonKey: CivicActionBlockedReasonKey | null =
+        request.body.blockedReasonKey ?? null;
+      if (blockedReasonKey !== null && kind !== 'status_update') throw validationError();
+      const url = request.body.url?.trim() ?? null;
+      if (url !== null) {
+        if (kind !== 'evidence') throw validationError();
+        if (!/^https?:\/\//.test(url)) throw validationError();
+      }
+      if (kind === 'take_step') {
+        const existingResponsibleActor = await findCivicActionResponsibleActor(
+          app.database.db,
+          process.id,
+        );
+        if (existingResponsibleActor) throw alreadyHasResponsibleActorError();
+      }
       const updateId = generateId();
       const createdAt = now();
       try {
@@ -289,11 +361,17 @@ export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOp
           processId: process.id,
           actorId: actor.id,
           text,
+          kind,
+          blockedReasonKey,
+          url,
           createdAt,
         });
       } catch (error: unknown) {
         if (error instanceof Error && error.message.includes('stage is closed')) {
           throw stageClosedError();
+        }
+        if (postgresErrorCode(error) === '23505') {
+          throw alreadyHasResponsibleActorError();
         }
         throw error;
       }
@@ -302,6 +380,9 @@ export const civicActionRoutes: FastifyPluginCallbackTypebox<CivicActionRoutesOp
           id: updateId,
           authorDisplayName: actor.displayLabel,
           text,
+          kind,
+          blockedReasonKey,
+          url,
           createdAt: toIsoTimestamp(createdAt),
           isMine: true,
         },

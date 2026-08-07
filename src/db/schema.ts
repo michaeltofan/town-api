@@ -2447,6 +2447,9 @@ export const civicActionUpdates = town.table(
     processId: uuid('process_id').notNull(),
     authorActorId: uuid('author_actor_id').notNull(),
     text: text('text').notNull(),
+    kind: text('kind').notNull().default('status_update'),
+    blockedReasonKey: text('blocked_reason_key'),
+    url: text('url'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -2464,6 +2467,30 @@ export const civicActionUpdates = town.table(
       'civic_action_updates_text_valid',
       sql`char_length(btrim(${table.text})) between 12 and 480`,
     ),
+    check(
+      'civic_action_updates_kind_supported',
+      sql`${table.kind} in ('status_update', 'take_step', 'offer_help', 'evidence', 'institution_response')`,
+    ),
+    check(
+      'civic_action_updates_blocked_reason_valid',
+      sql`${table.blockedReasonKey} is null or (
+        ${table.kind} = 'status_update'
+        and ${table.blockedReasonKey} in (
+          'awaiting_institution_response', 'awaiting_resources', 'awaiting_volunteers', 'other'
+        )
+      )`,
+    ),
+    check(
+      'civic_action_updates_url_valid',
+      sql`${table.url} is null or (
+        ${table.kind} = 'evidence'
+        and char_length(btrim(${table.url})) between 1 and 500
+        and (btrim(${table.url}) like 'http://%' or btrim(${table.url}) like 'https://%')
+      )`,
+    ),
+    uniqueIndex('civic_action_updates_one_responsible_actor_idx')
+      .on(table.processId)
+      .where(sql`${table.kind} = 'take_step'`),
     index('civic_action_updates_process_created_idx').on(
       table.processId,
       table.createdAt,

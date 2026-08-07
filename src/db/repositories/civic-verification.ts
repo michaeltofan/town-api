@@ -52,7 +52,7 @@ export async function markActionReadyForVerification(
         gen_random_uuid(), ${input.processId}, 'action', 'verification', 'action_marked_ready',
         ${input.now}
       )
-      ON CONFLICT (process_id, from_stage, to_stage) DO NOTHING
+      ON CONFLICT (process_id, from_stage, to_stage, ballot_cycle) DO NOTHING
     `);
     if (!transitionResult.rowCount) {
       return;
@@ -71,7 +71,7 @@ export async function markActionReadyForVerification(
     await tx.execute(sql`
       INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at)
       VALUES (gen_random_uuid(), ${input.processId}, 'stage_transitioned_to_verification', ${input.now})
-      ON CONFLICT (process_id, event_type) DO NOTHING
+      ON CONFLICT (process_id, event_type, ballot_cycle) DO NOTHING
     `);
   });
 }

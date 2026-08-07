@@ -310,18 +310,34 @@ always `pending` until §14 ships review), and the mandate is still never
 edited retroactively — corrections are published as a linked amendment
 record, never an in-place edit, exactly as specified.
 
-## 12. Civic action **[V1 — implemented]**
+## 12. Civic action **[V1 — implemented, V2 — implemented]**
 
 Status updates only in V1 (`not_started → in_progress → blocked →
 completed`, free-text updates, community-scoped, no threshold to open).
 
-**[V2 — specified]** Adds: named responsible actor + optional collaborators,
-target institution, objective, indicative deadline, structured
-blocked-reason on the `blocked` state, and the contextual actions from the
-owner's spec (`Îmi asum un pas`, `Ofer ajutor`, `Publică o actualizare`,
-`Adaugă o dovadă`, `Înregistrează răspunsul instituției`) as typed update
-subtypes, not new tables — they reuse `civic_action_updates` with a `kind`
-column.
+**[V2 — implemented]** The owner's contextual actions (`Îmi asum un pas`,
+`Ofer ajutor`, `Publică o actualizare`, `Adaugă o dovadă`, `Înregistrează
+răspunsul instituției`) are typed update subtypes on the existing
+`civic_action_updates` table via a `kind` column
+(`take_step | offer_help | status_update | evidence | institution_response`)
+— no new tables, exactly as specified. Neither the named responsible actor
+nor collaborators are a separately stored assignment: the responsible actor
+is whichever actor posted the process's one-and-only `take_step` update (a
+partial-unique index makes this a first-claim, immutable, fail-closed 409 on
+a second attempt — never a silently-ignored second claim); collaborators are
+every distinct actor who ever posted `offer_help`. `not_started` /
+`in_progress` / `blocked` / `completed` are likewise never a stored status
+column — they are derived on every read from the update history and the
+process's own stage, the same way every other derived state in this schema
+works (quorum failure, minority position, contestation pending): `blocked`
+means the most recent update is a `status_update` carrying a structured
+`blockedReasonKey`; `completed` means the process has already moved past
+`action`; otherwise `in_progress` once any update exists or a responsible
+actor has claimed it, else `not_started`. Target institution, objective
+(the proposal's `expectedOutcome`), and indicative deadline are not new
+storage either — they already exist on the winning `civic_proposals` row
+(added in 0051) and are now surfaced on every route that renders a winner
+(`mandate`, `action`, `verification`).
 
 ## 13. Result verification **[V1 — implemented]**
 
@@ -367,24 +383,24 @@ same existing audit mechanisms, no new logging system.
 
 Matches the owner's PR plan, one slice per PR, API before its dependent UI:
 
-| #   | Repo                                | Delivers                                                             |
-| --- | ----------------------------------- | -------------------------------------------------------------------- |
-| 1   | town-api (this doc)                 | This governance specification                                        |
-| 2   | town-api                            | _(done — confirmation-stage nucleus, PR #94 and earlier)_            |
-| 3   | town-public                         | _(done — confirmation-stage right panel, PR #99–#101)_               |
-| 4   | town-api                            | Rich proposal object + lifecycle (§6)                                |
-| 5   | town-public                         | Proposal authoring/list UI for the new fields                        |
-| 6   | town-api                            | Extended deliberation intents + reply threading (§7)                 |
-| 7   | town-public                         | Deliberation UI for the new intents                                  |
-| 8   | town-api                            | Real ballot-preparation gate + freeze snapshot (§8)                  |
-| 9   | town-api + town-public, coordinated | _(done — secret-ballot voting + quorum retry, §9)_                   |
-| 10  | town-api + town-public              | _(done — mandate minority position + contestation filing, §10, §11)_ |
-| 11  | town-api + town-public              | Action extensions (§12)                                              |
-| 12  | town-api + town-public              | Verification dispute routing (§13)                                   |
-| 13  | town-api + platform console         | `moderate_civic_process` + contestation review UI (§14)              |
-| 14  | town-public                         | HOME civic center surfacing real process state                       |
-| 15  | town-api + town-public              | Notifications / Civic Inbox / civic profile extensions               |
-| 16  | town-public                         | Mobile parity pass                                                   |
+| #   | Repo                                | Delivers                                                                                |
+| --- | ----------------------------------- | --------------------------------------------------------------------------------------- |
+| 1   | town-api (this doc)                 | This governance specification                                                           |
+| 2   | town-api                            | _(done — confirmation-stage nucleus, PR #94 and earlier)_                               |
+| 3   | town-public                         | _(done — confirmation-stage right panel, PR #99–#101)_                                  |
+| 4   | town-api                            | Rich proposal object + lifecycle (§6)                                                   |
+| 5   | town-public                         | Proposal authoring/list UI for the new fields                                           |
+| 6   | town-api                            | Extended deliberation intents + reply threading (§7)                                    |
+| 7   | town-public                         | Deliberation UI for the new intents                                                     |
+| 8   | town-api                            | Real ballot-preparation gate + freeze snapshot (§8)                                     |
+| 9   | town-api + town-public, coordinated | _(done — secret-ballot voting + quorum retry, §9)_                                      |
+| 10  | town-api + town-public              | _(done — mandate minority position + contestation filing, §10, §11)_                    |
+| 11  | town-api + town-public              | _(done — action extensions: responsible actor, collaborators, typed update kinds, §12)_ |
+| 12  | town-api + town-public              | Verification dispute routing (§13)                                                      |
+| 13  | town-api + platform console         | `moderate_civic_process` + contestation review UI (§14)                                 |
+| 14  | town-public                         | HOME civic center surfacing real process state                                          |
+| 15  | town-api + town-public              | Notifications / Civic Inbox / civic profile extensions                                  |
+| 16  | town-public                         | Mobile parity pass                                                                      |
 
 Each PR must update this document in the same PR if it changes a decision
 recorded here — this file is the contract, not the README.

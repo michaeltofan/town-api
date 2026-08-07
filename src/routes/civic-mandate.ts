@@ -329,6 +329,9 @@ export const civicMandateRoutes: FastifyPluginCallbackTypebox<CivicMandateRoutes
                 title: winnerProposal.title,
                 body: winnerProposal.body,
                 voteCount: mandate?.voteCount ?? 0,
+                targetInstitution: winnerProposal.targetInstitution,
+                objective: winnerProposal.expectedOutcome,
+                indicativeDeadline: winnerProposal.indicativeDeadline,
               }
             : null,
           totalVotes: quorumFailed ? quorumFailedVoteCount : (mandate?.totalVotes ?? 0),

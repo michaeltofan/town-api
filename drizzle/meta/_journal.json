@@ -393,6 +393,13 @@
       "when": 1788028800000,
       "tag": "0055_civic_mandate_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1788115200000,
+      "tag": "0056_civic_action_extensions",
+      "breakpoints": true
     }
   ]
 }
