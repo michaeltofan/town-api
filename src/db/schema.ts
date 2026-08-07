@@ -328,7 +328,11 @@ export const platformAuditEvents = town.table(
         'backup_verified',
         'restore_inspected',
         'restore_drill_attested',
-        'investigation_exported'
+        'investigation_exported',
+        'civic_content_hidden',
+        'civic_content_unhidden',
+        'civic_contestation_resolved',
+        'civic_verification_dispute_resolved'
       )`,
     ),
     index('platform_audit_events_occurred_at_idx').on(table.occurredAt),
@@ -1780,7 +1784,11 @@ export type PlatformAuditAction =
   | 'backup_verified'
   | 'restore_inspected'
   | 'restore_drill_attested'
-  | 'investigation_exported';
+  | 'investigation_exported'
+  | 'civic_content_hidden'
+  | 'civic_content_unhidden'
+  | 'civic_contestation_resolved'
+  | 'civic_verification_dispute_resolved';
 
 export type PlatformTechnicalErrorRow = typeof platformTechnicalErrors.$inferSelect;
 export type PlatformUptimeSampleRow = typeof platformUptimeSamples.$inferSelect;
@@ -2063,6 +2071,9 @@ export const civicProposals = town.table(
     revisedAt: timestamp('revised_at', { withTimezone: true, mode: 'string' }),
     withdrawnAt: timestamp('withdrawn_at', { withTimezone: true, mode: 'string' }),
     frozenAt: timestamp('frozen_at', { withTimezone: true, mode: 'string' }),
+    hiddenAt: timestamp('hidden_at', { withTimezone: true, mode: 'string' }),
+    hiddenReason: text('hidden_reason'),
+    hiddenByAccountId: uuid('hidden_by_account_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -2075,6 +2086,11 @@ export const civicProposals = town.table(
       columns: [table.authorActorId],
       foreignColumns: [actors.id],
       name: 'civic_proposals_author_actor_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.hiddenByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'civic_proposals_hidden_by_account_id_fkey',
     }).onDelete('restrict'),
     unique('civic_proposals_process_actor_unique').on(table.processId, table.authorActorId),
     check('civic_proposals_title_valid', sql`char_length(btrim(${table.title})) between 1 and 160`),
@@ -2094,6 +2110,17 @@ export const civicProposals = town.table(
     check(
       'civic_proposals_lifecycle_state_valid',
       sql`${table.lifecycleState} IN ('published', 'revised', 'withdrawn', 'frozen')`,
+    ),
+    check(
+      'civic_proposals_hidden_reason_valid',
+      sql`${table.hiddenReason} is null or ${table.hiddenReason} in ('immoral', 'abusive', 'spam', 'off_topic', 'illegal', 'other')`,
+    ),
+    check(
+      'civic_proposals_hidden_state_consistent',
+      sql`(
+        (${table.hiddenAt} is null and ${table.hiddenReason} is null and ${table.hiddenByAccountId} is null)
+        or (${table.hiddenAt} is not null and ${table.hiddenReason} is not null and ${table.hiddenByAccountId} is not null)
+      )`,
     ),
     index('civic_proposals_process_created_idx').on(table.processId, table.createdAt, table.id),
   ],
@@ -2191,6 +2218,9 @@ export const civicDeliberationContributions = town.table(
     intent: text('intent').notNull(),
     text: text('text').notNull(),
     replyToContributionId: uuid('reply_to_contribution_id'),
+    hiddenAt: timestamp('hidden_at', { withTimezone: true, mode: 'string' }),
+    hiddenReason: text('hidden_reason'),
+    hiddenByAccountId: uuid('hidden_by_account_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -2214,6 +2244,11 @@ export const civicDeliberationContributions = town.table(
       foreignColumns: [table.id],
       name: 'civic_deliberation_contributions_reply_to_fkey',
     }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.hiddenByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'civic_deliberation_contributions_hidden_by_account_id_fkey',
+    }).onDelete('restrict'),
     index('civic_deliberation_contributions_reply_to_idx').on(table.replyToContributionId),
     check(
       'civic_deliberation_contributions_intent_supported',
@@ -2226,6 +2261,17 @@ export const civicDeliberationContributions = town.table(
     check(
       'civic_deliberation_contributions_text_valid',
       sql`char_length(btrim(${table.text})) between 12 and 480`,
+    ),
+    check(
+      'civic_deliberation_contributions_hidden_reason_valid',
+      sql`${table.hiddenReason} is null or ${table.hiddenReason} in ('immoral', 'abusive', 'spam', 'off_topic', 'illegal', 'other')`,
+    ),
+    check(
+      'civic_deliberation_contributions_hidden_state_consistent',
+      sql`(
+        (${table.hiddenAt} is null and ${table.hiddenReason} is null and ${table.hiddenByAccountId} is null)
+        or (${table.hiddenAt} is not null and ${table.hiddenReason} is not null and ${table.hiddenByAccountId} is not null)
+      )`,
     ),
     index('civic_deliberation_contributions_process_created_idx').on(
       table.processId,
@@ -2408,6 +2454,9 @@ export const civicMandateContestations = town.table(
     elaboration: text('elaboration'),
     status: text('status').notNull().default('pending'),
     filedAt: timestamp('filed_at', { withTimezone: true, mode: 'string' }).notNull(),
+    reviewedByAccountId: uuid('reviewed_by_account_id'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'string' }),
+    reviewNote: text('review_note'),
   },
   (table) => [
     foreignKey({
@@ -2419,6 +2468,11 @@ export const civicMandateContestations = town.table(
       columns: [table.filerActorId],
       foreignColumns: [actors.id],
       name: 'civic_mandate_contestations_filer_actor_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.reviewedByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'civic_mandate_contestations_reviewed_by_account_id_fkey',
     }).onDelete('restrict'),
     unique('civic_mandate_contestations_process_filer_unique').on(
       table.processId,
@@ -2435,6 +2489,18 @@ export const civicMandateContestations = town.table(
     check(
       'civic_mandate_contestations_elaboration_valid',
       sql`${table.elaboration} is null or char_length(btrim(${table.elaboration})) between 1 and 1000`,
+    ),
+    check(
+      'civic_mandate_contestations_review_note_valid',
+      sql`${table.reviewNote} is null or char_length(btrim(${table.reviewNote})) between 1 and 1000`,
+    ),
+    check(
+      'civic_mandate_contestations_review_state_consistent',
+      sql`(
+        ${table.status} = 'pending' and ${table.reviewedByAccountId} is null and ${table.reviewedAt} is null
+      ) or (
+        ${table.status} in ('upheld', 'rejected') and ${table.reviewedByAccountId} is not null and ${table.reviewedAt} is not null
+      )`,
     ),
     index('civic_mandate_contestations_process_idx').on(table.processId),
   ],
@@ -2507,6 +2573,9 @@ export const civicVerificationEvidence = town.table(
     authorActorId: uuid('author_actor_id').notNull(),
     text: text('text').notNull(),
     url: text('url'),
+    hiddenAt: timestamp('hidden_at', { withTimezone: true, mode: 'string' }),
+    hiddenReason: text('hidden_reason'),
+    hiddenByAccountId: uuid('hidden_by_account_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -2520,6 +2589,11 @@ export const civicVerificationEvidence = town.table(
       foreignColumns: [actors.id],
       name: 'civic_verification_evidence_author_actor_id_fkey',
     }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.hiddenByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'civic_verification_evidence_hidden_by_account_id_fkey',
+    }).onDelete('restrict'),
     check(
       'civic_verification_evidence_text_valid',
       sql`char_length(btrim(${table.text})) between 12 and 480`,
@@ -2529,6 +2603,17 @@ export const civicVerificationEvidence = town.table(
       sql`${table.url} is null or (
         char_length(btrim(${table.url})) between 1 and 500
         and (btrim(${table.url}) like 'http://%' or btrim(${table.url}) like 'https://%')
+      )`,
+    ),
+    check(
+      'civic_verification_evidence_hidden_reason_valid',
+      sql`${table.hiddenReason} is null or ${table.hiddenReason} in ('immoral', 'abusive', 'spam', 'off_topic', 'illegal', 'other')`,
+    ),
+    check(
+      'civic_verification_evidence_hidden_state_consistent',
+      sql`(
+        (${table.hiddenAt} is null and ${table.hiddenReason} is null and ${table.hiddenByAccountId} is null)
+        or (${table.hiddenAt} is not null and ${table.hiddenReason} is not null and ${table.hiddenByAccountId} is not null)
       )`,
     ),
     index('civic_verification_evidence_process_created_idx').on(
@@ -2596,6 +2681,45 @@ export const civicVerifications = town.table(
   ],
 );
 
+/**
+ * §13/§14: an operator's resolution of a verification dispute that
+ * escalated past the 14-day window without either outcome reaching
+ * threshold. Deliberately a separate table from civic_verifications (the
+ * normal threshold-reached record) — an operator resolution never touches
+ * current_stage/transitions/events, so the process stays "verification"
+ * forever; this is a public, permanent annotation only.
+ */
+export const civicVerificationDisputeResolutions = town.table(
+  'civic_verification_dispute_resolutions',
+  {
+    processId: uuid('process_id').primaryKey(),
+    outcome: text('outcome').notNull(),
+    resolvedByAccountId: uuid('resolved_by_account_id').notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true, mode: 'string' }).notNull(),
+    reviewNote: text('review_note'),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_verification_dispute_resolutions_process_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.resolvedByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'civic_verification_dispute_resolutions_resolved_by_account_id_fkey',
+    }).onDelete('restrict'),
+    check(
+      'civic_verification_dispute_resolutions_outcome_valid',
+      sql`${table.outcome} in ('delivered', 'not_delivered')`,
+    ),
+    check(
+      'civic_verification_dispute_resolutions_review_note_valid',
+      sql`${table.reviewNote} is null or char_length(btrim(${table.reviewNote})) between 1 and 1000`,
+    ),
+  ],
+);
+
 export const civicProcessViews = town.table(
   'civic_process_views',
   {
@@ -2633,4 +2757,6 @@ export type CivicActionUpdateRow = typeof civicActionUpdates.$inferSelect;
 export type CivicVerificationEvidenceRow = typeof civicVerificationEvidence.$inferSelect;
 export type CivicVerificationConfirmationRow = typeof civicVerificationConfirmations.$inferSelect;
 export type CivicVerificationRow = typeof civicVerifications.$inferSelect;
+export type CivicVerificationDisputeResolutionRow =
+  typeof civicVerificationDisputeResolutions.$inferSelect;
 export type CivicProcessViewRow = typeof civicProcessViews.$inferSelect;

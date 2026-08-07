@@ -108,3 +108,73 @@ export async function insertCivicMandateContestation(
     )
   `);
 }
+
+export async function findCivicMandateContestationById(
+  db: Db,
+  id: string,
+): Promise<CivicMandateContestationView | null> {
+  const result = await db.execute<{
+    id: string;
+    process_id: string;
+    reason_key: string;
+    elaboration: string | null;
+    status: string;
+    filed_at: string;
+  }>(sql`
+    SELECT id, process_id, reason_key, elaboration, status, filed_at
+    FROM town.civic_mandate_contestations
+    WHERE id = ${id}
+    LIMIT 1
+  `);
+  const row = result.rows[0];
+  return row ? toView(row) : null;
+}
+
+/** Every contestation still awaiting operator review (§14), oldest first. */
+export async function listPendingCivicMandateContestations(
+  db: Db,
+  limit = 100,
+): Promise<CivicMandateContestationView[]> {
+  const boundedLimit = Math.max(1, Math.min(limit, 100));
+  const result = await db.execute<{
+    id: string;
+    process_id: string;
+    reason_key: string;
+    elaboration: string | null;
+    status: string;
+    filed_at: string;
+  }>(sql`
+    SELECT id, process_id, reason_key, elaboration, status, filed_at
+    FROM town.civic_mandate_contestations
+    WHERE status = 'pending'
+    ORDER BY filed_at ASC
+    LIMIT ${boundedLimit}
+  `);
+  return result.rows.map(toView);
+}
+
+/**
+ * §14: an operator moves a contestation from 'pending' to 'upheld' or
+ * 'rejected', once, permanently — never edited retroactively, exactly
+ * like every other decided record in this schema. A contestation already
+ * reviewed is left untouched (returns false) rather than silently
+ * overwritten.
+ */
+export async function resolveCivicMandateContestation(
+  db: Db,
+  input: {
+    id: string;
+    status: 'upheld' | 'rejected';
+    reviewedByAccountId: string;
+    reviewedAt: string;
+    reviewNote: string | null;
+  },
+): Promise<boolean> {
+  const result = await db.execute(sql`
+    UPDATE town.civic_mandate_contestations
+    SET status = ${input.status}, reviewed_by_account_id = ${input.reviewedByAccountId},
+      reviewed_at = ${input.reviewedAt}, review_note = ${input.reviewNote}
+    WHERE id = ${input.id} AND status = 'pending'
+  `);
+  return (result.rowCount ?? 0) > 0;
+}

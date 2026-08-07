@@ -33,6 +33,7 @@ const EXPECTED_TOWN_TABLES = [
   'civic_proposal_revisions',
   'civic_proposals',
   'civic_verification_confirmations',
+  'civic_verification_dispute_resolutions',
   'civic_verification_evidence',
   'civic_verifications',
   'civic_votes',

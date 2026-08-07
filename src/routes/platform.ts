@@ -2,6 +2,24 @@ import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebo
 import { randomUUID } from 'node:crypto';
 import type { Env } from '../config/env.js';
 import {
+  hideCivicDeliberationContribution,
+  hideCivicProposal,
+  hideCivicVerificationEvidence,
+  unhideCivicDeliberationContribution,
+  unhideCivicProposal,
+  unhideCivicVerificationEvidence,
+} from '../db/repositories/civic-content-moderation.js';
+import {
+  findCivicMandateContestationById,
+  listPendingCivicMandateContestations,
+  resolveCivicMandateContestation,
+} from '../db/repositories/civic-contestations.js';
+import {
+  findCivicVerificationDisputeResolution,
+  listEscalatedUnresolvedCivicVerificationDisputes,
+  resolveCivicVerificationDispute,
+} from '../db/repositories/civic-verification.js';
+import {
   hideDiscussionContribution,
   unhideDiscussionContribution,
 } from '../db/repositories/discussion-contribution-moderation.js';
@@ -83,6 +101,15 @@ import {
   listPlatformRestoreDrillAttestations,
 } from '../platform/repositories/restore-drill-attestations.js';
 import { summarizePlatformUptimeSamples } from '../platform/repositories/uptime-samples.js';
+import {
+  PlatformCivicContentHideBodySchema,
+  PlatformCivicContentIdParamsSchema,
+  PlatformCivicContestationIdParamsSchema,
+  PlatformCivicContestationResolveBodySchema,
+  PlatformCivicModerationRouteResponses,
+  PlatformCivicVerificationDisputeProcessIdParamsSchema,
+  PlatformCivicVerificationDisputeResolveBodySchema,
+} from '../schemas/civic-moderation.js';
 import { DomainErrorResponseSchema } from '../schemas/error.js';
 import {
   PlatformAccountActionResponseSchema,
@@ -2474,6 +2501,464 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
     },
   );
 
+  // §14: moderate_civic_process — hide/restore a proposal, deliberation
+  // contribution, or verification evidence item; record a procedural
+  // contestation outcome (§10); record a stalled verification-dispute
+  // outcome (§13). None of these touch current_stage, civic_process_transitions,
+  // or civic_process_events, and none alter a published mandate.
+
+  app.post(
+    '/v1/platform/civic/proposals/:contentId/hide',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Hide a civic proposal',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformCivicContentIdParamsSchema,
+        body: PlatformCivicContentHideBodySchema,
+        response: PlatformCivicModerationRouteResponses.hideContent,
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_civic_process');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const result = await hideCivicProposal(app.database.db, {
+        proposalId: request.params.contentId,
+        reason: request.body.reason,
+        hiddenByAccountId: operator.accountId,
+        at: now(),
+      });
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+      if (result.changed) {
+        await audit(operator.accountId, 'civic_content_hidden', request.id, {
+          metadata: {
+            contentType: 'proposal',
+            contentId: result.proposal.id,
+            reason: request.body.reason,
+          },
+        });
+      }
+      return {
+        data: {
+          contentId: result.proposal.id,
+          hidden: result.proposal.hiddenAt !== null,
+          hiddenAt:
+            result.proposal.hiddenAt === null ? null : toIsoTimestamp(result.proposal.hiddenAt),
+          hiddenReason: result.proposal.hiddenReason,
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/civic/proposals/:contentId/unhide',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Unhide a civic proposal',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformCivicContentIdParamsSchema,
+        response: PlatformCivicModerationRouteResponses.hideContent,
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_civic_process');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const result = await unhideCivicProposal(app.database.db, {
+        proposalId: request.params.contentId,
+      });
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+      if (result.changed) {
+        await audit(operator.accountId, 'civic_content_unhidden', request.id, {
+          metadata: { contentType: 'proposal', contentId: result.proposal.id },
+        });
+      }
+      return {
+        data: {
+          contentId: result.proposal.id,
+          hidden: result.proposal.hiddenAt !== null,
+          hiddenAt:
+            result.proposal.hiddenAt === null ? null : toIsoTimestamp(result.proposal.hiddenAt),
+          hiddenReason: result.proposal.hiddenReason,
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/civic/deliberation-contributions/:contentId/hide',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Hide a civic deliberation contribution',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformCivicContentIdParamsSchema,
+        body: PlatformCivicContentHideBodySchema,
+        response: PlatformCivicModerationRouteResponses.hideContent,
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_civic_process');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const result = await hideCivicDeliberationContribution(app.database.db, {
+        contributionId: request.params.contentId,
+        reason: request.body.reason,
+        hiddenByAccountId: operator.accountId,
+        at: now(),
+      });
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+      if (result.changed) {
+        await audit(operator.accountId, 'civic_content_hidden', request.id, {
+          metadata: {
+            contentType: 'deliberation_contribution',
+            contentId: result.contribution.id,
+            reason: request.body.reason,
+          },
+        });
+      }
+      return {
+        data: {
+          contentId: result.contribution.id,
+          hidden: result.contribution.hiddenAt !== null,
+          hiddenAt:
+            result.contribution.hiddenAt === null
+              ? null
+              : toIsoTimestamp(result.contribution.hiddenAt),
+          hiddenReason: result.contribution.hiddenReason,
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/civic/deliberation-contributions/:contentId/unhide',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Unhide a civic deliberation contribution',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformCivicContentIdParamsSchema,
+        response: PlatformCivicModerationRouteResponses.hideContent,
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_civic_process');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const result = await unhideCivicDeliberationContribution(app.database.db, {
+        contributionId: request.params.contentId,
+      });
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+      if (result.changed) {
+        await audit(operator.accountId, 'civic_content_unhidden', request.id, {
+          metadata: { contentType: 'deliberation_contribution', contentId: result.contribution.id },
+        });
+      }
+      return {
+        data: {
+          contentId: result.contribution.id,
+          hidden: result.contribution.hiddenAt !== null,
+          hiddenAt:
+            result.contribution.hiddenAt === null
+              ? null
+              : toIsoTimestamp(result.contribution.hiddenAt),
+          hiddenReason: result.contribution.hiddenReason,
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/civic/verification-evidence/:contentId/hide',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Hide a civic verification evidence item',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformCivicContentIdParamsSchema,
+        body: PlatformCivicContentHideBodySchema,
+        response: PlatformCivicModerationRouteResponses.hideContent,
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_civic_process');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const result = await hideCivicVerificationEvidence(app.database.db, {
+        evidenceId: request.params.contentId,
+        reason: request.body.reason,
+        hiddenByAccountId: operator.accountId,
+        at: now(),
+      });
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+      if (result.changed) {
+        await audit(operator.accountId, 'civic_content_hidden', request.id, {
+          metadata: {
+            contentType: 'verification_evidence',
+            contentId: result.evidence.id,
+            reason: request.body.reason,
+          },
+        });
+      }
+      return {
+        data: {
+          contentId: result.evidence.id,
+          hidden: result.evidence.hiddenAt !== null,
+          hiddenAt:
+            result.evidence.hiddenAt === null ? null : toIsoTimestamp(result.evidence.hiddenAt),
+          hiddenReason: result.evidence.hiddenReason,
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/civic/verification-evidence/:contentId/unhide',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Unhide a civic verification evidence item',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformCivicContentIdParamsSchema,
+        response: PlatformCivicModerationRouteResponses.hideContent,
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_civic_process');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const result = await unhideCivicVerificationEvidence(app.database.db, {
+        evidenceId: request.params.contentId,
+      });
+      if (!result) {
+        reply.callNotFound();
+        return;
+      }
+      if (result.changed) {
+        await audit(operator.accountId, 'civic_content_unhidden', request.id, {
+          metadata: { contentType: 'verification_evidence', contentId: result.evidence.id },
+        });
+      }
+      return {
+        data: {
+          contentId: result.evidence.id,
+          hidden: result.evidence.hiddenAt !== null,
+          hiddenAt:
+            result.evidence.hiddenAt === null ? null : toIsoTimestamp(result.evidence.hiddenAt),
+          hiddenReason: result.evidence.hiddenReason,
+          changed: result.changed,
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/civic/contestations',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'List mandate contestations still awaiting review (§10)',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: PlatformCivicModerationRouteResponses.contestationsQueue,
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_civic_process');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const contestations = await listPendingCivicMandateContestations(app.database.db);
+      return {
+        data: {
+          contestations: contestations.map((contestation) => ({
+            id: contestation.id,
+            processId: contestation.processId,
+            reasonKey: contestation.reasonKey,
+            elaboration: contestation.elaboration,
+            status: contestation.status,
+            filedAt: toIsoTimestamp(contestation.filedAt),
+          })),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/civic/contestations/:contestationId/resolve',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Record a procedural contestation outcome (§10)',
+        description:
+          'Upheld or rejected, once, permanently. Never touches current_stage, civic_process_transitions, or civic_process_events, and never alters a published mandate.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformCivicContestationIdParamsSchema,
+        body: PlatformCivicContestationResolveBodySchema,
+        response: PlatformCivicModerationRouteResponses.resolveContestation,
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_civic_process');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const contestation = await findCivicMandateContestationById(
+        app.database.db,
+        request.params.contestationId,
+      );
+      if (!contestation) {
+        reply.callNotFound();
+        return;
+      }
+      const nowIso = now();
+      const changed =
+        contestation.status === 'pending'
+          ? await resolveCivicMandateContestation(app.database.db, {
+              id: contestation.id,
+              status: request.body.status,
+              reviewedByAccountId: operator.accountId,
+              reviewedAt: nowIso,
+              reviewNote: request.body.reviewNote ?? null,
+            })
+          : false;
+      if (changed) {
+        await audit(operator.accountId, 'civic_contestation_resolved', request.id, {
+          metadata: {
+            contestationId: contestation.id,
+            processId: contestation.processId,
+            status: request.body.status,
+          },
+        });
+      }
+      return {
+        data: {
+          contestationId: contestation.id,
+          status: changed ? request.body.status : contestation.status,
+          reviewedAt: changed ? toIsoTimestamp(nowIso) : null,
+          changed,
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/v1/platform/civic/verification-disputes',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'List verification disputes escalated past 14 days and still unresolved (§13)',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        response: PlatformCivicModerationRouteResponses.verificationDisputesQueue,
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_civic_process');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const disputes = await listEscalatedUnresolvedCivicVerificationDisputes(app.database.db, {
+        now: now(),
+      });
+      return {
+        data: {
+          disputes: disputes.map((dispute) => ({
+            processId: dispute.processId,
+            verificationOpenedAt: toIsoTimestamp(dispute.verificationOpenedAt),
+          })),
+        },
+      };
+    },
+  );
+
+  app.post(
+    '/v1/platform/civic/verification-disputes/:processId/resolve',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary: 'Record a stalled verification-dispute outcome (§13)',
+        description:
+          'Delivered or not_delivered, once, permanently. Never touches current_stage, civic_process_transitions, or civic_process_events — the process stays "verification" forever; this is a public, permanent annotation only.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        params: PlatformCivicVerificationDisputeProcessIdParamsSchema,
+        body: PlatformCivicVerificationDisputeResolveBodySchema,
+        response: PlatformCivicModerationRouteResponses.resolveVerificationDispute,
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'moderate_civic_process');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const nowIso = now();
+      const changed = await resolveCivicVerificationDispute(app.database.db, {
+        processId: request.params.processId,
+        outcome: request.body.outcome,
+        resolvedByAccountId: operator.accountId,
+        resolvedAt: nowIso,
+        reviewNote: request.body.reviewNote ?? null,
+      });
+      if (changed) {
+        await audit(operator.accountId, 'civic_verification_dispute_resolved', request.id, {
+          metadata: { processId: request.params.processId, outcome: request.body.outcome },
+        });
+      }
+      const existing = changed
+        ? null
+        : await findCivicVerificationDisputeResolution(app.database.db, request.params.processId);
+      return {
+        data: {
+          processId: request.params.processId,
+          outcome: changed ? request.body.outcome : (existing?.outcome ?? request.body.outcome),
+          resolvedAt: changed
+            ? toIsoTimestamp(nowIso)
+            : existing
+              ? toIsoTimestamp(existing.resolvedAt)
+              : null,
+          changed,
+        },
+      };
+    },
+  );
+
   done();
 };
 
@@ -2506,6 +2991,10 @@ const PLATFORM_AUDIT_ACTIONS = new Set<PlatformAuditAction>([
   'restore_inspected',
   'restore_drill_attested',
   'investigation_exported',
+  'civic_content_hidden',
+  'civic_content_unhidden',
+  'civic_contestation_resolved',
+  'civic_verification_dispute_resolved',
 ]);
 
 function isPlatformAuditAction(value: string): value is PlatformAuditAction {
