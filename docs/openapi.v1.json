@@ -21323,7 +21323,7 @@
     },
     "/v1/signals/{signalId}/civic-process/mandate": {
       "get": {
-        "description": "Public final result for a visible signal. Voting closes lazily the moment any request observes an elapsed voting window (no scheduled job). A perfect tie among the top vote counts is reported as contested with no winner — no tie-break rule is invented. Never exposes who voted for what.",
+        "description": "Public final result for a visible signal. Voting closes lazily the moment any request observes an elapsed voting window (no scheduled job). A perfect tie among the top vote counts is reported as contested with no winner — no tie-break rule is invented. Never exposes who voted for what. Also surfaces any minority_position deliberation contributions as a permanent part of the record (§11), and reports whether a procedural contestation (§10) is pending — an eligible actor may file one within 72 hours of voting closing.",
         "parameters": [
           {
             "in": "path",
@@ -21345,6 +21345,23 @@
                     "data": {
                       "additionalProperties": false,
                       "properties": {
+                        "canContest": {
+                          "type": "boolean"
+                        },
+                        "contestationPending": {
+                          "type": "boolean"
+                        },
+                        "contestationWindowClosesAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "contested": {
                           "type": "boolean"
                         },
@@ -21396,6 +21413,113 @@
                             {
                               "format": "date-time",
                               "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "minorityPositions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "authorDisplayName": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "proposalId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "text": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "authorDisplayName",
+                              "proposalId",
+                              "text",
+                              "createdAt"
+                            ],
+                            "title": "CivicMinorityPosition",
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "type": "array"
+                        },
+                        "myContestation": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "filedAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "reasonKey": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "eligibility_error"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "ballot_tampering_suspected"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "count_discrepancy"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ],
+                                  "title": "CivicContestationReasonKey"
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "pending"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "upheld"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    {
+                                      "enum": [
+                                        "rejected"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  ],
+                                  "title": "CivicContestationStatus"
+                                }
+                              },
+                              "required": [
+                                "reasonKey",
+                                "status",
+                                "filedAt"
+                              ],
+                              "title": "CivicMyContestation",
+                              "type": "object"
                             },
                             {
                               "type": "null"
@@ -21477,7 +21601,12 @@
                         "winner",
                         "totalVotes",
                         "votingClosesAt",
-                        "decidedAt"
+                        "decidedAt",
+                        "minorityPositions",
+                        "contestationWindowClosesAt",
+                        "contestationPending",
+                        "myContestation",
+                        "canContest"
                       ],
                       "type": "object"
                     }
@@ -21565,6 +21694,334 @@
           }
         },
         "summary": "Read the civic mandate for a process once voting has closed",
+        "tags": [
+          "Civic Process"
+        ]
+      }
+    },
+    "/v1/signals/{signalId}/civic-process/mandate/contest": {
+      "post": {
+        "description": "Any actor who was eligible for the decisive ballot may file one procedural contestation, within 72 hours of voting_closes_at, citing a fixed reason code (§10). Unlike a vote, a contestation is filed openly under the filer's own identity — there is no secrecy requirement here. Filing moves the process to a verification_pending sub-flag pending operator review; that review is not implemented yet, so every contestation reports status \"pending\" for now.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signalId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "elaboration": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "reasonKey": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "eligibility_error"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "ballot_tampering_suspected"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "enum": [
+                          "count_discrepancy"
+                        ],
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "reasonKey"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "filedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "reasonKey": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "eligibility_error"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "ballot_tampering_suspected"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "count_discrepancy"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "pending"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "upheld"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "rejected"
+                              ],
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "reasonKey",
+                        "status",
+                        "filedAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "File a procedural contestation against a decided mandate",
         "tags": [
           "Civic Process"
         ]
