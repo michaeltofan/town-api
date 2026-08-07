@@ -19794,6 +19794,7 @@
                                   "stage_transitioned_to_deliberation",
                                   "stage_transitioned_to_ballot_preparation",
                                   "stage_transitioned_to_voting",
+                                  "stage_returned_to_deliberation_after_quorum_failure",
                                   "stage_transitioned_to_mandate",
                                   "stage_transitioned_to_action",
                                   "stage_transitioned_to_verification",
@@ -21351,6 +21352,12 @@
                           "anyOf": [
                             {
                               "enum": [
+                                "deliberation"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
                                 "voting"
                               ],
                               "type": "string"
@@ -21398,6 +21405,9 @@
                         "processId": {
                           "format": "uuid",
                           "type": "string"
+                        },
+                        "quorumFailed": {
+                          "type": "boolean"
                         },
                         "totalVotes": {
                           "minimum": 0,
@@ -21463,6 +21473,7 @@
                         "currentStage",
                         "decided",
                         "contested",
+                        "quorumFailed",
                         "winner",
                         "totalVotes",
                         "votingClosesAt",
@@ -24535,7 +24546,7 @@
     },
     "/v1/signals/{signalId}/civic-process/voting": {
       "get": {
-        "description": "Public vote options for a visible signal (the five finalized ballot proposals) with aggregate vote counts. Optional session state derives only canVote, hasVoted, and myChoice. Never exposes account or actor identifiers, and never who voted for what.",
+        "description": "Public vote options for a visible signal (the frozen ballot proposals) with aggregate vote counts. Optional session state derives only canVote and hasVoted. This is a secret ballot (§9): the vote is not linked back to the actor once cast, so the server cannot answer \"what did I vote?\", only \"have I voted?\". Never exposes account or actor identifiers, and never who voted for what.",
         "parameters": [
           {
             "in": "path",
@@ -24603,17 +24614,6 @@
                         "hasVoted": {
                           "type": "boolean"
                         },
-                        "myChoice": {
-                          "anyOf": [
-                            {
-                              "format": "uuid",
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
                         "options": {
                           "items": {
                             "additionalProperties": false,
@@ -24668,7 +24668,6 @@
                         "currentStage",
                         "canVote",
                         "hasVoted",
-                        "myChoice",
                         "totalVotes",
                         "options"
                       ],
@@ -24765,7 +24764,7 @@
     },
     "/v1/signals/{signalId}/civic-process/voting/vote": {
       "post": {
-        "description": "Records one vote for one proposal while the canonical process is in voting. One vote per eligible civic actor; votes cannot be changed once cast. This is not yet a secret ballot: the vote is linked to the actor internally for eligibility and one-person-one-vote enforcement, and TOWN does not present it as anonymous.",
+        "description": "Records one vote for one proposal while the canonical process is in voting. One vote per eligible civic actor, enforced by consuming a single-use cast token; votes cannot be changed once cast. This is a secret ballot (§9): the vote is written without a link back to the actor or account that cast it — only that a token was consumed. TOWN does not claim this is cryptographically verifiable, only that identity is not stored with the vote.",
         "parameters": [
           {
             "in": "path",

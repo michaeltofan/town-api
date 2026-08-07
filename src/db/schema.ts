@@ -2025,6 +2025,7 @@ export const civicProcesses = town.table(
     currentStage: text('current_stage').notNull(),
     votingOpensAt: timestamp('voting_opens_at', { withTimezone: true, mode: 'string' }),
     votingClosesAt: timestamp('voting_closes_at', { withTimezone: true, mode: 'string' }),
+    ballotCycle: integer('ballot_cycle').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
@@ -2128,6 +2129,7 @@ export const civicBallotEligibleActors = town.table(
     processId: uuid('process_id').notNull(),
     actorId: uuid('actor_id').notNull(),
     snapshottedAt: timestamp('snapshotted_at', { withTimezone: true, mode: 'string' }).notNull(),
+    ballotCycle: integer('ballot_cycle').notNull().default(1),
   },
   (table) => [
     foreignKey({
@@ -2140,8 +2142,42 @@ export const civicBallotEligibleActors = town.table(
       foreignColumns: [actors.id],
       name: 'civic_ballot_eligible_actors_actor_id_fkey',
     }).onDelete('restrict'),
-    unique('civic_ballot_eligible_actors_process_actor_unique').on(table.processId, table.actorId),
+    unique('civic_ballot_eligible_actors_process_actor_unique').on(
+      table.processId,
+      table.actorId,
+      table.ballotCycle,
+    ),
     index('civic_ballot_eligible_actors_process_idx').on(table.processId),
+  ],
+);
+
+export const civicBallotTokens = town.table(
+  'civic_ballot_tokens',
+  {
+    id: uuid('id').primaryKey(),
+    processId: uuid('process_id').notNull(),
+    actorId: uuid('actor_id').notNull(),
+    ballotCycle: integer('ballot_cycle').notNull(),
+    issuedAt: timestamp('issued_at', { withTimezone: true, mode: 'string' }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processId],
+      foreignColumns: [civicProcesses.id],
+      name: 'civic_ballot_tokens_process_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.actorId],
+      foreignColumns: [actors.id],
+      name: 'civic_ballot_tokens_actor_id_fkey',
+    }).onDelete('restrict'),
+    unique('civic_ballot_tokens_process_actor_cycle_unique').on(
+      table.processId,
+      table.actorId,
+      table.ballotCycle,
+    ),
+    index('civic_ballot_tokens_process_idx').on(table.processId, table.ballotCycle),
   ],
 );
 
@@ -2210,7 +2246,7 @@ export const civicVotes = town.table(
     id: uuid('id').primaryKey(),
     processId: uuid('process_id').notNull(),
     proposalId: uuid('proposal_id').notNull(),
-    actorId: uuid('actor_id').notNull(),
+    ballotCycle: integer('ballot_cycle').notNull().default(1),
     castAt: timestamp('cast_at', { withTimezone: true, mode: 'string' }).notNull(),
   },
   (table) => [
@@ -2224,13 +2260,8 @@ export const civicVotes = town.table(
       foreignColumns: [civicProposals.id],
       name: 'civic_votes_proposal_id_fkey',
     }).onDelete('restrict'),
-    foreignKey({
-      columns: [table.actorId],
-      foreignColumns: [actors.id],
-      name: 'civic_votes_actor_id_fkey',
-    }).onDelete('restrict'),
-    unique('civic_votes_process_actor_unique').on(table.processId, table.actorId),
     index('civic_votes_process_proposal_idx').on(table.processId, table.proposalId),
+    index('civic_votes_process_cycle_idx').on(table.processId, table.ballotCycle),
   ],
 );
 
@@ -2243,6 +2274,7 @@ export const civicProcessTransitions = town.table(
     toStage: text('to_stage').notNull(),
     reasonKey: text('reason_key').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull(),
+    ballotCycle: integer('ballot_cycle').notNull().default(1),
   },
   (table) => [
     foreignKey({
@@ -2254,6 +2286,7 @@ export const civicProcessTransitions = town.table(
       table.processId,
       table.fromStage,
       table.toStage,
+      table.ballotCycle,
     ),
     check(
       'civic_process_transitions_supported_paths',
@@ -2273,6 +2306,10 @@ export const civicProcessTransitions = town.table(
         ${table.fromStage} = 'ballot_preparation'
         and ${table.toStage} = 'voting'
         and ${table.reasonKey} = 'ballot_prepared'
+      ) or (
+        ${table.fromStage} = 'voting'
+        and ${table.toStage} = 'deliberation'
+        and ${table.reasonKey} = 'quorum_not_reached'
       ) or (
         ${table.fromStage} = 'voting'
         and ${table.toStage} = 'mandate'
@@ -2306,6 +2343,7 @@ export const civicProcessEvents = town.table(
     processId: uuid('process_id').notNull(),
     eventType: text('event_type').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull(),
+    ballotCycle: integer('ballot_cycle').notNull().default(1),
   },
   (table) => [
     foreignKey({
@@ -2321,13 +2359,18 @@ export const civicProcessEvents = town.table(
         'stage_transitioned_to_deliberation',
         'stage_transitioned_to_ballot_preparation',
         'stage_transitioned_to_voting',
+        'stage_returned_to_deliberation_after_quorum_failure',
         'stage_transitioned_to_mandate',
         'stage_transitioned_to_action',
         'stage_transitioned_to_verification',
         'stage_transitioned_to_archived'
       )`,
     ),
-    unique('civic_process_events_process_type_unique').on(table.processId, table.eventType),
+    unique('civic_process_events_process_type_unique').on(
+      table.processId,
+      table.eventType,
+      table.ballotCycle,
+    ),
     index('civic_process_events_process_occurred_idx').on(table.processId, table.occurredAt),
   ],
 );

@@ -17,7 +17,7 @@ async function simulateActionMarkedReady(pool: Pool, processId: string): Promise
       `INSERT INTO town.civic_process_transitions
          (id, process_id, from_stage, to_stage, reason_key, occurred_at)
        VALUES (gen_random_uuid(), $1, 'action', 'verification', 'action_marked_ready', now())
-       ON CONFLICT (process_id, from_stage, to_stage) DO NOTHING`,
+       ON CONFLICT (process_id, from_stage, to_stage, ballot_cycle) DO NOTHING`,
       [processId],
     );
     await client.query(
@@ -33,7 +33,7 @@ async function simulateActionMarkedReady(pool: Pool, processId: string): Promise
     await client.query(
       `INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at)
        VALUES (gen_random_uuid(), $1, 'stage_transitioned_to_verification', now())
-       ON CONFLICT (process_id, event_type) DO NOTHING`,
+       ON CONFLICT (process_id, event_type, ballot_cycle) DO NOTHING`,
       [processId],
     );
     await client.query('COMMIT');
@@ -152,7 +152,10 @@ async function buildDecidedProcessThroughAction(
   const proposalIds = proposalRows.rows.map((row) => row.id);
   const winningProposalId = proposalIds[0];
   const secondProposalId = proposalIds[1];
-  if (!winningProposalId || !secondProposalId) throw new Error('missing proposal ids');
+  const thirdProposalId = proposalIds[2];
+  if (!winningProposalId || !secondProposalId || !thirdProposalId) {
+    throw new Error('missing proposal ids');
+  }
 
   await Promise.all(
     actorIds.slice(0, 5).map((actorId, index) =>
@@ -174,24 +177,31 @@ async function buildDecidedProcessThroughAction(
 
   await Promise.all([
     pool.query(
-      `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-      [processId, winningProposalId, actorIds[0]],
+      `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+       VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+      [processId, winningProposalId],
     ),
     pool.query(
-      `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-      [processId, winningProposalId, actorIds[1]],
+      `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+       VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+      [processId, winningProposalId],
     ),
     pool.query(
-      `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-      [processId, winningProposalId, actorIds[2]],
+      `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+       VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+      [processId, winningProposalId],
     ),
     pool.query(
-      `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-      [processId, secondProposalId, actorIds[3]],
+      `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+       VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+      [processId, secondProposalId],
+    ),
+    // A fifth vote for a fourth proposal — needed to clear quorum (§9: at
+    // least 5 votes) without changing the winning proposal's vote count.
+    pool.query(
+      `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+       VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+      [processId, thirdProposalId],
     ),
   ]);
 
@@ -889,9 +899,9 @@ describe('civic process confirmation integration', () => {
     // rejected, and the ballot cannot be reached through the voting route.
     await expect(
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, proposalIds[0], actorIds[0]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, proposalIds[0]],
       ),
     ).rejects.toThrow(/civic voting stage is closed/);
 
@@ -958,35 +968,32 @@ describe('civic process confirmation integration', () => {
 
     await Promise.all([
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, proposalIds[0], actorIds[0]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, proposalIds[0]],
       ),
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, proposalIds[0], actorIds[1]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, proposalIds[0]],
       ),
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, proposalIds[1], actorIds[2]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, proposalIds[1]],
       ),
     ]);
 
+    // One-vote-per-actor is no longer a civic_votes constraint (the vote row
+    // carries no actor link at all, §9) — it is enforced entirely by
+    // single-use ballot token consumption at the application layer
+    // (see civic-voting.integration.test.ts for that coverage). A fourth
+    // anonymous vote arriving at the DB layer is simply another vote.
     await expect(
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, proposalIds[1], actorIds[0]],
-      ),
-    ).rejects.toThrow(/civic_votes_process_actor_unique/);
-
-    await expect(
-      pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, proposalIds[0], actorIds[5]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, proposalIds[0]],
       ),
     ).resolves.toBeDefined();
 
@@ -1000,7 +1007,6 @@ describe('civic process confirmation integration', () => {
         currentStage: string;
         canVote: boolean;
         hasVoted: boolean;
-        myChoice: string | null;
         totalVotes: number;
         options: { proposalId: string; voteCount: number }[];
       };
@@ -1008,7 +1014,7 @@ describe('civic process confirmation integration', () => {
     expect(votingBody.data.currentStage).toBe('voting');
     expect(votingBody.data.canVote).toBe(false);
     expect(votingBody.data.hasVoted).toBe(false);
-    expect(votingBody.data.myChoice).toBeNull();
+    expect(votingBody.data).not.toHaveProperty('myChoice');
     expect(votingBody.data.totalVotes).toBe(4);
     const tallyByProposal = new Map(
       votingBody.data.options.map((option) => [option.proposalId, option.voteCount]),
@@ -1096,7 +1102,10 @@ describe('civic process confirmation integration', () => {
     const proposalIds = proposalRows.rows.map((row) => row.id);
     const firstProposalId = proposalIds[0];
     const secondProposalId = proposalIds[1];
-    if (!firstProposalId || !secondProposalId) throw new Error('missing proposal ids');
+    const thirdProposalId = proposalIds[2];
+    if (!firstProposalId || !secondProposalId || !thirdProposalId) {
+      throw new Error('missing proposal ids');
+    }
 
     await Promise.all(
       actorIds.slice(0, 5).map((actorId, index) =>
@@ -1119,24 +1128,32 @@ describe('civic process confirmation integration', () => {
 
     await Promise.all([
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, firstProposalId, actorIds[0]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, firstProposalId],
       ),
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, firstProposalId, actorIds[1]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, firstProposalId],
       ),
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, firstProposalId, actorIds[2]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, firstProposalId],
       ),
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, secondProposalId, actorIds[3]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, secondProposalId],
+      ),
+      // A fifth vote for a third, non-winning proposal — needed to clear
+      // quorum (§9: at least 5 votes) without changing the 3-vs-1 clear-
+      // winner shape this test is about.
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, thirdProposalId],
       ),
     ]);
 
@@ -1160,7 +1177,7 @@ describe('civic process confirmation integration', () => {
           proposalId: firstProposalId,
           voteCount: 3,
         },
-        totalVotes: 4,
+        totalVotes: 5,
       },
     });
     const mandateBody = mandateResponse.json<{ data: { decidedAt: string | null } }>();
@@ -1216,15 +1233,15 @@ describe('civic process confirmation integration', () => {
         action_events: '1',
         mandate_proposal_id: firstProposalId,
         mandate_vote_count: 3,
-        mandate_total_votes: 4,
+        mandate_total_votes: 5,
       },
     ]);
 
     await expect(
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, firstProposalId, actorIds[5]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, firstProposalId],
       ),
     ).rejects.toThrow(/civic voting stage is closed/);
 
@@ -1369,7 +1386,10 @@ describe('civic process confirmation integration', () => {
     const proposalIds = proposalRows.rows.map((row) => row.id);
     const firstProposalId = proposalIds[0];
     const secondProposalId = proposalIds[1];
-    if (!firstProposalId || !secondProposalId) throw new Error('missing proposal ids');
+    const thirdProposalId = proposalIds[2];
+    if (!firstProposalId || !secondProposalId || !thirdProposalId) {
+      throw new Error('missing proposal ids');
+    }
 
     await Promise.all(
       actorIds.slice(0, 5).map((actorId, index) =>
@@ -1384,16 +1404,34 @@ describe('civic process confirmation integration', () => {
 
     await advanceBallotPreparationToVoting(pool, app, { signalId, processId });
 
+    // Two votes each for the tied top proposals, plus one for a third
+    // (untied) proposal — needed to clear quorum (§9: at least 5 votes)
+    // without disturbing the perfect-tie-at-top shape this test is about.
     await Promise.all([
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, firstProposalId, actorIds[0]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, firstProposalId],
       ),
       pool.query(
-        `INSERT INTO town.civic_votes (id, process_id, proposal_id, actor_id, cast_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, now())`,
-        [processId, secondProposalId, actorIds[1]],
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, firstProposalId],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, secondProposalId],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, secondProposalId],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, thirdProposalId],
       ),
     ]);
 
@@ -1413,7 +1451,7 @@ describe('civic process confirmation integration', () => {
         decided: true,
         contested: true,
         winner: null,
-        totalVotes: 2,
+        totalVotes: 5,
       },
     });
 
@@ -1453,6 +1491,285 @@ describe('civic process confirmation integration', () => {
         [processId, actorIds[0]],
       ),
     ).rejects.toThrow(/civic action stage is closed/);
+  });
+
+  it('returns to deliberation on quorum failure, then decides a real mandate on the retry cycle', async () => {
+    const signalId = randomUUID();
+    const actorIds = Array.from({ length: 7 }, () => randomUUID());
+
+    await pool.query(
+      `INSERT INTO town.signals
+       SELECT (jsonb_populate_record(
+         NULL::town.signals,
+         to_jsonb(source) || jsonb_build_object(
+           'id', $1::uuid,
+           'slug', 'civic-process-quorum-retry-test',
+           'position', 32010,
+           'created_at', now(),
+           'updated_at', now(),
+           'published_at', now()
+         )
+       )).*
+       FROM town.signals source
+       ORDER BY position
+       LIMIT 1`,
+      [signalId],
+    );
+
+    for (const actorId of actorIds) {
+      await pool.query(
+        `INSERT INTO town.actors (
+           id, kind, status, display_label, community_id, account_id,
+           local_eligibility_verified_at, community_commitment_accepted_at,
+           community_commitment_version, created_at, updated_at
+         )
+         SELECT
+           $1::uuid, 'controlled_test', 'active', $1::text, community_id, NULL,
+           NULL, NULL, NULL, now(), now()
+         FROM town.signals
+         WHERE id = $2`,
+        [actorId, signalId],
+      );
+    }
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId) =>
+        pool.query(
+          `INSERT INTO town.signal_confirmations
+             (id, signal_id, actor_id, confirmed_at, created_at)
+           VALUES (gen_random_uuid(), $1, $2, now(), now())`,
+          [signalId, actorId],
+        ),
+      ),
+    );
+
+    const processRow = await pool.query<{ id: string }>(
+      'SELECT id FROM town.civic_processes WHERE signal_id = $1',
+      [signalId],
+    );
+    const processId = processRow.rows[0]?.id;
+    if (!processId) throw new Error('missing process id');
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId, index) =>
+        pool.query(
+          `INSERT INTO town.civic_proposals
+             (id, process_id, author_actor_id, title, body, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, now())`,
+          [processId, actorId, `Quorum retry proposal ${String(index)}`, `Body ${String(index)}`],
+        ),
+      ),
+    );
+
+    const proposalRows = await pool.query<{ id: string }>(
+      'SELECT id FROM town.civic_proposals WHERE process_id = $1 ORDER BY created_at, id',
+      [processId],
+    );
+    const proposalIds = proposalRows.rows.map((row) => row.id);
+    const firstProposalId = proposalIds[0];
+    if (!firstProposalId) throw new Error('missing proposal ids');
+
+    await Promise.all(
+      actorIds.slice(0, 5).map((actorId, index) =>
+        pool.query(
+          `INSERT INTO town.civic_deliberation_contributions
+             (id, process_id, proposal_id, author_actor_id, intent, text, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, 'observation', $4, now())`,
+          [processId, proposalIds[index], actorId, `Quorum retry deliberation ${String(index)}`],
+        ),
+      ),
+    );
+
+    const stageAfterDeliberation = await pool.query<{
+      current_stage: string;
+      ballot_cycle: number;
+    }>('SELECT current_stage, ballot_cycle FROM town.civic_processes WHERE id = $1', [processId]);
+    expect(stageAfterDeliberation.rows[0]).toMatchObject({
+      current_stage: 'ballot_preparation',
+      ballot_cycle: 1,
+    });
+
+    const frozenAtCycle1 = await pool.query<{ frozen_at: string }>(
+      'SELECT frozen_at FROM town.civic_proposals WHERE id = $1',
+      [firstProposalId],
+    );
+    const originalFrozenAt = frozenAtCycle1.rows[0]?.frozen_at;
+    expect(originalFrozenAt).toBeDefined();
+
+    await advanceBallotPreparationToVoting(pool, app, { signalId, processId });
+
+    // Only 2 of the 5 eligible actors vote — well under quorum (5).
+    await Promise.all([
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, firstProposalId],
+      ),
+      pool.query(
+        `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+         VALUES (gen_random_uuid(), $1, $2, 1, now())`,
+        [processId, firstProposalId],
+      ),
+    ]);
+
+    await pool.query(
+      "UPDATE town.civic_processes SET voting_closes_at = now() - interval '1 second' WHERE id = $1",
+      [processId],
+    );
+
+    const mandateAfterQuorumFailure = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/mandate`,
+    });
+    expect(mandateAfterQuorumFailure.statusCode).toBe(200);
+    expect(mandateAfterQuorumFailure.json()).toMatchObject({
+      data: {
+        processId,
+        currentStage: 'deliberation',
+        decided: false,
+        contested: false,
+        quorumFailed: true,
+        winner: null,
+        totalVotes: 2,
+      },
+    });
+
+    const stateAfterQuorumFailure = await pool.query<{
+      current_stage: string;
+      ballot_cycle: number;
+      quorum_transitions: string;
+      quorum_events: string;
+      mandate_rows: string;
+    }>(
+      `SELECT
+         process.current_stage,
+         process.ballot_cycle,
+         (SELECT count(*)::text
+          FROM town.civic_process_transitions transition
+          WHERE transition.process_id = process.id
+            AND transition.from_stage = 'voting'
+            AND transition.to_stage = 'deliberation'
+            AND transition.reason_key = 'quorum_not_reached'
+            AND transition.ballot_cycle = 1) AS quorum_transitions,
+         (SELECT count(*)::text
+          FROM town.civic_process_events event
+          WHERE event.process_id = process.id
+            AND event.event_type = 'stage_returned_to_deliberation_after_quorum_failure'
+            AND event.ballot_cycle = 1) AS quorum_events,
+         (SELECT count(*)::text FROM town.civic_mandates mandate
+          WHERE mandate.process_id = process.id) AS mandate_rows
+       FROM town.civic_processes process
+       WHERE process.id = $1`,
+      [processId],
+    );
+    expect(stateAfterQuorumFailure.rows).toEqual([
+      {
+        current_stage: 'deliberation',
+        ballot_cycle: 2,
+        quorum_transitions: '1',
+        quorum_events: '1',
+        mandate_rows: '0',
+      },
+    ]);
+
+    // The frozen ballot content survives the failed cycle untouched.
+    const frozenAfterQuorumFailure = await pool.query<{
+      lifecycle_state: string;
+      frozen_at: string;
+    }>('SELECT lifecycle_state, frozen_at FROM town.civic_proposals WHERE id = $1', [
+      firstProposalId,
+    ]);
+    expect(frozenAfterQuorumFailure.rows[0]?.lifecycle_state).toBe('frozen');
+    expect(frozenAfterQuorumFailure.rows[0]?.frozen_at).toEqual(originalFrozenAt);
+
+    // One more contribution re-triggers the deliberation threshold (the
+    // cumulative distinct-participant count already cleared it) and starts
+    // ballot cycle 2 — a new, explicitly audited cycle, not a silent retry.
+    await pool.query(
+      `INSERT INTO town.civic_deliberation_contributions
+         (id, process_id, proposal_id, author_actor_id, intent, text, created_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'observation', 'One more contribution to retry the ballot', now())`,
+      [processId, firstProposalId, actorIds[5]],
+    );
+
+    const stateAfterRetryBallotPreparation = await pool.query<{
+      current_stage: string;
+      ballot_cycle: number;
+      transitions_cycle_2: string;
+    }>(
+      `SELECT
+         process.current_stage,
+         process.ballot_cycle,
+         (SELECT count(*)::text
+          FROM town.civic_process_transitions transition
+          WHERE transition.process_id = process.id
+            AND transition.from_stage = 'deliberation'
+            AND transition.to_stage = 'ballot_preparation'
+            AND transition.ballot_cycle = 2) AS transitions_cycle_2
+       FROM town.civic_processes process
+       WHERE process.id = $1`,
+      [processId],
+    );
+    expect(stateAfterRetryBallotPreparation.rows).toEqual([
+      { current_stage: 'ballot_preparation', ballot_cycle: 2, transitions_cycle_2: '1' },
+    ]);
+
+    // The eligible-voter snapshot for cycle 2 is a superset covering every
+    // active actor in the shared foundation community (other tests' actors
+    // included) — a re-snapshot, not a re-run of the original 7.
+    const eligibleActorsCycle2 = await pool.query<{ actor_id: string }>(
+      'SELECT actor_id FROM town.civic_ballot_eligible_actors WHERE process_id = $1 AND ballot_cycle = 2',
+      [processId],
+    );
+    const eligibleActorIdsCycle2 = eligibleActorsCycle2.rows.map((row) => row.actor_id);
+    for (const actorId of actorIds) {
+      expect(eligibleActorIdsCycle2).toContain(actorId);
+    }
+
+    await advanceBallotPreparationToVoting(pool, app, { signalId, processId });
+
+    const tokensCycle2 = await pool.query<{ actor_id: string }>(
+      `SELECT actor_id FROM town.civic_ballot_tokens
+       WHERE process_id = $1 AND ballot_cycle = 2`,
+      [processId],
+    );
+    const tokenActorIdsCycle2 = tokensCycle2.rows.map((row) => row.actor_id);
+    for (const actorId of actorIds) {
+      expect(tokenActorIdsCycle2).toContain(actorId);
+    }
+
+    // This time, 5 of the 7 eligible actors vote — quorum is cleared.
+    await Promise.all(
+      actorIds.slice(0, 5).map((_actorId) =>
+        pool.query(
+          `INSERT INTO town.civic_votes (id, process_id, proposal_id, ballot_cycle, cast_at)
+           VALUES (gen_random_uuid(), $1, $2, 2, now())`,
+          [processId, firstProposalId],
+        ),
+      ),
+    );
+
+    await pool.query(
+      "UPDATE town.civic_processes SET voting_closes_at = now() - interval '1 second' WHERE id = $1",
+      [processId],
+    );
+
+    const mandateAfterRetry = await app.inject({
+      method: 'GET',
+      url: `/v1/signals/${signalId}/civic-process/mandate`,
+    });
+    expect(mandateAfterRetry.statusCode).toBe(200);
+    expect(mandateAfterRetry.json()).toMatchObject({
+      data: {
+        processId,
+        currentStage: 'action',
+        decided: true,
+        contested: false,
+        quorumFailed: false,
+        winner: { proposalId: firstProposalId, voteCount: 5 },
+        totalVotes: 5,
+      },
+    });
   });
 
   it('marks a decided action ready, then archives as delivered once 5 actors confirm', async () => {

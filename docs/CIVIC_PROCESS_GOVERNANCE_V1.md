@@ -205,34 +205,50 @@ linked to the actor internally for eligibility and one-person-one-vote
 enforcement, and this is disclosed, not presented as anonymous
 (`src/routes/civic-voting.ts`).
 
-**[V2 — specified]**
+**[V2 — specified, revised 2026-08-06 to stay simple ahead of possible rapid
+platform growth]**
 
-- **Ballot type**: approval voting among the frozen, non-withdrawn proposals
-  plus a standing **"No proposal — continue deliberation"** option, exactly
-  as the owner specified. Binary Da/Nu/Abținere is reserved for a future
-  single-proposal ballot type and is not built in this iteration.
+- **Ballot type**: single choice among the frozen, non-withdrawn proposals —
+  unchanged from V1. Approval voting and a standing "No proposal" option were
+  considered and deliberately dropped: they complicate the vote-casting
+  contract (a set of approvals instead of one choice) for a benefit that
+  isn't worth the added surface at this stage. Binary Da/Nu/Abținere remains
+  reserved for a future single-proposal ballot type.
 - **Quorum**: at least 5 of the frozen eligible-voter snapshot must vote, or
   the process reports `contested: true, reason: 'quorum_not_reached'` and
   returns to `deliberation` (proposals stay `frozen`; a new
   `ballot_preparation` cycle is required to re-open voting — this is a new,
-  explicitly audited transition, not a silent retry).
-- **Win rule**: the proposal with strictly the most approvals wins. A tie at
-  the top, or "No proposal" winning outright, both resolve to
-  `contested: true` with **no invented tie-break** — this preserves the
-  existing precedent in `civic-mandate.ts` (`mandate.proposalId === null`)
-  and extends it to the "No proposal" case.
+  explicitly audited transition, not a silent retry). A process tracks a
+  `ballotCycle` counter (starts at 1, increments on each quorum-failure
+  retry) so the audit ledger (`civic_process_transitions`,
+  `civic_process_events`) can record the same `deliberation ⇄
+ballot_preparation ⇄ voting` edges more than once for one process, each
+  cycle distinctly numbered rather than silently overwritten or blocked by
+  the ledger's uniqueness guard.
+- **Win rule**: the proposal with strictly the most votes wins. A tie at the
+  top resolves to `contested: true` with **no invented tie-break** — this
+  preserves the existing precedent in `civic-mandate.ts`
+  (`mandate.proposalId === null`).
 - **Secret ballot** (the owner's flagged infrastructure-sensitive item):
   adopted approach for V1 — a **separate anonymized ballot table**, decoupled
   from actor identity at cast time:
-  - At ballot open, one single-use, opaque cast token per eligible actor is
-    minted and stored linked to `actor_id` in a `civic_ballot_tokens` table
-    (separate from any vote content).
-    - Casting a vote consumes the token (marks it used, one-way) and writes
-      the choice into `civic_votes` **without a foreign key back to
-      actor_id or account_id** — only `process_id`, `proposal_id` (or the
-      "no proposal" sentinel), and `cast_at`.
+  - At ballot open (voting start, per `ballotCycle`), one single-use, opaque
+    cast token per eligible actor is minted and stored linked to `actor_id`
+    in a `civic_ballot_tokens` table (separate from any vote content).
+    - Casting a vote consumes the token (marks it used, one-way, in the same
+      atomic statement that inserts the vote) and writes the choice into
+      `civic_votes` **without a foreign key back to actor_id or
+      account_id** — only `process_id`, `proposal_id`, `ballotCycle`, and
+      `cast_at`.
     - Eligibility and one-vote-per-actor are enforced via the token
       consumption, not via a link from the vote row to the actor.
+    - Once cast, **the server itself can no longer answer "what did I
+      vote?"** — only "have I voted?" (derived from token consumption, not
+      from the vote row). This is the direct, accepted consequence of
+      genuine anonymization: showing a caller their own past choice after
+      the fact would require exactly the identity-to-choice link the token
+      design deliberately discards. `hasVoted` is exposed; `myChoice` is
+      not.
     - **Threat model, stated plainly**: this protects against casual
       identity-choice correlation in the product surface and against any
       single query joining `civic_votes` to an actor. It does **not**

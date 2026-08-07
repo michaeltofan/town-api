@@ -4,7 +4,9 @@ import { closeVotingWindowIfElapsed, findCivicMandate } from '../db/repositories
 import {
   findCivicProcessBySignalId,
   openVotingIfBallotPreparationElapsed,
+  quorumFailedForBallotCycle,
 } from '../db/repositories/civic-processes.js';
+import { countCivicVotesForProcess } from '../db/repositories/civic-votes.js';
 import { findCivicProposalById } from '../db/repositories/civic-proposals.js';
 import { findPublishedSignalById } from '../db/repositories/signals.js';
 import { signalNotFoundError } from '../errors/app-error.js';
@@ -70,10 +72,31 @@ export const civicMandateRoutes: FastifyPluginCallbackTypebox<CivicMandateRoutes
         ? await findCivicProposalById(app.database.db, mandate.proposalId)
         : null;
 
+      // A quorum failure (§9) returns the process to deliberation and
+      // increments ballot_cycle — check whether the immediately prior
+      // cycle ended that way, so a caller who missed the transition still
+      // learns why there is no mandate yet, honestly, rather than seeing an
+      // indistinguishable "still voting."
+      const quorumFailed =
+        !isDecided &&
+        process.currentStage === 'deliberation' &&
+        process.ballotCycle > 1 &&
+        (await quorumFailedForBallotCycle(app.database.db, {
+          processId: process.id,
+          ballotCycle: process.ballotCycle - 1,
+        }));
+      const quorumFailedVoteCount = quorumFailed
+        ? await countCivicVotesForProcess(app.database.db, {
+            processId: process.id,
+            ballotCycle: process.ballotCycle - 1,
+          })
+        : 0;
+
       return await reply.status(200).send({
         data: {
           processId: process.id,
           currentStage:
+            process.currentStage === 'deliberation' ||
             process.currentStage === 'voting' ||
             process.currentStage === 'mandate' ||
             process.currentStage === 'action' ||
@@ -83,6 +106,7 @@ export const civicMandateRoutes: FastifyPluginCallbackTypebox<CivicMandateRoutes
               : 'voting',
           decided: isDecided,
           contested: mandate !== null && mandate.proposalId === null,
+          quorumFailed,
           winner: winnerProposal
             ? {
                 proposalId: winnerProposal.id,
@@ -92,7 +116,7 @@ export const civicMandateRoutes: FastifyPluginCallbackTypebox<CivicMandateRoutes
                 voteCount: mandate?.voteCount ?? 0,
               }
             : null,
-          totalVotes: mandate?.totalVotes ?? 0,
+          totalVotes: quorumFailed ? quorumFailedVoteCount : (mandate?.totalVotes ?? 0),
           votingClosesAt: process.votingClosesAt ? toIsoTimestamp(process.votingClosesAt) : null,
           decidedAt: mandate ? toIsoTimestamp(mandate.decidedAt) : null,
         },

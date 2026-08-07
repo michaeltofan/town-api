@@ -59,7 +59,11 @@ export async function listCivicInboxProcessesForActor(
       UNION
       SELECT process_id FROM town.civic_deliberation_contributions WHERE author_actor_id = ${actorId}
       UNION
-      SELECT process_id FROM town.civic_votes WHERE actor_id = ${actorId}
+      -- civic_votes carries no actor link (§9, secret ballot) — "did this
+      -- actor vote on this process" is derived from token consumption
+      -- instead, never from the anonymized vote content itself.
+      SELECT process_id FROM town.civic_ballot_tokens
+      WHERE actor_id = ${actorId} AND consumed_at IS NOT NULL
       UNION
       SELECT process_id FROM town.civic_action_updates WHERE author_actor_id = ${actorId}
       UNION

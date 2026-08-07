@@ -158,7 +158,11 @@ describe('civic process confirmation foundation', () => {
     expect(migration).toContain('actor_community_id IS DISTINCT FROM process_community_id');
     expect(route).toContain("app.get(\n    '/v1/signals/:signalId/civic-process/voting'");
     expect(route).toContain("app.post(\n    '/v1/signals/:signalId/civic-process/voting/vote'");
-    expect(route.toLowerCase()).toContain('not yet a secret ballot');
+    // §9 (V2): the ballot is now genuinely secret (token-consumption based),
+    // and the route's own description must state the honest, disclosed
+    // threat model rather than claim more than the design delivers.
+    expect(route.toLowerCase()).toContain('this is a secret ballot');
+    expect(route).toContain('does not claim this is cryptographically verifiable');
   });
 
   it('closes the voting window lazily and records an audited transition to mandate', async () => {
