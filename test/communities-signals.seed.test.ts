@@ -81,8 +81,8 @@ describe('foundation seed', () => {
     const communityRows = await database.db.select().from(communities);
     const signalRows = await database.db.select().from(signals);
 
-    expect(communityRows).toHaveLength(7);
-    expect(signalRows).toHaveLength(21);
+    expect(communityRows).toHaveLength(12);
+    expect(signalRows).toHaveLength(36);
 
     expect(communityRows.map((row) => row.id).sort()).toEqual(
       Object.values(FOUNDATION_COMMUNITY_IDS).sort(),
@@ -182,8 +182,8 @@ describe('foundation seed', () => {
       .map(normalizeSignal)
       .sort((a, b) => a.id.localeCompare(b.id));
 
-    expect(afterCommunities).toHaveLength(7);
-    expect(afterSignals).toHaveLength(21);
+    expect(afterCommunities).toHaveLength(12);
+    expect(afterSignals).toHaveLength(36);
     expect(afterCommunities).toEqual(beforeCommunities);
     expect(afterSignals).toEqual(beforeSignals);
   });

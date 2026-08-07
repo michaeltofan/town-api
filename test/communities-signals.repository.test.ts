@@ -46,6 +46,11 @@ describe('communities and signals repositories', () => {
       'sibiu-ro',
       'iasi-ro',
       'timisoara-ro',
+      'koln-de',
+      'dortmund-de',
+      'stuttgart-de',
+      'frankfurt-de',
+      'salzburg-at',
     ]);
     expect(rows.every((row) => row.status === 'active')).toBe(true);
   });

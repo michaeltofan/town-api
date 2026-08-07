@@ -52,7 +52,7 @@ describe('communities and signals API', () => {
     expect(response.headers['content-type']).toMatch(/^application\/json/);
 
     const body = response.json<{ data: Record<string, unknown>[] }>();
-    expect(body.data).toHaveLength(7);
+    expect(body.data).toHaveLength(12);
     expect(body.data[0]).toEqual({
       id: milano.id,
       slug: 'milano-it',
@@ -122,6 +122,56 @@ describe('communities and signals API', () => {
       displayName: 'Timișoara',
       defaultLocale: 'ro-RO',
       timezone: 'Europe/Bucharest',
+    });
+    expect(body.data[7]).toEqual({
+      id: communityBySlug('koln-de').id,
+      slug: 'koln-de',
+      position: 8,
+      countryCode: 'DE',
+      cityName: 'Koln',
+      displayName: 'Köln',
+      defaultLocale: 'de-DE',
+      timezone: 'Europe/Berlin',
+    });
+    expect(body.data[8]).toEqual({
+      id: communityBySlug('dortmund-de').id,
+      slug: 'dortmund-de',
+      position: 9,
+      countryCode: 'DE',
+      cityName: 'Dortmund',
+      displayName: 'Dortmund',
+      defaultLocale: 'de-DE',
+      timezone: 'Europe/Berlin',
+    });
+    expect(body.data[9]).toEqual({
+      id: communityBySlug('stuttgart-de').id,
+      slug: 'stuttgart-de',
+      position: 10,
+      countryCode: 'DE',
+      cityName: 'Stuttgart',
+      displayName: 'Stuttgart',
+      defaultLocale: 'de-DE',
+      timezone: 'Europe/Berlin',
+    });
+    expect(body.data[10]).toEqual({
+      id: communityBySlug('frankfurt-de').id,
+      slug: 'frankfurt-de',
+      position: 11,
+      countryCode: 'DE',
+      cityName: 'Frankfurt',
+      displayName: 'Frankfurt',
+      defaultLocale: 'de-DE',
+      timezone: 'Europe/Berlin',
+    });
+    expect(body.data[11]).toEqual({
+      id: communityBySlug('salzburg-at').id,
+      slug: 'salzburg-at',
+      position: 12,
+      countryCode: 'AT',
+      cityName: 'Salzburg',
+      displayName: 'Salzburg',
+      defaultLocale: 'de-AT',
+      timezone: 'Europe/Vienna',
     });
     expect(JSON.stringify(body)).not.toMatch(/createdAt|updatedAt|"status"/);
   });
