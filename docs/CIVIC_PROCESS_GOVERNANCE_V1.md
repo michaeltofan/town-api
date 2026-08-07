@@ -339,16 +339,27 @@ storage either — they already exist on the winning `civic_proposals` row
 (added in 0051) and are now surfaced on every route that renders a winner
 (`mandate`, `action`, `verification`).
 
-## 13. Result verification **[V1 — implemented]**
+## 13. Result verification **[V1 — implemented, V2 — partially implemented]**
 
 Symmetric 5-actor threshold for `delivered`/`not_delivered`, evidence
 attachable, disputed state (`neither reaches 5`) reported honestly with no
 invented resolution (`src/routes/civic-verification.ts`).
 
-**[V2 — specified]** A dispute that stays unresolved for **14 days** after
-verification opened routes to the same procedural-review path as §10
-(operator with `moderate_civic_process`, public permanent outcome), rather
-than staying open indefinitely with no path to archive.
+**[V2 — implemented: escalation flag; review path deferred to §14]** A
+dispute that stays unresolved for **14 days** after verification opened is
+never auto-resolved. `verificationOpenedAt` is read from the existing,
+permanent `civic_process_transitions` ledger (the `action → verification`
+row) — no new stored timestamp. `GET /civic-process/verification` derives
+`disputeEscalatesAt` (`verificationOpenedAt` + 14 days) and
+`disputeEscalated` (`true` once that deadline passes while the process is
+still `verification` and no `civic_verifications` row exists) on every
+read, exactly like every other derived state in this schema. Escalation
+itself does not yet route anywhere: the actual procedural-review outcome
+(operator with `moderate_civic_process`, public permanent outcome, same
+path as §10) is deferred to §14, which this flag is intentionally built to
+plug into once that capability exists — until then the response honestly
+reports `disputeEscalated: true` and nothing more, never an invented
+resolution.
 
 ## 14. Operator rights **[V1 — implemented, extended]**
 
@@ -396,7 +407,7 @@ Matches the owner's PR plan, one slice per PR, API before its dependent UI:
 | 9   | town-api + town-public, coordinated | _(done — secret-ballot voting + quorum retry, §9)_                                      |
 | 10  | town-api + town-public              | _(done — mandate minority position + contestation filing, §10, §11)_                    |
 | 11  | town-api + town-public              | _(done — action extensions: responsible actor, collaborators, typed update kinds, §12)_ |
-| 12  | town-api + town-public              | Verification dispute routing (§13)                                                      |
+| 12  | town-api + town-public              | _(done — verification dispute escalation flag, §13; review path deferred to §14)_       |
 | 13  | town-api + platform console         | `moderate_civic_process` + contestation review UI (§14)                                 |
 | 14  | town-public                         | HOME civic center surfacing real process state                                          |
 | 15  | town-api + town-public              | Notifications / Civic Inbox / civic profile extensions                                  |

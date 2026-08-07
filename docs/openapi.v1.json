@@ -24081,6 +24081,20 @@
                           "minimum": 0,
                           "type": "integer"
                         },
+                        "disputeEscalated": {
+                          "type": "boolean"
+                        },
+                        "disputeEscalatesAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "evidence": {
                           "items": {
                             "additionalProperties": false,
@@ -24187,6 +24201,17 @@
                           "format": "uuid",
                           "type": "string"
                         },
+                        "verificationOpenedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "winner": {
                           "anyOf": [
                             {
@@ -24278,6 +24303,9 @@
                         "notDeliveredCount",
                         "outcome",
                         "decidedAt",
+                        "verificationOpenedAt",
+                        "disputeEscalatesAt",
+                        "disputeEscalated",
                         "evidence"
                       ],
                       "type": "object"
