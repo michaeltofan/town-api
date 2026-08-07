@@ -152,7 +152,7 @@ jobs:
              WHERE id = '00000000-0000-4000-8000-000000000301'`,
           );
           await pool.end();
-          if (communities.rows[0].count !== 7 || signals.rows[0].count !== 21) {
+          if (communities.rows[0].count !== 12 || signals.rows[0].count !== 36) {
             console.error('Unexpected canonical counts', communities.rows[0], signals.rows[0]);
             process.exit(1);
           }
@@ -170,7 +170,7 @@ jobs:
             console.error('Unexpected controlled actor', controlled.rows[0]);
             process.exit(1);
           }
-          console.log('Canonical seed counts OK: communities=7 signals=21 actors=1 confirmations=0');
+          console.log('Canonical seed counts OK: communities=12 signals=36 actors=1 confirmations=0');
           EOF
 
       - name: PostgreSQL integration tests

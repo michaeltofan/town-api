@@ -7,7 +7,7 @@ import {
 
 describe('canonical foundation content lock', () => {
   it('locks community identifiers and metadata', () => {
-    expect(FOUNDATION_COMMUNITIES).toHaveLength(7);
+    expect(FOUNDATION_COMMUNITIES).toHaveLength(12);
     expect(FOUNDATION_COMMUNITIES[0]).toMatchObject({
       id: '00000000-0000-4000-8000-000000000001',
       slug: 'milano-it',
@@ -44,7 +44,7 @@ describe('canonical foundation content lock', () => {
   });
 
   it('locks Italian, German, and Romanian signal identity and approved copy fields', () => {
-    expect(FOUNDATION_SIGNALS).toHaveLength(21);
+    expect(FOUNDATION_SIGNALS).toHaveLength(36);
 
     const milanoOne = FOUNDATION_SIGNALS.find(
       (signal) => signal.id === FOUNDATION_SIGNAL_IDS.milanoSignal1,
@@ -160,5 +160,74 @@ describe('canonical foundation content lock', () => {
       expect(signal?.locale).toBe('ro-RO');
       expect(signal?.publicationStatus).toBe('published');
     }
+  });
+
+  it('locks the German/Austrian city-expansion communities and signal identity', () => {
+    const kolnCommunity = FOUNDATION_COMMUNITIES.find((c) => c.slug === 'koln-de');
+    const dortmundCommunity = FOUNDATION_COMMUNITIES.find((c) => c.slug === 'dortmund-de');
+    const stuttgartCommunity = FOUNDATION_COMMUNITIES.find((c) => c.slug === 'stuttgart-de');
+    const frankfurtCommunity = FOUNDATION_COMMUNITIES.find((c) => c.slug === 'frankfurt-de');
+    const salzburgCommunity = FOUNDATION_COMMUNITIES.find((c) => c.slug === 'salzburg-at');
+    expect(kolnCommunity).toMatchObject({
+      position: 8,
+      countryCode: 'DE',
+      cityName: 'Koln',
+      defaultLocale: 'de-DE',
+      timezone: 'Europe/Berlin',
+      status: 'active',
+    });
+    expect(dortmundCommunity).toMatchObject({
+      position: 9,
+      countryCode: 'DE',
+      cityName: 'Dortmund',
+    });
+    expect(stuttgartCommunity).toMatchObject({
+      position: 10,
+      countryCode: 'DE',
+      cityName: 'Stuttgart',
+    });
+    expect(frankfurtCommunity).toMatchObject({
+      position: 11,
+      countryCode: 'DE',
+      cityName: 'Frankfurt',
+    });
+    expect(salzburgCommunity).toMatchObject({
+      position: 12,
+      countryCode: 'AT',
+      cityName: 'Salzburg',
+      defaultLocale: 'de-AT',
+      timezone: 'Europe/Vienna',
+    });
+
+    const kolnOne = FOUNDATION_SIGNALS.find(
+      (signal) => signal.id === FOUNDATION_SIGNAL_IDS.kolnSignal1,
+    );
+    expect(kolnOne).toMatchObject({
+      communityId: kolnCommunity?.id,
+      slug: 'koln-signal-1',
+      position: 1,
+      locale: 'de-DE',
+      category: 'ÖFFENTLICHER RAUM',
+      area: 'Ehrenfeld',
+    });
+
+    for (const cityId of [
+      FOUNDATION_SIGNAL_IDS.kolnSignal1,
+      FOUNDATION_SIGNAL_IDS.dortmundSignal1,
+      FOUNDATION_SIGNAL_IDS.stuttgartSignal1,
+      FOUNDATION_SIGNAL_IDS.frankfurtSignal1,
+    ]) {
+      const signal = FOUNDATION_SIGNALS.find((s) => s.id === cityId);
+      expect(signal).toBeDefined();
+      expect(signal?.locale).toBe('de-DE');
+      expect(signal?.publicationStatus).toBe('published');
+    }
+
+    const salzburgOne = FOUNDATION_SIGNALS.find(
+      (signal) => signal.id === FOUNDATION_SIGNAL_IDS.salzburgSignal1,
+    );
+    expect(salzburgOne).toBeDefined();
+    expect(salzburgOne?.locale).toBe('de-AT');
+    expect(salzburgOne?.publicationStatus).toBe('published');
   });
 });
