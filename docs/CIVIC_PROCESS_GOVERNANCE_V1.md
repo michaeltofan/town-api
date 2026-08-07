@@ -265,7 +265,7 @@ ballot_preparation ⇄ voting` edges more than once for one process, each
     to be more than it is — matching the owner's own stated principle that
     TOWN must not claim secrecy it cannot back.
 
-## 10. Cancellation and contestation **[V2 filing — implemented; review — pending §14]**
+## 10. Cancellation and contestation **[V2 filing + review — implemented]**
 
 **[V1 — implemented]** A tied/no-winner mandate is reported `contested`,
 never resolved by an invented rule (§9 extends this to quorum failure and
@@ -286,12 +286,16 @@ never resolved by an invented rule (§9 extends this to quorum failure and
   **sub-flag** on the mandate stage (not a new top-level stage — the
   canonical 9-state sequence in §1 does not change) and requires an operator
   with the new `moderate_civic_process` capability (§14) to record a
-  procedural review outcome: `upheld` (recount from the untouched
-  `civic_votes` table, published) or `rejected` (with reason). Both outcomes
-  are public and permanent. **[Pending]** — every contestation currently
-  reports `status: 'pending'` forever, honestly, because the review capability
-  and route do not exist yet; this is the next PR in the sequence (§14), not
-  an invented resolution.
+  procedural review outcome: `upheld` or `rejected` (with an optional review
+  note). Both outcomes are public and permanent. **[Implemented]** — an
+  operator with `moderate_civic_process` reviews the pending queue
+  (`GET /v1/platform/civic/contestations`) and resolves each one exactly once
+  (`POST /v1/platform/civic/contestations/:id/resolve`); resolution is
+  idempotent — a contestation already reviewed is left untouched and the
+  route reports the real stored outcome, never the caller's request, on a
+  repeat call. The recount-from-`civic_votes` mechanics for an `upheld`
+  outcome are left to the operator's own investigation off-system for now —
+  the route records the outcome and note, it does not compute a recount.
 - A **civic jury** (a small panel of randomly-selected eligible actors from
   the same community, outside the disputing parties) is the V2 design intent
   for contestations an operator cannot resolve procedurally (i.e. a dispute
@@ -305,10 +309,10 @@ applied, eligible-voter count, participation, aggregated results, winning
 proposal, adoption date. **[V2 — implemented]** adds: minority position (from
 §7) surfaced verbatim on the decided mandate's read (`minorityPositions`,
 sourced from the `minority_position`-intent deliberation contributions —
-never a new voting mechanism), any contestation outcome (§10, currently
-always `pending` until §14 ships review), and the mandate is still never
-edited retroactively — corrections are published as a linked amendment
-record, never an in-place edit, exactly as specified.
+never a new voting mechanism), any contestation outcome (§10, now `pending`,
+`upheld`, or `rejected` once an operator reviews it), and the mandate is
+still never edited retroactively — corrections are published as a linked
+amendment record, never an in-place edit, exactly as specified.
 
 ## 12. Civic action **[V1 — implemented, V2 — implemented]**
 
@@ -339,79 +343,99 @@ storage either — they already exist on the winning `civic_proposals` row
 (added in 0051) and are now surfaced on every route that renders a winner
 (`mandate`, `action`, `verification`).
 
-## 13. Result verification **[V1 — implemented, V2 — partially implemented]**
+## 13. Result verification **[V1 — implemented, V2 — implemented]**
 
 Symmetric 5-actor threshold for `delivered`/`not_delivered`, evidence
 attachable, disputed state (`neither reaches 5`) reported honestly with no
 invented resolution (`src/routes/civic-verification.ts`).
 
-**[V2 — implemented: escalation flag; review path deferred to §14]** A
-dispute that stays unresolved for **14 days** after verification opened is
-never auto-resolved. `verificationOpenedAt` is read from the existing,
-permanent `civic_process_transitions` ledger (the `action → verification`
-row) — no new stored timestamp. `GET /civic-process/verification` derives
-`disputeEscalatesAt` (`verificationOpenedAt` + 14 days) and
-`disputeEscalated` (`true` once that deadline passes while the process is
-still `verification` and no `civic_verifications` row exists) on every
-read, exactly like every other derived state in this schema. Escalation
-itself does not yet route anywhere: the actual procedural-review outcome
-(operator with `moderate_civic_process`, public permanent outcome, same
-path as §10) is deferred to §14, which this flag is intentionally built to
-plug into once that capability exists — until then the response honestly
-reports `disputeEscalated: true` and nothing more, never an invented
-resolution.
+**[V2 — implemented]** A dispute that stays unresolved for **14 days** after
+verification opened is never auto-resolved. `verificationOpenedAt` is read
+from the existing, permanent `civic_process_transitions` ledger (the
+`action → verification` row) — no new stored timestamp. `GET
+/civic-process/verification` derives `disputeEscalatesAt`
+(`verificationOpenedAt` + 14 days) and `disputeEscalated` (`true` once that
+deadline passes while the process is still `verification` and no
+`civic_verifications` row exists) on every read, exactly like every other
+derived state in this schema. An operator with `moderate_civic_process`
+reviews the escalated queue (`GET /v1/platform/civic/verification-disputes`)
+and resolves each one exactly once
+(`POST /v1/platform/civic/verification-disputes/:processId/resolve`) with an
+outcome (`delivered`/`not_delivered`) and an optional review note. The
+resolution is recorded in a separate `civic_verification_dispute_resolutions`
+table (§14) — it never touches `current_stage`, `civic_process_transitions`,
+or `civic_process_events`, so the process stays `verification` forever; the
+resolution is a public, permanent annotation layered on top, never a
+rewritten state machine. Idempotent — a process already resolved is left
+untouched and the route reports the real stored outcome, never the caller's
+request, on a repeat call.
 
-## 14. Operator rights **[V1 — implemented, extended]**
+## 14. Operator rights **[V1 — implemented, extended; V2 — implemented]**
 
 Existing capability ladder (`src/platform/roles.ts`):
 `viewer < investigator < moderator < account_admin < ops_admin < role_admin`.
 Operators moderate; they never advance or reverse a civic-process stage.
 
-**[V2 — specified]** New capability `moderate_civic_process`, minimum role
+**[V2 — implemented]** New capability `moderate_civic_process`, minimum role
 `moderator` (same rank as `moderate_signals`), covering exactly:
 
-- Hiding a proposal/contribution/evidence item with a mandatory reason
-  (mirrors existing `signal-moderation` pattern — hidden, not deleted).
-- Recording a procedural contestation outcome (§10) or a stalled
-  verification-dispute outcome (§13).
-- Restoring a moderation-hidden item.
+- Hiding/restoring a proposal, deliberation contribution, or verification
+  evidence item with a mandatory reason on hide (mirrors the existing
+  `signal-moderation` pattern exactly — hidden, not deleted):
+  `POST /v1/platform/civic/{proposals,deliberation-contributions,verification-evidence}/:contentId/{hide,unhide}`.
+- Recording a procedural contestation outcome (§10):
+  `GET /v1/platform/civic/contestations`,
+  `POST /v1/platform/civic/contestations/:contestationId/resolve`.
+- Recording a stalled verification-dispute outcome (§13):
+  `GET /v1/platform/civic/verification-disputes`,
+  `POST /v1/platform/civic/verification-disputes/:processId/resolve`.
 
 None of these capabilities can set `current_stage`, touch
 `civic_process_transitions`/`civic_process_events` directly, or alter a
-published mandate. Every use is written to `town.platform_audit_log` exactly
-like existing operator actions.
+published mandate. Every use is written to `town.platform_audit_events`
+exactly like existing operator actions
+(`civic_content_hidden`/`civic_content_unhidden`/`civic_contestation_resolved`/`civic_verification_dispute_resolved`).
+Hiding/unhiding a proposal is allowed regardless of its `lifecycle_state`
+(`published`/`revised`/`frozen`/`withdrawn`) — the frozen-ballot immutability
+guard (§8) blocks changes to substantive content, not to moderation-only
+visibility, so `guard_civic_proposal_update()` explicitly exempts updates
+that touch only the `hidden_*` columns.
 
-## 15. Audit events **[V1 — implemented, extended]**
+## 15. Audit events **[V1 — implemented, extended; V2 — implemented]**
 
 Already permanent and queryable: every `civic_process_transitions` row,
 every `civic_process_events` row, every operator action via
-`platform_audit_log`. **[V2]** adds to the audited event set: proposal
-revisions (§6), ballot freeze snapshots (§8), contestation filings and
-outcomes (§10), and `moderate_civic_process` actions (§14) — all via the
-same existing audit mechanisms, no new logging system.
+`platform_audit_events`. **[V2 — implemented]** adds to the audited event
+set: `civic_content_hidden`, `civic_content_unhidden`,
+`civic_contestation_resolved`, `civic_verification_dispute_resolved` (§14) —
+all via the same existing `platform_audit_events` mechanism, no new logging
+system. (Proposal revisions and ballot freeze snapshots (§6, §8) remain
+covered by the existing `civic_proposal_revisions` table and
+`civic_process_transitions` ledger respectively, not by
+`platform_audit_events`.)
 
 ## Build sequence
 
 Matches the owner's PR plan, one slice per PR, API before its dependent UI:
 
-| #   | Repo                                | Delivers                                                                                |
-| --- | ----------------------------------- | --------------------------------------------------------------------------------------- |
-| 1   | town-api (this doc)                 | This governance specification                                                           |
-| 2   | town-api                            | _(done — confirmation-stage nucleus, PR #94 and earlier)_                               |
-| 3   | town-public                         | _(done — confirmation-stage right panel, PR #99–#101)_                                  |
-| 4   | town-api                            | Rich proposal object + lifecycle (§6)                                                   |
-| 5   | town-public                         | Proposal authoring/list UI for the new fields                                           |
-| 6   | town-api                            | Extended deliberation intents + reply threading (§7)                                    |
-| 7   | town-public                         | Deliberation UI for the new intents                                                     |
-| 8   | town-api                            | Real ballot-preparation gate + freeze snapshot (§8)                                     |
-| 9   | town-api + town-public, coordinated | _(done — secret-ballot voting + quorum retry, §9)_                                      |
-| 10  | town-api + town-public              | _(done — mandate minority position + contestation filing, §10, §11)_                    |
-| 11  | town-api + town-public              | _(done — action extensions: responsible actor, collaborators, typed update kinds, §12)_ |
-| 12  | town-api + town-public              | _(done — verification dispute escalation flag, §13; review path deferred to §14)_       |
-| 13  | town-api + platform console         | `moderate_civic_process` + contestation review UI (§14)                                 |
-| 14  | town-public                         | HOME civic center surfacing real process state                                          |
-| 15  | town-api + town-public              | Notifications / Civic Inbox / civic profile extensions                                  |
-| 16  | town-public                         | Mobile parity pass                                                                      |
+| #   | Repo                                | Delivers                                                                                                |
+| --- | ----------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 1   | town-api (this doc)                 | This governance specification                                                                           |
+| 2   | town-api                            | _(done — confirmation-stage nucleus, PR #94 and earlier)_                                               |
+| 3   | town-public                         | _(done — confirmation-stage right panel, PR #99–#101)_                                                  |
+| 4   | town-api                            | Rich proposal object + lifecycle (§6)                                                                   |
+| 5   | town-public                         | Proposal authoring/list UI for the new fields                                                           |
+| 6   | town-api                            | Extended deliberation intents + reply threading (§7)                                                    |
+| 7   | town-public                         | Deliberation UI for the new intents                                                                     |
+| 8   | town-api                            | Real ballot-preparation gate + freeze snapshot (§8)                                                     |
+| 9   | town-api + town-public, coordinated | _(done — secret-ballot voting + quorum retry, §9)_                                                      |
+| 10  | town-api + town-public              | _(done — mandate minority position + contestation filing, §10, §11)_                                    |
+| 11  | town-api + town-public              | _(done — action extensions: responsible actor, collaborators, typed update kinds, §12)_                 |
+| 12  | town-api + town-public              | _(done — verification dispute escalation flag, §13; review path deferred to §14)_                       |
+| 13  | town-api + platform console         | _(done — `moderate_civic_process` capability + hide/restore + contestation/dispute review routes, §14)_ |
+| 14  | town-public                         | HOME civic center surfacing real process state                                                          |
+| 15  | town-api + town-public              | Notifications / Civic Inbox / civic profile extensions                                                  |
+| 16  | town-public                         | Mobile parity pass                                                                                      |
 
 Each PR must update this document in the same PR if it changes a decision
 recorded here — this file is the contract, not the README.

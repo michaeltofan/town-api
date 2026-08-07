@@ -25,6 +25,7 @@ export default defineConfig({
       'test/civic-mandate-extensions.integration.test.ts',
       'test/civic-action-extensions.integration.test.ts',
       'test/civic-verification-extensions.integration.test.ts',
+      'test/civic-moderation.integration.test.ts',
       'test/account-identity.migration.test.ts',
       'test/account-identity.repository.test.ts',
       'test/account-identity.fixtures.test.ts',

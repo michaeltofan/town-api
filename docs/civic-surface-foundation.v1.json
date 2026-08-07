@@ -280,7 +280,7 @@
             "read_submissions"
           ],
           "investigator": ["read_audit", "read_emails", "read_payments", "export_investigation"],
-          "moderator": ["moderate_signals"],
+          "moderator": ["moderate_signals", "moderate_civic_process"],
           "account_admin": ["manage_accounts"],
           "ops_admin": ["manage_memberships", "manage_alerts", "manage_backup", "manage_restore"],
           "role_admin": ["manage_operators"]

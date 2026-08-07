@@ -233,3 +233,111 @@ export async function findCivicVerification(
     decidedAt: row.decided_at,
   };
 }
+
+export type CivicVerificationDisputeResolutionRow = {
+  processId: string;
+  outcome: CivicVerificationOutcome;
+  resolvedByAccountId: string;
+  resolvedAt: string;
+  reviewNote: string | null;
+};
+
+function toDisputeResolutionRow(row: {
+  process_id: string;
+  outcome: string;
+  resolved_by_account_id: string;
+  resolved_at: string;
+  review_note: string | null;
+}): CivicVerificationDisputeResolutionRow {
+  if (row.outcome !== 'delivered' && row.outcome !== 'not_delivered') {
+    throw new Error('Unsupported civic verification dispute resolution outcome');
+  }
+  return {
+    processId: row.process_id,
+    outcome: row.outcome,
+    resolvedByAccountId: row.resolved_by_account_id,
+    resolvedAt: row.resolved_at,
+    reviewNote: row.review_note,
+  };
+}
+
+export async function findCivicVerificationDisputeResolution(
+  db: Db,
+  processId: string,
+): Promise<CivicVerificationDisputeResolutionRow | null> {
+  const result = await db.execute<{
+    process_id: string;
+    outcome: string;
+    resolved_by_account_id: string;
+    resolved_at: string;
+    review_note: string | null;
+  }>(sql`
+    SELECT process_id, outcome, resolved_by_account_id, resolved_at, review_note
+    FROM town.civic_verification_dispute_resolutions
+    WHERE process_id = ${processId}
+    LIMIT 1
+  `);
+  const row = result.rows[0];
+  return row ? toDisputeResolutionRow(row) : null;
+}
+
+/**
+ * §14: an operator records a stalled (14-day-escalated) verification
+ * dispute's outcome, once, permanently. Never touches current_stage or
+ * the transitions/events ledgers — the process stays "verification"
+ * forever; this is a public, permanent annotation layered on top, not a
+ * rewritten state machine. Idempotent: a process already resolved is left
+ * untouched (returns false).
+ */
+export async function resolveCivicVerificationDispute(
+  db: Db,
+  input: {
+    processId: string;
+    outcome: CivicVerificationOutcome;
+    resolvedByAccountId: string;
+    resolvedAt: string;
+    reviewNote: string | null;
+  },
+): Promise<boolean> {
+  const result = await db.execute(sql`
+    INSERT INTO town.civic_verification_dispute_resolutions (
+      process_id, outcome, resolved_by_account_id, resolved_at, review_note
+    ) VALUES (
+      ${input.processId}, ${input.outcome}, ${input.resolvedByAccountId}, ${input.resolvedAt},
+      ${input.reviewNote}
+    )
+    ON CONFLICT (process_id) DO NOTHING
+  `);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Every open verification dispute that has escalated past the 14-day
+ * window and has no operator resolution yet (§14 review queue), oldest
+ * first.
+ */
+export async function listEscalatedUnresolvedCivicVerificationDisputes(
+  db: Db,
+  input: { now: string; limit?: number },
+): Promise<{ processId: string; verificationOpenedAt: string }[]> {
+  const boundedLimit = Math.max(1, Math.min(input.limit ?? 100, 100));
+  const result = await db.execute<{ process_id: string; verification_opened_at: string }>(sql`
+    SELECT transition.process_id, transition.occurred_at AS verification_opened_at
+    FROM town.civic_process_transitions transition
+    JOIN town.civic_processes process ON process.id = transition.process_id
+    WHERE transition.from_stage = 'action'
+      AND transition.to_stage = 'verification'
+      AND process.current_stage = 'verification'
+      AND transition.occurred_at + interval '14 days' < ${input.now}
+      AND NOT EXISTS (
+        SELECT 1 FROM town.civic_verification_dispute_resolutions resolution
+        WHERE resolution.process_id = transition.process_id
+      )
+    ORDER BY transition.occurred_at ASC
+    LIMIT ${boundedLimit}
+  `);
+  return result.rows.map((row) => ({
+    processId: row.process_id,
+    verificationOpenedAt: row.verification_opened_at,
+  }));
+}
