@@ -52,7 +52,7 @@ describe('communities and signals API', () => {
     expect(response.headers['content-type']).toMatch(/^application\/json/);
 
     const body = response.json<{ data: Record<string, unknown>[] }>();
-    expect(body.data).toHaveLength(3);
+    expect(body.data).toHaveLength(7);
     expect(body.data[0]).toEqual({
       id: milano.id,
       slug: 'milano-it',
@@ -80,6 +80,46 @@ describe('communities and signals API', () => {
       countryCode: 'RO',
       cityName: 'Arad',
       displayName: 'Arad',
+      defaultLocale: 'ro-RO',
+      timezone: 'Europe/Bucharest',
+    });
+    expect(body.data[3]).toEqual({
+      id: communityBySlug('cluj-napoca-ro').id,
+      slug: 'cluj-napoca-ro',
+      position: 4,
+      countryCode: 'RO',
+      cityName: 'Cluj-Napoca',
+      displayName: 'Cluj-Napoca',
+      defaultLocale: 'ro-RO',
+      timezone: 'Europe/Bucharest',
+    });
+    expect(body.data[4]).toEqual({
+      id: communityBySlug('sibiu-ro').id,
+      slug: 'sibiu-ro',
+      position: 5,
+      countryCode: 'RO',
+      cityName: 'Sibiu',
+      displayName: 'Sibiu',
+      defaultLocale: 'ro-RO',
+      timezone: 'Europe/Bucharest',
+    });
+    expect(body.data[5]).toEqual({
+      id: communityBySlug('iasi-ro').id,
+      slug: 'iasi-ro',
+      position: 6,
+      countryCode: 'RO',
+      cityName: 'Iași',
+      displayName: 'Iași',
+      defaultLocale: 'ro-RO',
+      timezone: 'Europe/Bucharest',
+    });
+    expect(body.data[6]).toEqual({
+      id: communityBySlug('timisoara-ro').id,
+      slug: 'timisoara-ro',
+      position: 7,
+      countryCode: 'RO',
+      cityName: 'Timișoara',
+      displayName: 'Timișoara',
       defaultLocale: 'ro-RO',
       timezone: 'Europe/Bucharest',
     });

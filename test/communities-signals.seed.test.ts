@@ -77,19 +77,15 @@ describe('foundation seed', () => {
     await pool.end();
   });
 
-  it('seeds exactly 3 communities and 9 signals with stable IDs/slugs/locales', async () => {
+  it('seeds exactly 7 communities and 21 signals with stable IDs/slugs/locales', async () => {
     const communityRows = await database.db.select().from(communities);
     const signalRows = await database.db.select().from(signals);
 
-    expect(communityRows).toHaveLength(3);
-    expect(signalRows).toHaveLength(9);
+    expect(communityRows).toHaveLength(7);
+    expect(signalRows).toHaveLength(21);
 
     expect(communityRows.map((row) => row.id).sort()).toEqual(
-      [
-        FOUNDATION_COMMUNITY_IDS.milanoIt,
-        FOUNDATION_COMMUNITY_IDS.munichDe,
-        FOUNDATION_COMMUNITY_IDS.aradRo,
-      ].sort(),
+      Object.values(FOUNDATION_COMMUNITY_IDS).sort(),
     );
     expect(signalRows.map((row) => row.id).sort()).toEqual(
       Object.values(FOUNDATION_SIGNAL_IDS).sort(),
@@ -103,6 +99,18 @@ describe('foundation seed', () => {
       .sort((a, b) => a.position - b.position);
     const aradSignals = signalRows
       .filter((row) => row.communityId === FOUNDATION_COMMUNITY_IDS.aradRo)
+      .sort((a, b) => a.position - b.position);
+    const clujSignals = signalRows
+      .filter((row) => row.communityId === FOUNDATION_COMMUNITY_IDS.clujNapocaRo)
+      .sort((a, b) => a.position - b.position);
+    const sibiuSignals = signalRows
+      .filter((row) => row.communityId === FOUNDATION_COMMUNITY_IDS.sibiuRo)
+      .sort((a, b) => a.position - b.position);
+    const iasiSignals = signalRows
+      .filter((row) => row.communityId === FOUNDATION_COMMUNITY_IDS.iasiRo)
+      .sort((a, b) => a.position - b.position);
+    const timisoaraSignals = signalRows
+      .filter((row) => row.communityId === FOUNDATION_COMMUNITY_IDS.timisoaraRo)
       .sort((a, b) => a.position - b.position);
 
     expect(milanoSignals.map((row) => row.slug)).toEqual([
@@ -120,12 +128,40 @@ describe('foundation seed', () => {
       'arad-signal-2',
       'arad-signal-3',
     ]);
+    expect(clujSignals.map((row) => row.slug)).toEqual([
+      'cluj-napoca-signal-1',
+      'cluj-napoca-signal-2',
+      'cluj-napoca-signal-3',
+    ]);
+    expect(sibiuSignals.map((row) => row.slug)).toEqual([
+      'sibiu-signal-1',
+      'sibiu-signal-2',
+      'sibiu-signal-3',
+    ]);
+    expect(iasiSignals.map((row) => row.slug)).toEqual([
+      'iasi-signal-1',
+      'iasi-signal-2',
+      'iasi-signal-3',
+    ]);
+    expect(timisoaraSignals.map((row) => row.slug)).toEqual([
+      'timisoara-signal-1',
+      'timisoara-signal-2',
+      'timisoara-signal-3',
+    ]);
     expect(milanoSignals.map((row) => row.position)).toEqual([1, 2, 3]);
     expect(munichSignals.map((row) => row.position)).toEqual([1, 2, 3]);
     expect(aradSignals.map((row) => row.position)).toEqual([1, 2, 3]);
+    expect(clujSignals.map((row) => row.position)).toEqual([1, 2, 3]);
+    expect(sibiuSignals.map((row) => row.position)).toEqual([1, 2, 3]);
+    expect(iasiSignals.map((row) => row.position)).toEqual([1, 2, 3]);
+    expect(timisoaraSignals.map((row) => row.position)).toEqual([1, 2, 3]);
     expect(milanoSignals.every((row) => row.locale === 'it-IT')).toBe(true);
     expect(munichSignals.every((row) => row.locale === 'de-DE')).toBe(true);
     expect(aradSignals.every((row) => row.locale === 'ro-RO')).toBe(true);
+    expect(clujSignals.every((row) => row.locale === 'ro-RO')).toBe(true);
+    expect(sibiuSignals.every((row) => row.locale === 'ro-RO')).toBe(true);
+    expect(iasiSignals.every((row) => row.locale === 'ro-RO')).toBe(true);
+    expect(timisoaraSignals.every((row) => row.locale === 'ro-RO')).toBe(true);
   });
 
   it('is idempotent and does not drift timestamps or create duplicates', async () => {
@@ -146,8 +182,8 @@ describe('foundation seed', () => {
       .map(normalizeSignal)
       .sort((a, b) => a.id.localeCompare(b.id));
 
-    expect(afterCommunities).toHaveLength(3);
-    expect(afterSignals).toHaveLength(9);
+    expect(afterCommunities).toHaveLength(7);
+    expect(afterSignals).toHaveLength(21);
     expect(afterCommunities).toEqual(beforeCommunities);
     expect(afterSignals).toEqual(beforeSignals);
   });
