@@ -10,8 +10,8 @@ import {
 } from '../ceremony/passkey-authentication/session-transport.js';
 import { resolveActiveSession } from '../ceremony/passkey-authentication/service.js';
 import {
-  findCivicVoteByProcessAndActor,
-  insertCivicVote,
+  castCivicVote,
+  findCivicBallotTokenStatus,
   listCivicVoteTallyForProcess,
 } from '../db/repositories/civic-votes.js';
 import { closeVotingWindowIfElapsed } from '../db/repositories/civic-mandates.js';
@@ -55,6 +55,14 @@ function stageClosedError(): AppError {
 
 function alreadyVotedError(): AppError {
   return new AppError(409, 'CIVIC_VOTE_ALREADY_CAST', 'This member has already voted.');
+}
+
+function notEligibleForBallotError(): AppError {
+  return new AppError(
+    403,
+    'CIVIC_VOTE_NOT_ELIGIBLE_FOR_BALLOT',
+    'This member was not on the eligible-voter list when the ballot was frozen.',
+  );
 }
 
 function proposalNotFoundError(): AppError {
@@ -204,7 +212,7 @@ export const civicVotingRoutes: FastifyPluginCallbackTypebox<CivicVotingRoutesOp
         tags: ['Civic Process'],
         summary: 'Read the civic vote for a process and its per-option tally',
         description:
-          'Public vote options for a visible signal (the five finalized ballot proposals) with aggregate vote counts. Optional session state derives only canVote, hasVoted, and myChoice. Never exposes account or actor identifiers, and never who voted for what.',
+          'Public vote options for a visible signal (the frozen ballot proposals) with aggregate vote counts. Optional session state derives only canVote and hasVoted. This is a secret ballot (§9): the vote is not linked back to the actor once cast, so the server cannot answer "what did I vote?", only "have I voted?". Never exposes account or actor identifiers, and never who voted for what.',
         params: SignalIdParamsSchema,
         response: CivicVotingRouteResponses.read,
       },
@@ -218,15 +226,19 @@ export const civicVotingRoutes: FastifyPluginCallbackTypebox<CivicVotingRoutesOp
       );
       const [proposals, tally] = await Promise.all([
         listCivicProposals(app.database.db, process.id),
-        listCivicVoteTallyForProcess(app.database.db, process.id),
+        listCivicVoteTallyForProcess(app.database.db, {
+          processId: process.id,
+          ballotCycle: process.ballotCycle,
+        }),
       ]);
       const tallyByProposal = new Map(tally.map((row) => [row.proposalId, row.voteCount]));
-      const ownVote = actor
-        ? await findCivicVoteByProcessAndActor(app.database.db, {
+      const tokenStatus = actor
+        ? await findCivicBallotTokenStatus(app.database.db, {
             processId: process.id,
             actorId: actor.id,
+            ballotCycle: process.ballotCycle,
           })
-        : null;
+        : 'not_eligible';
       const totalVotes = tally.reduce((sum, row) => sum + row.voteCount, 0);
       return await reply.status(200).send({
         data: {
@@ -240,17 +252,18 @@ export const civicVotingRoutes: FastifyPluginCallbackTypebox<CivicVotingRoutesOp
             process.currentStage === 'archived'
               ? process.currentStage
               : 'ballot_preparation',
-          canVote: process.currentStage === 'voting' && actor !== null && ownVote === null,
-          hasVoted: ownVote !== null,
-          myChoice: ownVote?.proposalId ?? null,
+          canVote: process.currentStage === 'voting' && tokenStatus === 'not_voted',
+          hasVoted: tokenStatus === 'already_voted',
           totalVotes,
-          options: proposals.map((proposal) => ({
-            proposalId: proposal.id,
-            authorDisplayName: proposal.authorDisplayName,
-            title: proposal.title,
-            body: proposal.body,
-            voteCount: tallyByProposal.get(proposal.id) ?? 0,
-          })),
+          options: proposals
+            .filter((proposal) => proposal.lifecycleState === 'frozen')
+            .map((proposal) => ({
+              proposalId: proposal.id,
+              authorDisplayName: proposal.authorDisplayName,
+              title: proposal.title,
+              body: proposal.body,
+              voteCount: tallyByProposal.get(proposal.id) ?? 0,
+            })),
         },
       });
     },
@@ -263,7 +276,7 @@ export const civicVotingRoutes: FastifyPluginCallbackTypebox<CivicVotingRoutesOp
         tags: ['Civic Process'],
         summary: 'Cast one vote for one ballot option',
         description:
-          'Records one vote for one proposal while the canonical process is in voting. One vote per eligible civic actor; votes cannot be changed once cast. This is not yet a secret ballot: the vote is linked to the actor internally for eligibility and one-person-one-vote enforcement, and TOWN does not present it as anonymous.',
+          'Records one vote for one proposal while the canonical process is in voting. One vote per eligible civic actor, enforced by consuming a single-use cast token; votes cannot be changed once cast. This is a secret ballot (§9): the vote is written without a link back to the actor or account that cast it — only that a token was consumed. TOWN does not claim this is cryptographically verifiable, only that identity is not stored with the vote.',
         security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
         params: SignalIdParamsSchema,
         body: CivicVoteBodySchema,
@@ -274,39 +287,39 @@ export const civicVotingRoutes: FastifyPluginCallbackTypebox<CivicVotingRoutesOp
       const { published, process } = await visibleProcess(request.params.signalId);
       if (process.currentStage !== 'voting') throw stageClosedError();
       const proposal = await findCivicProposalById(app.database.db, request.body.proposalId);
-      if (proposal?.processId !== process.id) throw proposalNotFoundError();
+      if (proposal?.processId !== process.id || proposal.lifecycleState !== 'frozen') {
+        throw proposalNotFoundError();
+      }
       const session = await resolveSession(request, true, true);
       if (!session) throw sessionNotAuthorizedError();
       const actor = await participantActor(session.accountId, published.signal.communityId);
       if (!actor) throw civicParticipationNotAuthorizedError();
-      const existing = await findCivicVoteByProcessAndActor(app.database.db, {
-        processId: process.id,
-        actorId: actor.id,
-      });
-      if (existing) throw alreadyVotedError();
       const voteId = generateId();
       const castAt = now();
+      let cast: boolean;
       try {
-        await insertCivicVote(app.database.db, {
+        cast = await castCivicVote(app.database.db, {
           id: voteId,
           processId: process.id,
           proposalId: proposal.id,
           actorId: actor.id,
+          ballotCycle: process.ballotCycle,
           castAt,
         });
       } catch (error: unknown) {
-        if (
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          (error as { code?: unknown }).code === '23505'
-        ) {
-          throw alreadyVotedError();
-        }
         if (error instanceof Error && error.message.includes('stage is closed')) {
           throw stageClosedError();
         }
         throw error;
+      }
+      if (!cast) {
+        const status = await findCivicBallotTokenStatus(app.database.db, {
+          processId: process.id,
+          actorId: actor.id,
+          ballotCycle: process.ballotCycle,
+        });
+        if (status === 'already_voted') throw alreadyVotedError();
+        throw notEligibleForBallotError();
       }
       return await reply.status(201).send({
         data: {

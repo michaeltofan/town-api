@@ -96,6 +96,7 @@ const CivicProcessTimelineEventSchema = Type.Object(
       | 'stage_transitioned_to_deliberation'
       | 'stage_transitioned_to_ballot_preparation'
       | 'stage_transitioned_to_voting'
+      | 'stage_returned_to_deliberation_after_quorum_failure'
       | 'stage_transitioned_to_mandate'
       | 'stage_transitioned_to_action'
       | 'stage_transitioned_to_verification'
@@ -108,6 +109,7 @@ const CivicProcessTimelineEventSchema = Type.Object(
         'stage_transitioned_to_deliberation',
         'stage_transitioned_to_ballot_preparation',
         'stage_transitioned_to_voting',
+        'stage_returned_to_deliberation_after_quorum_failure',
         'stage_transitioned_to_mandate',
         'stage_transitioned_to_action',
         'stage_transitioned_to_verification',

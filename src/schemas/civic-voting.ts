@@ -34,7 +34,6 @@ export const CivicVotingResponseSchema = Type.Object(
         ]),
         canVote: Type.Boolean(),
         hasVoted: Type.Boolean(),
-        myChoice: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
         totalVotes: Type.Integer({ minimum: 0 }),
         options: Type.Array(CivicVoteOptionSchema, { maxItems: 100 }),
       },

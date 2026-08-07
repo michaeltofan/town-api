@@ -12,6 +12,8 @@ const EXPECTED_TABLES = [
   'civic_action_updates',
 
   'civic_ballot_eligible_actors',
+
+  'civic_ballot_tokens',
   'civic_deliberation_contributions',
   'civic_mandates',
   'civic_process_events',

@@ -27,6 +27,7 @@ export type CivicProcessReadRow = {
   currentStage: PublicCivicProcessStage;
   votingOpensAt: string | null;
   votingClosesAt: string | null;
+  ballotCycle: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -38,6 +39,7 @@ export type PublicCivicProcessEvent = {
     | 'stage_transitioned_to_deliberation'
     | 'stage_transitioned_to_ballot_preparation'
     | 'stage_transitioned_to_voting'
+    | 'stage_returned_to_deliberation_after_quorum_failure'
     | 'stage_transitioned_to_mandate'
     | 'stage_transitioned_to_action'
     | 'stage_transitioned_to_verification'
@@ -56,11 +58,12 @@ export async function findCivicProcessBySignalId(
     current_stage: string;
     voting_opens_at: string | null;
     voting_closes_at: string | null;
+    ballot_cycle: number;
     created_at: string;
     updated_at: string;
   }>(sql`
     SELECT id, signal_id, community_id, current_stage, voting_opens_at, voting_closes_at,
-           created_at, updated_at
+           ballot_cycle, created_at, updated_at
     FROM town.civic_processes
     WHERE signal_id = ${signalId}
     LIMIT 1
@@ -89,6 +92,7 @@ export async function findCivicProcessBySignalId(
     currentStage: row.current_stage,
     votingOpensAt: row.voting_opens_at,
     votingClosesAt: row.voting_closes_at,
+    ballotCycle: row.ballot_cycle,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -122,7 +126,7 @@ export async function provisionMissingCivicProcess(
     SELECT ${params.eventId}, id, 'process_created', ${params.createdAt}
     FROM town.civic_processes
     WHERE signal_id = ${params.signalId}
-    ON CONFLICT (process_id, event_type) DO NOTHING
+    ON CONFLICT (process_id, event_type, ballot_cycle) DO NOTHING
   `);
 }
 
@@ -143,8 +147,9 @@ export async function openVotingIfBallotPreparationElapsed(
     const rows = await tx.execute<{
       current_stage: string;
       voting_opens_at: string | null;
+      ballot_cycle: number;
     }>(sql`
-      SELECT current_stage, voting_opens_at
+      SELECT current_stage, voting_opens_at, ballot_cycle
       FROM town.civic_processes
       WHERE id = ${input.processId}
       FOR UPDATE
@@ -156,15 +161,16 @@ export async function openVotingIfBallotPreparationElapsed(
     if (new Date(row.voting_opens_at).getTime() > new Date(input.now).getTime()) {
       return;
     }
+    const ballotCycle = row.ballot_cycle;
 
     const transitionResult = await tx.execute(sql`
       INSERT INTO town.civic_process_transitions (
-        id, process_id, from_stage, to_stage, reason_key, occurred_at
+        id, process_id, from_stage, to_stage, reason_key, occurred_at, ballot_cycle
       ) VALUES (
         gen_random_uuid(), ${input.processId}, 'ballot_preparation', 'voting',
-        'ballot_prepared', ${input.now}
+        'ballot_prepared', ${input.now}, ${ballotCycle}
       )
-      ON CONFLICT (process_id, from_stage, to_stage) DO NOTHING
+      ON CONFLICT (process_id, from_stage, to_stage, ballot_cycle) DO NOTHING
     `);
     if (!transitionResult.rowCount) {
       return;
@@ -181,11 +187,45 @@ export async function openVotingIfBallotPreparationElapsed(
     await tx.execute(sql`SELECT set_config('town.civic_stage_transition', '', true)`);
 
     await tx.execute(sql`
-      INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at)
-      VALUES (gen_random_uuid(), ${input.processId}, 'stage_transitioned_to_voting', ${input.now})
-      ON CONFLICT (process_id, event_type) DO NOTHING
+      INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at, ballot_cycle)
+      VALUES (
+        gen_random_uuid(), ${input.processId}, 'stage_transitioned_to_voting', ${input.now}, ${ballotCycle}
+      )
+      ON CONFLICT (process_id, event_type, ballot_cycle) DO NOTHING
+    `);
+
+    // Mint one single-use cast token per eligible actor for this cycle
+    // (§9): casting a vote consumes the token rather than linking the vote
+    // row back to the actor.
+    await tx.execute(sql`
+      INSERT INTO town.civic_ballot_tokens (id, process_id, actor_id, ballot_cycle, issued_at)
+      SELECT gen_random_uuid(), process_id, actor_id, ballot_cycle, ${input.now}
+      FROM town.civic_ballot_eligible_actors
+      WHERE process_id = ${input.processId} AND ballot_cycle = ${ballotCycle}
+      ON CONFLICT (process_id, actor_id, ballot_cycle) DO NOTHING
     `);
   });
+}
+
+/**
+ * Whether a given ballot cycle for this process ended in a quorum failure
+ * (returned to deliberation instead of deciding a mandate) — used to report
+ * an honest "quorum not reached" outcome even after the process has moved
+ * on to a later cycle.
+ */
+export async function quorumFailedForBallotCycle(
+  db: Db,
+  input: { processId: string; ballotCycle: number },
+): Promise<boolean> {
+  const result = await db.execute<{ exists: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM town.civic_process_events
+      WHERE process_id = ${input.processId}
+        AND event_type = 'stage_returned_to_deliberation_after_quorum_failure'
+        AND ballot_cycle = ${input.ballotCycle}
+    ) AS exists
+  `);
+  return result.rows[0]?.exists === true;
 }
 
 export async function listPublicCivicProcessEvents(
@@ -212,6 +252,7 @@ export async function listPublicCivicProcessEvents(
       row.event_type !== 'stage_transitioned_to_deliberation' &&
       row.event_type !== 'stage_transitioned_to_ballot_preparation' &&
       row.event_type !== 'stage_transitioned_to_voting' &&
+      row.event_type !== 'stage_returned_to_deliberation_after_quorum_failure' &&
       row.event_type !== 'stage_transitioned_to_mandate' &&
       row.event_type !== 'stage_transitioned_to_action' &&
       row.event_type !== 'stage_transitioned_to_verification' &&

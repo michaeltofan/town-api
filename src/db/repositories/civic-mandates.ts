@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
+import { CIVIC_BALLOT_QUORUM } from './civic-processes.js';
 
 type Db = Database['db'];
 
@@ -40,6 +41,12 @@ export async function findCivicMandate(db: Db, processId: string): Promise<Civic
  * There is no scheduled job: the voting window is only ever closed lazily,
  * the moment any request touches a process whose voting_closes_at has
  * passed. Row-locked and idempotent, so concurrent requests race safely.
+ *
+ * Quorum (§9): if fewer than CIVIC_BALLOT_QUORUM votes were cast this
+ * ballot cycle, the process returns to deliberation instead of deciding a
+ * mandate — a new, explicitly audited transition with an incremented
+ * ballot_cycle, not a silent retry. No civic_mandates row is written for a
+ * quorum-failed cycle.
  */
 export async function closeVotingWindowIfElapsed(
   db: Db,
@@ -49,8 +56,9 @@ export async function closeVotingWindowIfElapsed(
     const rows = await tx.execute<{
       current_stage: string;
       voting_closes_at: string | null;
+      ballot_cycle: number;
     }>(sql`
-      SELECT current_stage, voting_closes_at
+      SELECT current_stage, voting_closes_at, ballot_cycle
       FROM town.civic_processes
       WHERE id = ${input.processId}
       FOR UPDATE
@@ -62,15 +70,52 @@ export async function closeVotingWindowIfElapsed(
     if (new Date(row.voting_closes_at).getTime() > new Date(input.now).getTime()) {
       return;
     }
+    const ballotCycle = row.ballot_cycle;
 
     const tally = await tx.execute<{ proposal_id: string; vote_count: string }>(sql`
       SELECT proposal_id, count(*)::text AS vote_count
       FROM town.civic_votes
-      WHERE process_id = ${input.processId}
+      WHERE process_id = ${input.processId} AND ballot_cycle = ${ballotCycle}
       GROUP BY proposal_id
       ORDER BY count(*) DESC
     `);
     const totalVotes = tally.rows.reduce((sum, r) => sum + Number(r.vote_count), 0);
+
+    if (totalVotes < CIVIC_BALLOT_QUORUM) {
+      const quorumTransitionResult = await tx.execute(sql`
+        INSERT INTO town.civic_process_transitions (
+          id, process_id, from_stage, to_stage, reason_key, occurred_at, ballot_cycle
+        ) VALUES (
+          gen_random_uuid(), ${input.processId}, 'voting', 'deliberation',
+          'quorum_not_reached', ${input.now}, ${ballotCycle}
+        )
+        ON CONFLICT (process_id, from_stage, to_stage, ballot_cycle) DO NOTHING
+      `);
+      if (!quorumTransitionResult.rowCount) {
+        return;
+      }
+
+      await tx.execute(
+        sql`SELECT set_config('town.civic_stage_transition', 'quorum_not_reached', true)`,
+      );
+      await tx.execute(sql`
+        UPDATE town.civic_processes
+        SET current_stage = 'deliberation', updated_at = ${input.now}, ballot_cycle = ${ballotCycle + 1}
+        WHERE id = ${input.processId} AND current_stage = 'voting'
+      `);
+      await tx.execute(sql`SELECT set_config('town.civic_stage_transition', '', true)`);
+
+      await tx.execute(sql`
+        INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at, ballot_cycle)
+        VALUES (
+          gen_random_uuid(), ${input.processId},
+          'stage_returned_to_deliberation_after_quorum_failure', ${input.now}, ${ballotCycle}
+        )
+        ON CONFLICT (process_id, event_type, ballot_cycle) DO NOTHING
+      `);
+      return;
+    }
+
     const top = tally.rows[0];
     const topCount = top ? Number(top.vote_count) : 0;
     const tiedAtTop = tally.rows.filter((r) => Number(r.vote_count) === topCount).length;
@@ -78,11 +123,12 @@ export async function closeVotingWindowIfElapsed(
 
     const transitionResult = await tx.execute(sql`
       INSERT INTO town.civic_process_transitions (
-        id, process_id, from_stage, to_stage, reason_key, occurred_at
+        id, process_id, from_stage, to_stage, reason_key, occurred_at, ballot_cycle
       ) VALUES (
-        gen_random_uuid(), ${input.processId}, 'voting', 'mandate', 'voting_window_closed', ${input.now}
+        gen_random_uuid(), ${input.processId}, 'voting', 'mandate', 'voting_window_closed',
+        ${input.now}, ${ballotCycle}
       )
-      ON CONFLICT (process_id, from_stage, to_stage) DO NOTHING
+      ON CONFLICT (process_id, from_stage, to_stage, ballot_cycle) DO NOTHING
     `);
     if (!transitionResult.rowCount) {
       return;
@@ -99,9 +145,11 @@ export async function closeVotingWindowIfElapsed(
     await tx.execute(sql`SELECT set_config('town.civic_stage_transition', '', true)`);
 
     await tx.execute(sql`
-      INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at)
-      VALUES (gen_random_uuid(), ${input.processId}, 'stage_transitioned_to_mandate', ${input.now})
-      ON CONFLICT (process_id, event_type) DO NOTHING
+      INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at, ballot_cycle)
+      VALUES (
+        gen_random_uuid(), ${input.processId}, 'stage_transitioned_to_mandate', ${input.now}, ${ballotCycle}
+      )
+      ON CONFLICT (process_id, event_type, ballot_cycle) DO NOTHING
     `);
 
     await tx.execute(sql`
@@ -123,12 +171,12 @@ export async function closeVotingWindowIfElapsed(
     // of tying on an identical timestamp.
     const actionTransitionResult = await tx.execute(sql`
       INSERT INTO town.civic_process_transitions (
-        id, process_id, from_stage, to_stage, reason_key, occurred_at
+        id, process_id, from_stage, to_stage, reason_key, occurred_at, ballot_cycle
       ) VALUES (
         gen_random_uuid(), ${input.processId}, 'mandate', 'action', 'mandate_decided',
-        ${input.now}::timestamptz + interval '1 microsecond'
+        ${input.now}::timestamptz + interval '1 microsecond', ${ballotCycle}
       )
-      ON CONFLICT (process_id, from_stage, to_stage) DO NOTHING
+      ON CONFLICT (process_id, from_stage, to_stage, ballot_cycle) DO NOTHING
     `);
     if (!actionTransitionResult.rowCount) {
       return;
@@ -147,12 +195,12 @@ export async function closeVotingWindowIfElapsed(
     await tx.execute(sql`SELECT set_config('town.civic_stage_transition', '', true)`);
 
     await tx.execute(sql`
-      INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at)
+      INSERT INTO town.civic_process_events (id, process_id, event_type, occurred_at, ballot_cycle)
       VALUES (
         gen_random_uuid(), ${input.processId}, 'stage_transitioned_to_action',
-        ${input.now}::timestamptz + interval '1 microsecond'
+        ${input.now}::timestamptz + interval '1 microsecond', ${ballotCycle}
       )
-      ON CONFLICT (process_id, event_type) DO NOTHING
+      ON CONFLICT (process_id, event_type, ballot_cycle) DO NOTHING
     `);
   });
 }

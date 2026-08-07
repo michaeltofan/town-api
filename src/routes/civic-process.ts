@@ -231,7 +231,10 @@ export const civicProcessRoutes: FastifyPluginCallbackTypebox<CivicProcessRoutes
         countConfirmationsForSignal(app.database.db, published.signal.id),
         countCivicProposalsForProcess(app.database.db, process.id),
         countDistinctCivicDeliberationParticipants(app.database.db, process.id),
-        countCivicVotesForProcess(app.database.db, process.id),
+        countCivicVotesForProcess(app.database.db, {
+          processId: process.id,
+          ballotCycle: process.ballotCycle,
+        }),
         listPublicCivicProcessEvents(app.database.db, process.id),
         resolveOptionalSessionAccountId(request),
         process.currentStage === 'ballot_preparation'
