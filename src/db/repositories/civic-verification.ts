@@ -188,6 +188,22 @@ export async function listCivicVerificationConfirmationTallyForProcess(
   };
 }
 
+/**
+ * When verification opened (§13): read from the append-only
+ * civic_process_transitions ledger rather than a separately stored
+ * timestamp — the action→verification row is already the permanent,
+ * audited record of that moment.
+ */
+export async function findVerificationOpenedAt(db: Db, processId: string): Promise<string | null> {
+  const result = await db.execute<{ occurred_at: string }>(sql`
+    SELECT occurred_at
+    FROM town.civic_process_transitions
+    WHERE process_id = ${processId} AND from_stage = 'action' AND to_stage = 'verification'
+    LIMIT 1
+  `);
+  return result.rows[0]?.occurred_at ?? null;
+}
+
 export async function findCivicVerification(
   db: Db,
   processId: string,

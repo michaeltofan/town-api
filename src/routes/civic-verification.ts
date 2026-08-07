@@ -18,6 +18,7 @@ import { findCivicProposalById } from '../db/repositories/civic-proposals.js';
 import {
   findCivicVerification,
   findCivicVerificationConfirmationByProcessAndActor,
+  findVerificationOpenedAt,
   insertCivicVerificationConfirmation,
   insertCivicVerificationEvidence,
   listCivicVerificationConfirmationTallyForProcess,
@@ -53,6 +54,8 @@ export type CivicVerificationRoutesOptions = {
   generateId?: () => string;
   localEligibilityResolver?: LocalParticipationEligibilityResolver;
 };
+
+const CIVIC_VERIFICATION_DISPUTE_ESCALATION_DAYS = 14;
 
 function sessionNotAuthorizedError(): AppError {
   return new AppError(401, 'SESSION_NOT_AUTHORIZED', 'Session is not authorized.');
@@ -242,22 +245,42 @@ export const civicVerificationRoutes: FastifyPluginCallbackTypebox<
         isAction || isVerification || isArchived
           ? await findCivicMandate(app.database.db, process.id)
           : null;
-      const [winnerProposal, verification, tally, myConfirmation, evidence] = await Promise.all([
-        mandate?.proposalId ? findCivicProposalById(app.database.db, mandate.proposalId) : null,
-        isArchived ? findCivicVerification(app.database.db, process.id) : null,
-        isVerification || isArchived
-          ? listCivicVerificationConfirmationTallyForProcess(app.database.db, process.id)
-          : Promise.resolve({ deliveredCount: 0, notDeliveredCount: 0 }),
-        actor && (isVerification || isArchived)
-          ? findCivicVerificationConfirmationByProcessAndActor(app.database.db, {
-              processId: process.id,
-              actorId: actor.id,
-            })
-          : Promise.resolve(null),
-        isVerification || isArchived
-          ? listCivicVerificationEvidenceForProcess(app.database.db, process.id)
-          : Promise.resolve([]),
-      ]);
+      const [winnerProposal, verification, tally, myConfirmation, evidence, verificationOpenedAt] =
+        await Promise.all([
+          mandate?.proposalId ? findCivicProposalById(app.database.db, mandate.proposalId) : null,
+          isArchived ? findCivicVerification(app.database.db, process.id) : null,
+          isVerification || isArchived
+            ? listCivicVerificationConfirmationTallyForProcess(app.database.db, process.id)
+            : Promise.resolve({ deliveredCount: 0, notDeliveredCount: 0 }),
+          actor && (isVerification || isArchived)
+            ? findCivicVerificationConfirmationByProcessAndActor(app.database.db, {
+                processId: process.id,
+                actorId: actor.id,
+              })
+            : Promise.resolve(null),
+          isVerification || isArchived
+            ? listCivicVerificationEvidenceForProcess(app.database.db, process.id)
+            : Promise.resolve([]),
+          isVerification || isArchived
+            ? findVerificationOpenedAt(app.database.db, process.id)
+            : Promise.resolve(null),
+        ]);
+      // A dispute that never reaches either threshold is never auto-resolved
+      // (§13): after 14 days it just becomes visibly escalated, honestly
+      // reported here, pending the procedural-review path §14 will add —
+      // exactly like a filed mandate contestation stays "pending" (§10)
+      // until that same capability exists.
+      const disputeEscalatesAt = verificationOpenedAt
+        ? new Date(
+            new Date(verificationOpenedAt).getTime() +
+              CIVIC_VERIFICATION_DISPUTE_ESCALATION_DAYS * 24 * 60 * 60 * 1000,
+          ).toISOString()
+        : null;
+      const disputeEscalated =
+        isVerification &&
+        !verification &&
+        disputeEscalatesAt !== null &&
+        now() > disputeEscalatesAt;
       return await reply.status(200).send({
         data: {
           processId: process.id,
@@ -287,6 +310,9 @@ export const civicVerificationRoutes: FastifyPluginCallbackTypebox<
           notDeliveredCount: verification?.notDeliveredCount ?? tally.notDeliveredCount,
           outcome: verification?.outcome ?? null,
           decidedAt: verification ? toIsoTimestamp(verification.decidedAt) : null,
+          verificationOpenedAt: verificationOpenedAt ? toIsoTimestamp(verificationOpenedAt) : null,
+          disputeEscalatesAt: disputeEscalatesAt,
+          disputeEscalated,
           evidence: evidence.map((item) => ({
             id: item.id,
             authorDisplayName: item.authorDisplayName,
