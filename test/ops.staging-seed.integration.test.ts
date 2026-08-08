@@ -558,11 +558,11 @@ describe('staging seed runner integration', () => {
       idleTimeoutMs: 1000,
     });
     try {
-      const koln = await verify.db
+      const marseille = await verify.db
         .select()
         .from(communities)
-        .where(eq(communities.id, FOUNDATION_COMMUNITY_IDS.kolnDe));
-      expect(koln).toHaveLength(0);
+        .where(eq(communities.id, FOUNDATION_COMMUNITY_IDS.marseilleFr));
+      expect(marseille).toHaveLength(0);
       const drifted = await verify.db
         .select()
         .from(signals)
