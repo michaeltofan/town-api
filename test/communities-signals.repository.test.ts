@@ -51,6 +51,11 @@ describe('communities and signals repositories', () => {
       'stuttgart-de',
       'frankfurt-de',
       'salzburg-at',
+      'marseille-fr',
+      'lyon-fr',
+      'toulouse-fr',
+      'budapest-hu',
+      'szeged-hu',
     ]);
     expect(rows.every((row) => row.status === 'active')).toBe(true);
   });
