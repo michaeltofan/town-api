@@ -85,6 +85,7 @@ export default defineConfig({
       'test/ops.staging-seed.integration.test.ts',
       'test/ops.mark-account-owner.integration.test.ts',
       'test/staging-inspection.integration.test.ts',
+      'test/run-foundation-seed.integration.test.ts',
     ],
     fileParallelism: false,
     poolOptions: {
