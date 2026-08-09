@@ -69,21 +69,22 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
         'closed',
       ],
       setupTransitions: [
-        'pending_email -> pending_passkey',
         'pending_email -> pending_password',
         'pending_password -> pending_passkey',
+        'pending_passkey -> pending_password (repair when password is missing)',
         'pending_passkey -> active',
       ],
       activationRequires: [
         'verified primary email',
-        'at least one active passkey or password credential',
+        'active password credential',
+        'at least one active passkey',
         'linked civic actor',
         'webauthn user handle',
       ],
     },
     domainSeparation: {
       accountIdentity:
-        'Account shell, verified email, optional password credential, passkeys, challenges, recovery grants',
+        'Account shell, verified email, required password credential, passkeys, challenges, recovery grants',
       civicActor: 'Local civic participation identity; optionally linked 1:1 to an account',
       authenticationCeremony:
         'Challenges, purpose-bound setup grants, WebAuthn challenge records, rate limits',
@@ -316,11 +317,15 @@ export function generateAuthenticationCeremonyContractDocument(): unknown {
       antiEnumeration: true,
       createsSession: false,
       activatesAccount: false,
-      transitions: ['pending_email -> pending_passkey'],
+      transitions: [
+        'pending_email -> pending_password',
+        'pending_passkey -> pending_password when the required password is missing',
+      ],
       issues: {
-        pending_email: 'restricted setup grant initial_passkey_registration',
+        pending_email: 'restricted setup grant initial_password_setup',
         pending_password_reentry: 'restricted setup grant initial_password_setup',
-        pending_passkey_reentry: 'restricted setup grant initial_passkey_registration',
+        pending_passkey_reentry:
+          'restricted initial_password_setup grant when password is missing; otherwise initial_passkey_registration',
       },
       deliveryModes: ['test', 'development', 'resend'],
     },
