@@ -200,12 +200,12 @@ describe('email verification runtime API', () => {
 
     const db = currentApp().database.db;
     const account = (await db.select().from(accounts))[0];
-    expect(account?.status).toBe('pending_passkey');
+    expect(account?.status).toBe('pending_password');
     const emailRow = (await db.select().from(accountEmails))[0];
     expect(emailRow?.verifiedAt).not.toBeNull();
     expect((await db.select({ value: count() }).from(setupGrants))[0]?.value).toBe(1);
     const grant = (await db.select().from(setupGrants))[0];
-    expect(grant?.purpose).toBe('initial_passkey_registration');
+    expect(grant?.purpose).toBe('initial_password_setup');
     expect((await db.select({ value: count() }).from(accountSessions))[0]?.value).toBe(0);
     expect((await db.select({ value: count() }).from(passkeyCredentials))[0]?.value).toBe(0);
     const controlled = await db
@@ -545,39 +545,12 @@ describe('email verification runtime API', () => {
       payload: { verificationId: firstVerificationId, code: FIXED_CODE },
     });
     expect(firstComplete.statusCode).toBe(200);
-
-    // Ordinary completion is pending_passkey; place account on optional password path.
-    await currentApp().database.db.execute(
-      sql`UPDATE town.accounts SET status = 'pending_password', updated_at = ${FIXED_NOW} WHERE status = 'pending_passkey'`,
-    );
-    await currentApp().database.db.execute(
-      sql`UPDATE town.setup_grants SET revoked_at = ${FIXED_NOW} WHERE purpose = 'initial_passkey_registration'`,
-    );
-    const passwordGrantId = 'aaaaaaaa-0000-4000-8000-000000000088';
-    const seededAccount = (await currentApp().database.db.select().from(accounts))[0];
-    if (!seededAccount) {
-      throw new Error('expected account after email verification');
-    }
-    await currentApp()
-      .database.db.insert(setupGrants)
-      .values({
-        id: passwordGrantId,
-        accountId: seededAccount.id,
-        tokenHash: Buffer.alloc(32, 5),
-        purpose: 'initial_password_setup',
-        expiresAt: new Date(nowMs + 15 * 60_000).toISOString(),
-        createdAt: FIXED_NOW,
-        consumedAt: null,
-        revokedAt: null,
-      });
-    const firstGrant = 'prior-password-grant-token';
+    const firstGrant = firstComplete.json<{ data: { setupGrant: string } }>().data.setupGrant;
 
     const db = currentApp().database.db;
     const accountBefore = (await db.select().from(accounts))[0];
     expect(accountBefore?.status).toBe('pending_password');
-    expect(
-      (await db.select().from(setupGrants)).some((row) => row.purpose === 'initial_password_setup'),
-    ).toBe(true);
+    expect((await db.select().from(setupGrants))[0]?.purpose).toBe('initial_password_setup');
 
     nowMs += 61_000;
     const reentryRequest = await currentApp().inject({
@@ -608,14 +581,12 @@ describe('email verification runtime API', () => {
     expect((await db.select({ value: count() }).from(accounts))[0]?.value).toBe(1);
 
     const grants = await db.select().from(setupGrants);
-    const passwordGrants = grants.filter((row) => row.purpose === 'initial_password_setup');
-    const activeGrants = passwordGrants.filter(
-      (row) => row.revokedAt == null && row.consumedAt == null,
-    );
+    expect(grants.every((row) => row.purpose === 'initial_password_setup')).toBe(true);
+    const activeGrants = grants.filter((row) => row.revokedAt == null && row.consumedAt == null);
     expect(activeGrants).toHaveLength(1);
   });
 
-  it('supports pending_passkey re-entry with a fresh challenge and setup grant', async () => {
+  it('repairs pending_passkey without a password through a fresh password grant', async () => {
     let nowMs = Date.parse(FIXED_NOW);
     await boot({
       now: () => new Date(nowMs).toISOString(),
@@ -637,12 +608,37 @@ describe('email verification runtime API', () => {
       payload: { verificationId: firstVerificationId, code: FIXED_CODE },
     });
     expect(firstComplete.statusCode).toBe(200);
-    const firstGrant = firstComplete.json<{ data: { setupGrant: string } }>().data.setupGrant;
+
+    // Mechanically advance past password setup so re-entry targets pending_passkey.
+    await currentApp().database.db.execute(
+      sql`UPDATE town.accounts SET status = 'pending_passkey', updated_at = ${FIXED_NOW} WHERE status = 'pending_password'`,
+    );
+    await currentApp().database.db.execute(
+      sql`UPDATE town.setup_grants SET revoked_at = ${FIXED_NOW} WHERE purpose = 'initial_password_setup'`,
+    );
+    const passkeyGrantId = 'aaaaaaaa-0000-4000-8000-000000000099';
+    const passkeyTokenHash = Buffer.alloc(32, 7);
+    const seededAccount = (await currentApp().database.db.select().from(accounts))[0];
+    if (!seededAccount) {
+      throw new Error('expected account after email verification');
+    }
+    await currentApp()
+      .database.db.insert(setupGrants)
+      .values({
+        id: passkeyGrantId,
+        accountId: seededAccount.id,
+        tokenHash: passkeyTokenHash,
+        purpose: 'initial_passkey_registration',
+        expiresAt: new Date(nowMs + 15 * 60_000).toISOString(),
+        createdAt: FIXED_NOW,
+        consumedAt: null,
+        revokedAt: null,
+      });
+    const firstGrant = 'prior-passkey-grant-token';
 
     const db = currentApp().database.db;
     const accountBefore = (await db.select().from(accounts))[0];
     expect(accountBefore?.status).toBe('pending_passkey');
-    expect((await db.select().from(setupGrants))[0]?.purpose).toBe('initial_passkey_registration');
 
     nowMs += 61_000;
     const reentryRequest = await currentApp().inject({
@@ -688,16 +684,16 @@ describe('email verification runtime API', () => {
     expect(reentryGrant.setupGrantExpiresAt).toBe(new Date(nowMs + 15 * 60_000).toISOString());
 
     const accountAfter = (await db.select().from(accounts))[0];
-    expect(accountAfter?.status).toBe('pending_passkey');
+    expect(accountAfter?.status).toBe('pending_password');
     expect(accountAfter?.id).toBe(accountBefore?.id);
 
     const grants = await db.select().from(setupGrants);
-    const passkeyGrants = grants.filter((row) => row.purpose === 'initial_passkey_registration');
-    const activePasskeyGrants = passkeyGrants.filter(
+    const passwordGrants = grants.filter((row) => row.purpose === 'initial_password_setup');
+    const activePasswordGrants = passwordGrants.filter(
       (row) => row.revokedAt == null && row.consumedAt == null,
     );
-    expect(activePasskeyGrants).toHaveLength(1);
-    expect(activePasskeyGrants[0]?.accountId).toBe(accountBefore?.id);
+    expect(activePasswordGrants).toHaveLength(1);
+    expect(activePasswordGrants[0]?.accountId).toBe(accountBefore?.id);
 
     const oldChallengeReplay = await currentApp().inject({
       method: 'POST',
@@ -706,8 +702,10 @@ describe('email verification runtime API', () => {
     });
     expect(oldChallengeReplay.statusCode).toBe(400);
 
-    const revokedPrior = passkeyGrants.find((row) => row.revokedAt != null);
-    expect(revokedPrior).toBeTruthy();
+    const revokedPriorPasskey = grants.find(
+      (row) => row.purpose === 'initial_passkey_registration' && row.revokedAt != null,
+    );
+    expect(revokedPriorPasskey).toBeTruthy();
   });
 
   it('converges concurrent pending_passkey re-entry requests onto one account', async () => {
@@ -728,6 +726,9 @@ describe('email verification runtime API', () => {
       url: '/v1/account/email-verifications/complete',
       payload: { verificationId, code: FIXED_CODE },
     });
+    await currentApp().database.db.execute(
+      sql`UPDATE town.accounts SET status = 'pending_passkey', updated_at = ${FIXED_NOW} WHERE status = 'pending_password'`,
+    );
     const accountId = (await currentApp().database.db.select().from(accounts))[0]?.id;
     expect(accountId).toBeDefined();
 
