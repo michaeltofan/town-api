@@ -15,9 +15,8 @@ import { CONTROLLED_TEST_ACTOR_ID } from '../src/db/seeds/controlled-actor-conte
 import { toIsoTimestamp } from '../src/lib/timestamps.js';
 import { createSoftRegistrationResponse } from './helpers/webauthn-soft-authenticator.js';
 import {
-  completeEmailSetup,
+  completeEmailAndPasswordSetup,
   createPasskeyRegistrationTestApp,
-  preparePendingPasswordSetup,
   TEST_ORIGIN,
   TEST_RP_ID,
 } from './helpers/passkey-registration.js';
@@ -108,7 +107,7 @@ describe('passkey registration runtime API', () => {
   }
 
   async function createSetup(email = 'Passkey.User+setup@example.com') {
-    return await completeEmailSetup(currentApp(), currentDelivery(), email);
+    return await completeEmailAndPasswordSetup(currentApp(), currentDelivery(), email);
   }
 
   async function requestOptions(setupGrant: string) {
@@ -467,35 +466,6 @@ describe('passkey registration runtime API', () => {
           .where(eq(actors.accountId, ceremony.accountId))
       )[0]?.value,
     ).toBe(1);
-  });
-
-  it('rejects an initial_password_setup grant on passkey registration options', async () => {
-    const passwordPrepared = await preparePendingPasswordSetup(
-      currentApp(),
-      currentDelivery(),
-      'Wrong.Purpose.Password+passkey@example.com',
-      { now: FIXED_NOW },
-    );
-    const response = await requestOptions(passwordPrepared.setupGrant);
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject(FAILURE_BODY);
-    expect(
-      (
-        await currentApp()
-          .database.db.select()
-          .from(accounts)
-          .where(eq(accounts.id, passwordPrepared.accountId))
-      )[0]?.status,
-    ).toBe('pending_password');
-    expect(await countPasskeys()).toBe(0);
-    expect(
-      (
-        await currentApp()
-          .database.db.select({ value: count() })
-          .from(webauthnChallenges)
-          .where(eq(webauthnChallenges.accountId, passwordPrepared.accountId))
-      )[0]?.value,
-    ).toBe(0);
   });
 
   it('rejects expired, consumed, revoked, and wrong-purpose setup grants without state leak', async () => {
