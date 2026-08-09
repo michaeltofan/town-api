@@ -7,7 +7,7 @@ import {
 
 describe('canonical foundation content lock', () => {
   it('locks community identifiers and metadata', () => {
-    expect(FOUNDATION_COMMUNITIES).toHaveLength(12);
+    expect(FOUNDATION_COMMUNITIES).toHaveLength(17);
     expect(FOUNDATION_COMMUNITIES[0]).toMatchObject({
       id: '00000000-0000-4000-8000-000000000001',
       slug: 'milano-it',
@@ -44,7 +44,7 @@ describe('canonical foundation content lock', () => {
   });
 
   it('locks Italian, German, and Romanian signal identity and approved copy fields', () => {
-    expect(FOUNDATION_SIGNALS).toHaveLength(36);
+    expect(FOUNDATION_SIGNALS).toHaveLength(51);
 
     const milanoOne = FOUNDATION_SIGNALS.find(
       (signal) => signal.id === FOUNDATION_SIGNAL_IDS.milanoSignal1,
@@ -129,8 +129,16 @@ describe('canonical foundation content lock', () => {
       timezone: 'Europe/Bucharest',
       status: 'active',
     });
-    expect(sibiuCommunity).toMatchObject({ position: 5, countryCode: 'RO', cityName: 'Sibiu' });
-    expect(iasiCommunity).toMatchObject({ position: 6, countryCode: 'RO', cityName: 'Iași' });
+    expect(sibiuCommunity).toMatchObject({
+      position: 5,
+      countryCode: 'RO',
+      cityName: 'Sibiu',
+    });
+    expect(iasiCommunity).toMatchObject({
+      position: 6,
+      countryCode: 'RO',
+      cityName: 'Iași',
+    });
     expect(timisoaraCommunity).toMatchObject({
       position: 7,
       countryCode: 'RO',
@@ -229,5 +237,28 @@ describe('canonical foundation content lock', () => {
     expect(salzburgOne).toBeDefined();
     expect(salzburgOne?.locale).toBe('de-AT');
     expect(salzburgOne?.publicationStatus).toBe('published');
+  });
+  it('locks the French and Hungarian foundation communities and locales', () => {
+    expect(FOUNDATION_COMMUNITIES.slice(-5).map((community) => community.slug)).toEqual([
+      'marseille-fr',
+      'lyon-fr',
+      'toulouse-fr',
+      'budapest-hu',
+      'szeged-hu',
+    ]);
+    expect(
+      FOUNDATION_COMMUNITIES.slice(12, 15).every(
+        (community) => community.defaultLocale === 'fr-FR',
+      ),
+    ).toBe(true);
+    expect(
+      FOUNDATION_COMMUNITIES.slice(15, 17).every(
+        (community) => community.defaultLocale === 'hu-HU',
+      ),
+    ).toBe(true);
+    expect(FOUNDATION_SIGNALS.filter((signal) => signal.locale === 'fr-FR')).toHaveLength(9);
+    expect(FOUNDATION_SIGNALS.filter((signal) => signal.locale === 'hu-HU')).toHaveLength(6);
+    expect(FOUNDATION_SIGNAL_IDS.marseilleSignal1).toBe('00000000-0000-4000-8000-000000001401');
+    expect(FOUNDATION_SIGNAL_IDS.szegedSignal3).toBe('00000000-0000-4000-8000-000000001803');
   });
 });

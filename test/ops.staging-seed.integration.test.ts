@@ -19,15 +19,15 @@ import { seedControlledActor } from '../src/db/seeds/seed-controlled-actor.js';
 import { seedFoundationContent } from '../src/db/seeds/seed-foundation.js';
 import { requireDatabaseUrl, resetAndMigrate } from './helpers/pg.js';
 
-// Simulates a database seeded before the German/Austrian city-expansion round:
-// everything up through Timișoara — missing Köln, Dortmund, Stuttgart,
-// Frankfurt, and Salzburg.
+// Simulates a database seeded before the French/Hungarian city-expansion round:
+// everything up through Salzburg — missing Marseille, Lyon, Toulouse,
+// Budapest, and Szeged.
 const NEWEST_COMMUNITY_IDS: string[] = [
-  FOUNDATION_COMMUNITY_IDS.kolnDe,
-  FOUNDATION_COMMUNITY_IDS.dortmundDe,
-  FOUNDATION_COMMUNITY_IDS.stuttgartDe,
-  FOUNDATION_COMMUNITY_IDS.frankfurtDe,
-  FOUNDATION_COMMUNITY_IDS.salzburgAt,
+  FOUNDATION_COMMUNITY_IDS.marseilleFr,
+  FOUNDATION_COMMUNITY_IDS.lyonFr,
+  FOUNDATION_COMMUNITY_IDS.toulouseFr,
+  FOUNDATION_COMMUNITY_IDS.budapestHu,
+  FOUNDATION_COMMUNITY_IDS.szegedHu,
 ];
 const PRIOR_CANONICAL_COMMUNITIES = FOUNDATION_COMMUNITIES.filter(
   (row) => !NEWEST_COMMUNITY_IDS.includes(row.id),
@@ -92,8 +92,8 @@ describe('staging seed runner integration', () => {
     const result = await runStagingSeed({ env: stagingEnv });
     expect(result.outcome).toBe('seeded');
     expect(result.counts).toEqual({
-      communities: 12,
-      signals: 36,
+      communities: 17,
+      signals: 51,
       actors: 1,
       controlledActors: 1,
       confirmations: 0,
@@ -109,8 +109,8 @@ describe('staging seed runner integration', () => {
       const communityRows = await database.db.select().from(communities);
       const signalRows = await database.db.select().from(signals);
       const actorRows = await database.db.select().from(actors);
-      expect(communityRows).toHaveLength(12);
-      expect(signalRows).toHaveLength(36);
+      expect(communityRows).toHaveLength(17);
+      expect(signalRows).toHaveLength(51);
       expect(actorRows).toHaveLength(1);
       expect(actorRows[0]).toMatchObject({
         id: CONTROLLED_TEST_ACTOR_ID,
@@ -154,8 +154,8 @@ describe('staging seed runner integration', () => {
       expect(afterCommunities).toEqual(beforeCommunities);
       expect(afterSignals).toEqual(beforeSignals);
       expect(afterActors).toEqual(beforeActors);
-      expect(afterCommunities).toHaveLength(12);
-      expect(afterSignals).toHaveLength(36);
+      expect(afterCommunities).toHaveLength(17);
+      expect(afterSignals).toHaveLength(51);
       expect(afterActors).toHaveLength(1);
     } finally {
       await database.close();
@@ -216,8 +216,8 @@ describe('staging seed runner integration', () => {
     const result = await runStagingSeed({ env: stagingEnv });
     expect(result.outcome).toBe('reconciled');
     expect(result.counts).toEqual({
-      communities: 12,
-      signals: 36,
+      communities: 17,
+      signals: 51,
       actors: 1,
       controlledActors: 1,
       confirmations: 0,
@@ -442,8 +442,8 @@ describe('staging seed runner integration', () => {
 
   it('uses only the canonical foundation signal set after a successful seed', async () => {
     await runStagingSeed({ env: stagingEnv });
-    expect(FOUNDATION_SIGNALS).toHaveLength(36);
-    expect(FOUNDATION_COMMUNITIES).toHaveLength(12);
+    expect(FOUNDATION_SIGNALS).toHaveLength(51);
+    expect(FOUNDATION_COMMUNITIES).toHaveLength(17);
     const counts = await readCounts();
     expect(counts.confirmations).toBe(0);
     expect(counts.controlledActors).toBe(1);
@@ -457,8 +457,8 @@ describe('staging seed runner integration', () => {
       idleTimeoutMs: 1000,
     });
     try {
-      expect(PRIOR_CANONICAL_COMMUNITIES).toHaveLength(7);
-      expect(PRIOR_CANONICAL_SIGNALS).toHaveLength(21);
+      expect(PRIOR_CANONICAL_COMMUNITIES).toHaveLength(12);
+      expect(PRIOR_CANONICAL_SIGNALS).toHaveLength(36);
       for (const community of PRIOR_CANONICAL_COMMUNITIES) {
         await database.db.insert(communities).values({ ...community });
       }
@@ -474,8 +474,8 @@ describe('staging seed runner integration', () => {
   it('completes an exact prior-canonical subset by inserting only missing manifest rows', async () => {
     await seedPriorExactCanonicalSubset();
     expect(await readCounts()).toEqual({
-      communities: 7,
-      signals: 21,
+      communities: 12,
+      signals: 36,
       actors: 1,
       controlledActors: 1,
       confirmations: 0,
@@ -484,8 +484,8 @@ describe('staging seed runner integration', () => {
     const result = await runStagingSeed({ env: stagingEnv });
     expect(result.outcome).toBe('completed_subset');
     expect(result.counts).toEqual({
-      communities: 12,
-      signals: 36,
+      communities: 17,
+      signals: 51,
       actors: 1,
       controlledActors: 1,
       confirmations: 0,
@@ -544,8 +544,8 @@ describe('staging seed runner integration', () => {
     } satisfies Partial<StagingSeedError>);
 
     expect(await readCounts()).toEqual({
-      communities: 7,
-      signals: 21,
+      communities: 12,
+      signals: 36,
       actors: 1,
       controlledActors: 1,
       confirmations: 0,
@@ -558,11 +558,11 @@ describe('staging seed runner integration', () => {
       idleTimeoutMs: 1000,
     });
     try {
-      const koln = await verify.db
+      const marseille = await verify.db
         .select()
         .from(communities)
-        .where(eq(communities.id, FOUNDATION_COMMUNITY_IDS.kolnDe));
-      expect(koln).toHaveLength(0);
+        .where(eq(communities.id, FOUNDATION_COMMUNITY_IDS.marseilleFr));
+      expect(marseille).toHaveLength(0);
       const drifted = await verify.db
         .select()
         .from(signals)
@@ -579,8 +579,8 @@ describe('staging seed runner integration', () => {
     await seedPriorExactCanonicalSubset();
     const first = await runStagingSeed({ env: stagingEnv });
     expect(first.outcome).toBe('completed_subset');
-    expect(first.counts.communities).toBe(12);
-    expect(first.counts.signals).toBe(36);
+    expect(first.counts.communities).toBe(17);
+    expect(first.counts.signals).toBe(51);
 
     const second = await runStagingSeed({ env: stagingEnv });
     expect(second.outcome).toBe('already_canonical');
