@@ -12,8 +12,8 @@ import {
 } from '../src/db/schema.js';
 import { toIsoTimestamp } from '../src/lib/timestamps.js';
 import {
+  completeEmailSetup,
   createPasskeyRegistrationTestApp,
-  preparePendingPasswordSetup,
   TEST_EMAIL_VERIFICATION_HASH_KEY,
   TEST_INITIAL_PASSWORD,
 } from './helpers/passkey-registration.js';
@@ -89,11 +89,10 @@ describe('initial password setup API', () => {
   });
 
   it('completes password setup, hands off a passkey grant, and creates no session', async () => {
-    const emailSetup = await preparePendingPasswordSetup(
+    const emailSetup = await completeEmailSetup(
       currentApp(),
       currentDelivery(),
       'Password.Setup+ok@example.com',
-      { now: FIXED_NOW },
     );
     expect((await currentApp().database.db.select().from(accounts))[0]?.status).toBe(
       'pending_password',
@@ -155,11 +154,10 @@ describe('initial password setup API', () => {
   });
 
   it('rejects missing auth, wrong-purpose grants, and policy violations with a bounded error', async () => {
-    const emailSetup = await preparePendingPasswordSetup(
+    const emailSetup = await completeEmailSetup(
       currentApp(),
       currentDelivery(),
       'Password.Fail+ok@example.com',
-      { now: FIXED_NOW },
     );
 
     const missing = await currentApp().inject({
@@ -230,11 +228,10 @@ describe('initial password setup API', () => {
   }
 
   it('allows exactly one concurrent successful password setup for the same grant', async () => {
-    const emailSetup = await preparePendingPasswordSetup(
+    const emailSetup = await completeEmailSetup(
       currentApp(),
       currentDelivery(),
       'Password.Concurrent+ok@example.com',
-      { now: FIXED_NOW },
     );
 
     const results = await Promise.all(
@@ -344,11 +341,10 @@ describe('initial password setup API', () => {
 
     for (const testCase of cases) {
       await boot();
-      const emailSetup = await preparePendingPasswordSetup(
+      const emailSetup = await completeEmailSetup(
         currentApp(),
         currentDelivery(),
         `Password.${testCase.name}+grant@example.com`,
-        { now: FIXED_NOW },
       );
       await testCase.mutate(emailSetup.accountId);
 
@@ -367,11 +363,10 @@ describe('initial password setup API', () => {
   it('rejects password setup when the account is no longer pending_password', async () => {
     for (const status of ['pending_passkey', 'active'] as const) {
       await boot();
-      const emailSetup = await preparePendingPasswordSetup(
+      const emailSetup = await completeEmailSetup(
         currentApp(),
         currentDelivery(),
         `Password.State.${status}+ok@example.com`,
-        { now: FIXED_NOW },
       );
 
       if (status === 'pending_passkey') {
@@ -433,11 +428,10 @@ describe('initial password setup API', () => {
   });
 
   it('rejects retry after an active password credential already exists', async () => {
-    const emailSetup = await preparePendingPasswordSetup(
+    const emailSetup = await completeEmailSetup(
       currentApp(),
       currentDelivery(),
       'Password.Retry+exists@example.com',
-      { now: FIXED_NOW },
     );
 
     const first = await currentApp().inject({

@@ -31,7 +31,6 @@ import { authenticatePasskey } from './helpers/passkey-authentication.js';
 import {
   completeEmailAndPasswordSetup,
   completeEmailSetup,
-  preparePendingPasswordSetup,
   TEST_INITIAL_PASSWORD,
   TEST_ORIGIN,
   TEST_RP_ID,
@@ -437,33 +436,10 @@ describe('password sign-in API', () => {
       }),
     );
 
-    const pendingPasskeyFromEmail = await completeEmailSetup(
-      currentApp(),
-      currentDelivery(),
-      'Password.SignIn+pending-passkey-email@example.com',
-    );
-    expect(
-      (
-        await currentApp()
-          .database.db.select()
-          .from(accounts)
-          .where(eq(accounts.id, pendingPasskeyFromEmail.accountId))
-          .limit(1)
-      )[0]?.status,
-    ).toBe('pending_passkey');
-    assertFailureEnvelope(
-      await signInWithPassword({
-        app: currentApp(),
-        email: 'Password.SignIn+pending-passkey-email@example.com',
-        clientType: 'web',
-      }),
-    );
-
-    const pendingPassword = await preparePendingPasswordSetup(
+    const pendingPassword = await completeEmailSetup(
       currentApp(),
       currentDelivery(),
       'Password.SignIn+pending-password@example.com',
-      { now: FIXED_NOW },
     );
     const pendingPasswordAccount = (
       await currentApp()
@@ -485,8 +461,6 @@ describe('password sign-in API', () => {
       currentApp(),
       currentDelivery(),
       'Password.SignIn+pending-passkey@example.com',
-      TEST_INITIAL_PASSWORD,
-      { now: FIXED_NOW },
     );
     const pendingPasskeyAccount = (
       await currentApp()

@@ -16,9 +16,9 @@ type Db = Database['db'];
 const WEBAUTHN_USER_HANDLE_BYTES = 32;
 
 const VALID_TRANSITIONS: Record<AccountStatus, readonly AccountStatus[]> = {
-  pending_email: ['pending_password', 'pending_passkey'],
+  pending_email: ['pending_password'],
   pending_password: ['pending_passkey'],
-  pending_passkey: ['active'],
+  pending_passkey: ['pending_password', 'active'],
   active: ['suspended', 'closed'],
   suspended: ['active', 'closed'],
   closed: [],
@@ -160,6 +160,13 @@ async function assertActiveRequirements(db: Db, accountId: string): Promise<void
     .select({ value: count() })
     .from(passkeyCredentials)
     .where(and(eq(passkeyCredentials.accountId, accountId), isNull(passkeyCredentials.revokedAt)));
+  if ((passkeys[0]?.value ?? 0) < 1) {
+    throw new IdentityInvariantError(
+      'ACTIVE_REQUIRES_ACTIVE_PASSKEY',
+      'Active account requires at least one active passkey',
+    );
+  }
+
   const passwords = await db
     .select({ value: count() })
     .from(accountPasswordCredentials)
@@ -169,10 +176,10 @@ async function assertActiveRequirements(db: Db, accountId: string): Promise<void
         isNull(accountPasswordCredentials.revokedAt),
       ),
     );
-  if ((passkeys[0]?.value ?? 0) < 1 && (passwords[0]?.value ?? 0) < 1) {
+  if ((passwords[0]?.value ?? 0) < 1) {
     throw new IdentityInvariantError(
-      'ACTIVE_REQUIRES_ACTIVE_CREDENTIAL',
-      'Active account requires at least one active passkey or password credential',
+      'ACTIVE_REQUIRES_ACTIVE_PASSWORD',
+      'Active account requires an active password credential',
     );
   }
 
