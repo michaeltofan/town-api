@@ -460,7 +460,7 @@ describe('authentication ceremony repositories', () => {
       });
       await expect(
         transitionAccountState(db(), { accountId: noCredential, to: 'active', at: T3 }),
-      ).rejects.toMatchObject({ code: 'ACTIVE_REQUIRES_ACTIVE_CREDENTIAL' });
+      ).rejects.toMatchObject({ code: 'ACTIVE_REQUIRES_ACTIVE_PASSKEY' });
 
       const noActor = '30000000-0000-4000-8000-000000000017';
       await preparePendingPasskeyAccount(noActor);
