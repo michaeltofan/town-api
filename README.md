@@ -274,7 +274,7 @@ Client types: `web` | `mobile`.
 
 Rules:
 
-- creation requires an **active** account with verified primary email, an active password credential, at least one active passkey, and a linked civic actor
+- creation requires an **active** account with verified primary email, at least one active passkey or password credential, and a linked civic actor
 - suspended/closed/pending accounts cannot receive sessions
 - setup grants and recovery grants cannot create sessions
 - ordinary activity may extend `idle_expires_at` only (never absolute expiry, never `authenticated_at`)
