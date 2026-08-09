@@ -29,6 +29,7 @@
     "smoke:deployment": "tsx scripts/smoke-deployment.ts",
     "db:seed:foundation": "tsx scripts/seed-foundation-content.ts",
     "db:seed:foundation:production": "node dist/scripts/seed-foundation-content.js",
+    "db:seed:foundation:staging:production": "node dist/scripts/seed-foundation-staging.js",
     "db:seed:controlled-actor": "tsx scripts/seed-controlled-actor.ts",
     "db:seed:staging": "tsx scripts/db-seed-staging.ts",
     "db:seed:staging:production": "node dist/scripts/db-seed-staging.js",
