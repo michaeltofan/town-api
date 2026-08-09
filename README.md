@@ -322,18 +322,18 @@ Architecture contract: `docs/authentication-ceremony-foundation.v1.json`.
 
 Email verification proves control of an email address during account setup. It does **not** authenticate a session and does **not** activate an account.
 
-| Item                   | Policy                                                                                                                                 |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Feature flag           | `EMAIL_VERIFICATION_ENABLED` (default `false`)                                                                                         |
-| Hash key               | `EMAIL_VERIFICATION_HASH_KEY` (HMAC-SHA-256; min 32 chars)                                                                             |
-| Rate-limit subject key | `CEREMONY_RATE_LIMIT_HASH_KEY` (min 32 chars)                                                                                          |
-| Delivery mode          | `test`, `development`, or `resend`                                                                                                     |
-| Code                   | 6 decimal digits, crypto-secure, 10-minute TTL, max 5 attempts                                                                         |
-| Resend                 | invalidates prior active `verify_email` challenges (`revoked_at`)                                                                      |
-| Success transition     | `pending_email` → `pending_password`; legacy repair uses the same transition                                                           |
-| Success authority      | one 15-minute `initial_password_setup` grant; passkey grant only after password exists                                                 |
-| Anti-enumeration       | request always returns generic `202 VERIFICATION_REQUEST_ACCEPTED` plus a UUID `verificationId`                                        |
-| Trusted proxy          | `TRUST_PROXY` default `false` (do not trust arbitrary `X-Forwarded-For`)                                                               |
+| Item                   | Policy                                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------------------------- |
+| Feature flag           | `EMAIL_VERIFICATION_ENABLED` (default `false`)                                                  |
+| Hash key               | `EMAIL_VERIFICATION_HASH_KEY` (HMAC-SHA-256; min 32 chars)                                      |
+| Rate-limit subject key | `CEREMONY_RATE_LIMIT_HASH_KEY` (min 32 chars)                                                   |
+| Delivery mode          | `test`, `development`, or `resend`                                                              |
+| Code                   | 6 decimal digits, crypto-secure, 10-minute TTL, max 5 attempts                                  |
+| Resend                 | invalidates prior active `verify_email` challenges (`revoked_at`)                               |
+| Success transition     | `pending_email` → `pending_password`; legacy repair uses the same transition                    |
+| Success authority      | one 15-minute `initial_password_setup` grant; passkey grant only after password exists          |
+| Anti-enumeration       | request always returns generic `202 VERIFICATION_REQUEST_ACCEPTED` plus a UUID `verificationId` |
+| Trusted proxy          | `TRUST_PROXY` default `false` (do not trust arbitrary `X-Forwarded-For`)                        |
 
 Implemented routes (also in live OpenAPI when registered):
 
