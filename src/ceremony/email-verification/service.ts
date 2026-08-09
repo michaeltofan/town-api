@@ -20,6 +20,7 @@ import {
   findCanonicalEmailByNormalized,
   verifyEmail,
 } from '../../identity/repositories/emails.js';
+import { findActiveAccountPasswordCredential } from '../../identity/repositories/password-credentials.js';
 import { appendIdentitySecurityEvent } from '../../identity/repositories/security-events.js';
 import { addMinutes, computeSetupGrantExpiresAt } from '../policy.js';
 import {
@@ -569,10 +570,18 @@ export async function completeEmailVerification(
       }
 
       await verifyEmail(dbTx, { emailId: email.id, verifiedAt: now });
-      if (isInitialVerification) {
+
+      // Accounts created while the passwordless handoff was live can be
+      // pending_passkey without a password. Email re-verification repairs
+      // those accounts without accepting a passkey-purpose grant as password
+      // authority and without creating a duplicate account.
+      const missingRequiredPassword =
+        isPendingPasskeyReentry &&
+        (await findActiveAccountPasswordCredential(dbTx, accountId)) === null;
+      if (isInitialVerification || missingRequiredPassword) {
         await transitionAccountState(dbTx, {
           accountId,
-          to: 'pending_passkey',
+          to: 'pending_password',
           at: now,
         });
       }
@@ -584,12 +593,18 @@ export async function completeEmailVerification(
         excludeChallengeId: challenge.id,
       });
 
-      // Ordinary new-account and pending_passkey re-entry hand off passkey registration.
-      // pending_password re-entry preserves the optional password-setup grant path.
-      const setupPurpose = isPendingPasswordReentry
-        ? ('initial_password_setup' as const)
-        : ('initial_passkey_registration' as const);
+      const setupPurpose =
+        isPendingPasskeyReentry && !missingRequiredPassword
+          ? ('initial_passkey_registration' as const)
+          : ('initial_password_setup' as const);
 
+      if (missingRequiredPassword) {
+        await revokeActiveSetupGrantsForAccount(dbTx, {
+          accountId,
+          purpose: 'initial_passkey_registration',
+          now,
+        });
+      }
       await revokeActiveSetupGrantsForAccount(dbTx, {
         accountId,
         purpose: setupPurpose,
