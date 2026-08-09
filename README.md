@@ -330,8 +330,8 @@ Email verification proves control of an email address during account setup. It d
 | Delivery mode          | `test`, `development`, or `resend`                                                                                                     |
 | Code                   | 6 decimal digits, crypto-secure, 10-minute TTL, max 5 attempts                                                                         |
 | Resend                 | invalidates prior active `verify_email` challenges (`revoked_at`)                                                                      |
-| Success transition     | `pending_email` → `pending_password`; legacy `pending_passkey` without password → `pending_password`                                    |
-| Success authority      | one restricted setup grant (`initial_password_setup`, 15 minutes); `pending_passkey` with an existing password receives `initial_passkey_registration` |
+| Success transition     | `pending_email` → `pending_password`; legacy repair uses the same transition                                                           |
+| Success authority      | one 15-minute `initial_password_setup` grant; passkey grant only after password exists                                                 |
 | Anti-enumeration       | request always returns generic `202 VERIFICATION_REQUEST_ACCEPTED` plus a UUID `verificationId`                                        |
 | Trusted proxy          | `TRUST_PROXY` default `false` (do not trust arbitrary `X-Forwarded-For`)                                                               |
 
