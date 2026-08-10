@@ -7,7 +7,7 @@ import {
 
 describe('canonical foundation content lock', () => {
   it('locks community identifiers and metadata', () => {
-    expect(FOUNDATION_COMMUNITIES).toHaveLength(17);
+    expect(FOUNDATION_COMMUNITIES).toHaveLength(22);
     expect(FOUNDATION_COMMUNITIES[0]).toMatchObject({
       id: '00000000-0000-4000-8000-000000000001',
       slug: 'milano-it',
@@ -44,7 +44,7 @@ describe('canonical foundation content lock', () => {
   });
 
   it('locks Italian, German, and Romanian signal identity and approved copy fields', () => {
-    expect(FOUNDATION_SIGNALS).toHaveLength(51);
+    expect(FOUNDATION_SIGNALS).toHaveLength(66);
 
     const milanoOne = FOUNDATION_SIGNALS.find(
       (signal) => signal.id === FOUNDATION_SIGNAL_IDS.milanoSignal1,
@@ -239,7 +239,7 @@ describe('canonical foundation content lock', () => {
     expect(salzburgOne?.publicationStatus).toBe('published');
   });
   it('locks the French and Hungarian foundation communities and locales', () => {
-    expect(FOUNDATION_COMMUNITIES.slice(-5).map((community) => community.slug)).toEqual([
+    expect(FOUNDATION_COMMUNITIES.slice(12, 17).map((community) => community.slug)).toEqual([
       'marseille-fr',
       'lyon-fr',
       'toulouse-fr',
@@ -260,5 +260,67 @@ describe('canonical foundation content lock', () => {
     expect(FOUNDATION_SIGNALS.filter((signal) => signal.locale === 'hu-HU')).toHaveLength(6);
     expect(FOUNDATION_SIGNAL_IDS.marseilleSignal1).toBe('00000000-0000-4000-8000-000000001401');
     expect(FOUNDATION_SIGNAL_IDS.szegedSignal3).toBe('00000000-0000-4000-8000-000000001803');
+  });
+
+  it('locks the Spanish city-expansion communities and signal identity', () => {
+    expect(FOUNDATION_COMMUNITIES.slice(-5).map((community) => community.slug)).toEqual([
+      'madrid-es',
+      'barcelona-es',
+      'valencia-es',
+      'sevilla-es',
+      'malaga-es',
+    ]);
+    expect(
+      FOUNDATION_COMMUNITIES.slice(17, 22).every(
+        (community) => community.defaultLocale === 'es-ES',
+      ),
+    ).toBe(true);
+    expect(
+      FOUNDATION_COMMUNITIES.slice(17, 22).every((community) => community.countryCode === 'ES'),
+    ).toBe(true);
+    expect(
+      FOUNDATION_COMMUNITIES.slice(17, 22).every(
+        (community) => community.timezone === 'Europe/Madrid',
+      ),
+    ).toBe(true);
+
+    const madridCommunity = FOUNDATION_COMMUNITIES.find((c) => c.slug === 'madrid-es');
+    expect(madridCommunity).toMatchObject({
+      position: 18,
+      countryCode: 'ES',
+      cityName: 'Madrid',
+      defaultLocale: 'es-ES',
+      timezone: 'Europe/Madrid',
+      status: 'active',
+    });
+
+    const madridOne = FOUNDATION_SIGNALS.find(
+      (signal) => signal.id === FOUNDATION_SIGNAL_IDS.madridSignal1,
+    );
+    expect(madridOne).toMatchObject({
+      communityId: madridCommunity?.id,
+      slug: 'madrid-signal-1',
+      position: 1,
+      locale: 'es-ES',
+      category: 'ESPACIO PÚBLICO',
+      area: 'Lavapiés',
+    });
+
+    for (const cityId of [
+      FOUNDATION_SIGNAL_IDS.madridSignal1,
+      FOUNDATION_SIGNAL_IDS.barcelonaSignal1,
+      FOUNDATION_SIGNAL_IDS.valenciaSignal1,
+      FOUNDATION_SIGNAL_IDS.sevillaSignal1,
+      FOUNDATION_SIGNAL_IDS.malagaSignal1,
+    ]) {
+      const signal = FOUNDATION_SIGNALS.find((s) => s.id === cityId);
+      expect(signal).toBeDefined();
+      expect(signal?.locale).toBe('es-ES');
+      expect(signal?.publicationStatus).toBe('published');
+    }
+
+    expect(FOUNDATION_SIGNALS.filter((signal) => signal.locale === 'es-ES')).toHaveLength(15);
+    expect(FOUNDATION_SIGNAL_IDS.madridSignal1).toBe('00000000-0000-4000-8000-000000001901');
+    expect(FOUNDATION_SIGNAL_IDS.malagaSignal3).toBe('00000000-0000-4000-8000-000000002303');
   });
 });
