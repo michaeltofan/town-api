@@ -32,7 +32,14 @@ production deployment.
 
 - [ ] Container image built from Node.js 24 with production dependencies
       only.
-- [ ] Image published (Amsterdam region).
+- [ ] **CI-triggered deployment succeeded** (`deploy-staging` / `deploy-production`
+      job in `ci.yml`, blocking on real terminal status via `railway up`).
+      If `RAILWAY_TOKEN` isn't configured yet, fall back to manually
+      triggering "Deploy Latest Commit" in the Railway dashboard and confirm
+      it resolved to the merge commit, not a stale snapshot.
+- [ ] Image published (`asia-southeast1` for production,
+      `europe-west4` for staging — see `DEPLOYMENT_READINESS_V1.md` §3 for
+      the known region mismatch).
 - [ ] `npm run db:migrate:production` (or `node dist/scripts/db-migrate.js`)
       run from a controlled one-off release step (advisory lock acquired).
       Not from persistent API startup.
@@ -47,8 +54,9 @@ production deployment.
 
 - [ ] `npm run smoke:deployment -- --base-url https://api-staging.towncivic.org \
  --environment staging --expect-commit <sha> --auth-enabled false` passes.
-- [ ] Production smoke (`https://api.towncivic.org`) only after that host is
-      provisioned. Skip while production DNS/service is absent.
+- [ ] `npm run smoke:deployment -- --base-url https://api.towncivic.org \
+ --environment production --expect-commit <sha>` passes. Production
+      (`api.towncivic.org`) has been live since 2026-08. Do not skip this step.
 - [ ] Unauthorized routes still return `401` when auth is enabled, or `404`
       when `--auth-enabled false`.
 - [ ] Invalid Stripe webhook signatures on `POST /v1/billing/stripe/webhook`

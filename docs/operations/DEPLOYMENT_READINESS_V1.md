@@ -39,13 +39,35 @@ Current repository journal (authoritative for pre-flight checks): 22 entries
 
 ## 3. Target environments
 
-The API is deployed to the Amsterdam region on PostgreSQL 18 in two runtime
-environments:
+**Both environments are live** (verified against real Railway deployments and
+live HTTP traffic, last confirmed 2026-08-10). PostgreSQL 18 in both.
 
-| APP_ENV      | Public URL                          | Notes                                                                                                                                    |
-| ------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `staging`    | `https://api-staging.towncivic.org` | **Current live target.** Stripe test mode. Public site `towncivic.org` talks to this API.                                                |
-| `production` | `https://api.towncivic.org`         | **Not provisioned yet** (DNS/service absent). Do not run production smoke until it exists. Stripe live mode required if billing enabled. |
+| APP_ENV      | Public URL                          | Region                       | Notes                                                                                                  |
+| ------------ | ----------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `staging`    | `https://api-staging.towncivic.org` | `europe-west4` (Netherlands) | Stripe test mode. Staging public site talks to this API.                                               |
+| `production` | `https://api.towncivic.org`         | `europe-west4` (Netherlands) | **Live.** Public site `towncivic.org` talks to this API. Stripe live mode required if billing enabled. |
+
+Both environments now run in `europe-west4` (Netherlands), matching TOWN's
+European community catalog (Italy, Germany, Romania, Austria, France,
+Hungary, Spain). This was **not** always true: production originally ran in
+`asia-southeast1` (Singapore), and the Postgres database, `town-api`, and
+`town-public` were migrated to `europe-west4` on 2026-08-10, verified via
+Railway deployment records and healthcheck latency (readiness probe —
+which includes a live database round trip — dropped from previous
+cross-region timings to ~27ms once the app services were co-located with
+the database again). `town-api-migrations` and `town-api-seed-production`
+(one-off release/seed jobs, not always-on) are still configured for
+`asia-southeast1` as of this writing; low priority to move since they run
+briefly and infrequently, but worth aligning for consistency next time
+either is touched.
+
+**Lesson learned during this migration, worth keeping in mind operationally:**
+Railway config reads (e.g. `multiRegionConfig` on a service) can reflect a
+**staged, undeployed** edit rather than what's actually running — the
+dashboard's "Staged Changes" panel and an actual successful deployment
+record are the only reliable ground truth. Don't trust a single config read
+as proof of what's live; cross-check against the latest deployment's status
+and, ideally, live behavior (e.g. request latency, health check timing).
 
 `APP_ENV` should be authoritative for environment policy. Prefer gating
 production-only rules on `APP_ENV === 'production'`; do not treat
@@ -269,6 +291,37 @@ machine-readable JSON summary.
 
 ## 12. Deployment order, rollback, and backups
 
+**Deploys are triggered by CI on merge to `main`**, via the `deploy-staging`
+and `deploy-production` jobs in `.github/workflows/ci.yml`. They run
+`railway up --service <name>` in attached mode (not `--ci`), which blocks
+until the deployment reaches a terminal status and exits non-zero on
+failure — a real CI gate, not a fire-and-forget trigger. `deploy-production`
+`needs: deploy-staging`, so production only deploys after staging succeeds.
+
+This deliberately does not rely on Railway's own "auto-deploy from GitHub"
+feature: every Railway service in this project (`town-api`,
+`town-api-staging`, `town-public`, `town-public-staging`) still carries a
+`watchPatterns` build filter that only matches
+`/.railway/manual-release-only/**`, so Railway's own GitHub integration
+silently `SKIPS` ordinary pushes. That filter is left in place intentionally
+as a second safety net; the GitHub Actions jobs push the build via the CLI
+instead of asking Railway to pull from GitHub, which also sidesteps a
+Railway bug this project hit repeatedly where a triggered deploy would
+resolve to a stale prior snapshot instead of the latest commit.
+
+**Requires `RAILWAY_TOKEN` configured as a GitHub Environment secret** (via
+repo Settings → Environments → `staging` / `production`) in both
+`michaeltofan/town-api` and `michaeltofan/town-public`, using a Railway
+[project token](https://docs.railway.com/integrations/api#project-token)
+scoped to that environment (one token per environment, reusable across both
+repos since project tokens are environment-scoped, not service-scoped). If
+this secret is missing, the deploy jobs fail loudly (not silently) and the
+manual fallback still works: trigger "Deploy Latest Commit" from the Railway
+dashboard, then confirm `GET /health/build` (`commitSha`) matches the merge
+commit before telling anyone a change has shipped. Optionally, add required
+reviewers to the `production` GitHub Environment for a manual approval gate
+before production deploys — not configured by default.
+
 Order for staging or production deployment:
 
 1. Merge to `main`.
@@ -276,7 +329,8 @@ Order for staging or production deployment:
    Railway Git deployments, `RAILWAY_GIT_COMMIT_SHA` is injected at runtime.
    For CI or non-Git deploy mechanisms, set `APP_COMMIT_SHA` to the merge
    commit SHA explicitly. If both are present they must match.
-3. Publish to the platform (Amsterdam region).
+3. CI triggers the deployment (`deploy-staging` / `deploy-production` job)
+   and blocks on its real terminal status — see above.
 4. Run `npm run db:migrate:production` (or `node dist/scripts/db-migrate.js`)
    against the target database from a controlled one-off release step. Fail
    deploy if this fails. Do not run migrations from the persistent API
@@ -299,15 +353,29 @@ Rollback:
 Backups:
 
 - PostgreSQL 18 point-in-time recovery is provided by the platform (Railway).
-  Confirm the retention window with the platform admin before any invasive
-  change.
+  **Confirmed enabled on production as of 2026-08-10** — verified directly
+  via Railway service config: `WAL_ARCHIVE_BUCKET`, `WAL_ARCHIVE_ENDPOINT`,
+  `WAL_ARCHIVE_KEY`, `WAL_ARCHIVE_PATH`, `WAL_ARCHIVE_REGION`,
+  `WAL_ARCHIVE_SECRET` are present on the production Postgres service,
+  referencing a real Railway Bucket resource. Before this date, PITR was
+  **not actually enabled** despite `DATABASE_BACKUP_PITR_ENABLED=true`
+  existing as an app-level env var — that variable only reflects an
+  operator's claim, it does not turn PITR on or verify it's on. Don't trust
+  it as proof; check the Postgres service's own config for `WAL_ARCHIVE_*`
+  variables, or the Backups tab in the dashboard.
+  Per Railway's PITR docs, the restore window starts from the first
+  post-enable base backup, not retroactively — so there's no usable restore
+  point immediately after enabling; a real restore drill needs to wait for
+  the first base backup to complete.
 - The API does not run dump jobs or workers. Operator console Monitor exposes
   automated PITR configuration via `DATABASE_BACKUP_*` env vars and records
   ops_admin verifications at `GET/POST /v1/platform/backup`.
 - Restore is attestation-only: operators record out-of-band Railway restore
   drills at `GET/POST /v1/platform/restore` (`/attest`). The API never executes
   `pg_restore` or clones against staging/production. Keep the latest passed
-  drill fresher than `DATABASE_RESTORE_DRILL_MAX_AGE_DAYS` (default 90).
+  drill fresher than `DATABASE_RESTORE_DRILL_MAX_AGE_DAYS` (default 90). As
+  of this writing no drill has been attested yet — enabling PITR is a
+  prerequisite, not the drill itself.
 - Configure staging/production with:
   `DATABASE_BACKUP_PROVIDER=railway_postgres_pitr`,
   `DATABASE_BACKUP_PITR_ENABLED=true`,
