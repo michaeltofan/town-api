@@ -32,10 +32,11 @@ production deployment.
 
 - [ ] Container image built from Node.js 24 with production dependencies
       only.
-- [ ] **Deployment manually triggered.** Merging to `main` does NOT deploy by
-      itself (`watchPatterns` gates auto-deploy on every service in this
-      project). Confirm the triggered build resolved to the merge commit —
-      not a stale snapshot — before continuing.
+- [ ] **CI-triggered deployment succeeded** (`deploy-staging` / `deploy-production`
+      job in `ci.yml`, blocking on real terminal status via `railway up`).
+      If `RAILWAY_TOKEN` isn't configured yet, fall back to manually
+      triggering "Deploy Latest Commit" in the Railway dashboard and confirm
+      it resolved to the merge commit, not a stale snapshot.
 - [ ] Image published (`asia-southeast1` for production,
       `europe-west4` for staging — see `DEPLOYMENT_READINESS_V1.md` §3 for
       the known region mismatch).

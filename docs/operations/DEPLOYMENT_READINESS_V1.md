@@ -278,19 +278,36 @@ machine-readable JSON summary.
 
 ## 12. Deployment order, rollback, and backups
 
-**Deploys do not happen automatically on merge.** Every Railway service in
-this project (`town-api`, `town-api-staging`, `town-public`,
-`town-public-staging`) is gated by a `watchPatterns` build filter that only
-matches `/.railway/manual-release-only/**`, so an ordinary push to `main`
-is silently skipped by Railway (visible in the dashboard/API as a `SKIPPED`
-deployment for that commit). A human (or an automation calling the Railway
-API) must explicitly trigger a fresh deployment after every merge for the
-change to actually go live. This has caused real incidents in this project:
-merged PRs sitting live-in-git-but-not-live-in-production for hours until
-someone noticed and triggered a manual deploy. Do not assume "merged" means
-"live" — check `GET /health/build` (`commitSha`) against the merge commit,
-or check the Railway deployment list, before telling anyone a change has
-shipped.
+**Deploys are triggered by CI on merge to `main`**, via the `deploy-staging`
+and `deploy-production` jobs in `.github/workflows/ci.yml`. They run
+`railway up --service <name>` in attached mode (not `--ci`), which blocks
+until the deployment reaches a terminal status and exits non-zero on
+failure — a real CI gate, not a fire-and-forget trigger. `deploy-production`
+`needs: deploy-staging`, so production only deploys after staging succeeds.
+
+This deliberately does not rely on Railway's own "auto-deploy from GitHub"
+feature: every Railway service in this project (`town-api`,
+`town-api-staging`, `town-public`, `town-public-staging`) still carries a
+`watchPatterns` build filter that only matches
+`/.railway/manual-release-only/**`, so Railway's own GitHub integration
+silently `SKIPS` ordinary pushes. That filter is left in place intentionally
+as a second safety net; the GitHub Actions jobs push the build via the CLI
+instead of asking Railway to pull from GitHub, which also sidesteps a
+Railway bug this project hit repeatedly where a triggered deploy would
+resolve to a stale prior snapshot instead of the latest commit.
+
+**Requires `RAILWAY_TOKEN` configured as a GitHub Environment secret** (via
+repo Settings → Environments → `staging` / `production`) in both
+`michaeltofan/town-api` and `michaeltofan/town-public`, using a Railway
+[project token](https://docs.railway.com/integrations/api#project-token)
+scoped to that environment (one token per environment, reusable across both
+repos since project tokens are environment-scoped, not service-scoped). If
+this secret is missing, the deploy jobs fail loudly (not silently) and the
+manual fallback still works: trigger "Deploy Latest Commit" from the Railway
+dashboard, then confirm `GET /health/build` (`commitSha`) matches the merge
+commit before telling anyone a change has shipped. Optionally, add required
+reviewers to the `production` GitHub Environment for a manual approval gate
+before production deploys — not configured by default.
 
 Order for staging or production deployment:
 
@@ -299,8 +316,8 @@ Order for staging or production deployment:
    Railway Git deployments, `RAILWAY_GIT_COMMIT_SHA` is injected at runtime.
    For CI or non-Git deploy mechanisms, set `APP_COMMIT_SHA` to the merge
    commit SHA explicitly. If both are present they must match.
-3. Trigger the deployment (manual step — see above) and confirm it targets
-   the merge commit, not a stale snapshot.
+3. CI triggers the deployment (`deploy-staging` / `deploy-production` job)
+   and blocks on its real terminal status — see above.
 4. Run `npm run db:migrate:production` (or `node dist/scripts/db-migrate.js`)
    against the target database from a controlled one-off release step. Fail
    deploy if this fails. Do not run migrations from the persistent API

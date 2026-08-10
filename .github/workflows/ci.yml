@@ -202,3 +202,52 @@ jobs:
 
       - name: npm audit omit dev
         run: npm audit --omit=dev
+
+  deploy-staging:
+    name: Deploy to staging (Railway)
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    concurrency:
+      group: deploy-town-api-staging
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy town-api-staging
+        # Deliberately not using --ci: attached mode blocks until the
+        # deployment reaches a terminal status and exits non-zero on
+        # failure (build failure, migration failure, or failed healthcheck).
+        # This is what makes the job an honest CI gate instead of a
+        # fire-and-forget trigger.
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service town-api-staging
+
+  deploy-production:
+    name: Deploy to production (Railway)
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: deploy-town-api-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy town-api (production)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service town-api
