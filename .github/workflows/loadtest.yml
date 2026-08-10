@@ -1,0 +1,23 @@
+name: Staging capacity test
+
+# Manual only. Never runs on push or pull_request — a load test has no
+# business firing automatically against staging on every commit.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  k6-staging:
+    name: k6 staging capacity test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Staging capacity test
+        run: k6 run loadtest/staging-capacity.js
+        env:
+          BASE_URL: https://api-staging.towncivic.org
