@@ -39,13 +39,22 @@ Current repository journal (authoritative for pre-flight checks): 22 entries
 
 ## 3. Target environments
 
-The API is deployed to the Amsterdam region on PostgreSQL 18 in two runtime
-environments:
+**Both environments are live** (verified against real Railway deployments and
+live HTTP traffic, last confirmed 2026-08-10). PostgreSQL 18 in both.
 
-| APP_ENV      | Public URL                          | Notes                                                                                                                                    |
-| ------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `staging`    | `https://api-staging.towncivic.org` | **Current live target.** Stripe test mode. Public site `towncivic.org` talks to this API.                                                |
-| `production` | `https://api.towncivic.org`         | **Not provisioned yet** (DNS/service absent). Do not run production smoke until it exists. Stripe live mode required if billing enabled. |
+| APP_ENV      | Public URL                          | Region                        | Notes                                                                                                  |
+| ------------ | ------------------------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `staging`    | `https://api-staging.towncivic.org` | `europe-west4` (Netherlands)  | Stripe test mode. Staging public site talks to this API.                                                |
+| `production` | `https://api.towncivic.org`         | `asia-southeast1` (Singapore) | **Live.** Public site `towncivic.org` talks to this API. Stripe live mode required if billing enabled.  |
+
+**Known region mismatch:** production runs in `asia-southeast1` (Singapore)
+while staging runs in `europe-west4` (Netherlands). TOWN's entire community
+catalog is European cities (Italy, Germany, Romania, Austria, France,
+Hungary, Spain); production being in Asia while staging is in Europe means
+staging latency is not representative of what European users experience in
+production. This was not a deliberate documented choice; treat it as an open
+operational item, not an intentional design. Confirm with the platform admin
+whether production should move to a European region.
 
 `APP_ENV` should be authoritative for environment policy. Prefer gating
 production-only rules on `APP_ENV === 'production'`; do not treat
@@ -269,6 +278,20 @@ machine-readable JSON summary.
 
 ## 12. Deployment order, rollback, and backups
 
+**Deploys do not happen automatically on merge.** Every Railway service in
+this project (`town-api`, `town-api-staging`, `town-public`,
+`town-public-staging`) is gated by a `watchPatterns` build filter that only
+matches `/.railway/manual-release-only/**`, so an ordinary push to `main`
+is silently skipped by Railway (visible in the dashboard/API as a `SKIPPED`
+deployment for that commit). A human (or an automation calling the Railway
+API) must explicitly trigger a fresh deployment after every merge for the
+change to actually go live. This has caused real incidents in this project:
+merged PRs sitting live-in-git-but-not-live-in-production for hours until
+someone noticed and triggered a manual deploy. Do not assume "merged" means
+"live" — check `GET /health/build` (`commitSha`) against the merge commit,
+or check the Railway deployment list, before telling anyone a change has
+shipped.
+
 Order for staging or production deployment:
 
 1. Merge to `main`.
@@ -276,7 +299,8 @@ Order for staging or production deployment:
    Railway Git deployments, `RAILWAY_GIT_COMMIT_SHA` is injected at runtime.
    For CI or non-Git deploy mechanisms, set `APP_COMMIT_SHA` to the merge
    commit SHA explicitly. If both are present they must match.
-3. Publish to the platform (Amsterdam region).
+3. Trigger the deployment (manual step — see above) and confirm it targets
+   the merge commit, not a stale snapshot.
 4. Run `npm run db:migrate:production` (or `node dist/scripts/db-migrate.js`)
    against the target database from a controlled one-off release step. Fail
    deploy if this fails. Do not run migrations from the persistent API

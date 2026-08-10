@@ -33,10 +33,14 @@ Recent `main` themes: health redaction + production security headers; `APP_ENV` 
 
 Recent `main` themes: member-local HOME + explore zone + invite trust; security headers / www redirect; staging API isolation; production API cutover; first-member staging proof; Etapa 3 journey.
 
-### Known docs tension
+### Known docs tension — reconciled 2026-08-10
 
-`town-public` README claims production API cutover + first real €12 payment proven.  
-`town-api` `DEPLOYMENT_READINESS_V1.md` still says production is not provisioned and staging is the current target. Treat **runtime + OpenAPI + this canonical contract** as authority when narrative docs disagree; reconcile deploy docs separately.
+`town-api` `DEPLOYMENT_READINESS_V1.md` previously said production was not
+provisioned and staging was the current target; this was stale and has been
+corrected to match this canonical contract (production live at
+`api.towncivic.org`, staging at `api-staging.towncivic.org`, region mismatch
+between the two documented). Treat **runtime + OpenAPI + this canonical
+contract** as authority when any narrative doc disagrees.
 
 ---
 

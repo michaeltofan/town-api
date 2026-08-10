@@ -32,7 +32,13 @@ production deployment.
 
 - [ ] Container image built from Node.js 24 with production dependencies
       only.
-- [ ] Image published (Amsterdam region).
+- [ ] **Deployment manually triggered.** Merging to `main` does NOT deploy by
+      itself (`watchPatterns` gates auto-deploy on every service in this
+      project). Confirm the triggered build resolved to the merge commit —
+      not a stale snapshot — before continuing.
+- [ ] Image published (`asia-southeast1` for production,
+      `europe-west4` for staging — see `DEPLOYMENT_READINESS_V1.md` §3 for
+      the known region mismatch).
 - [ ] `npm run db:migrate:production` (or `node dist/scripts/db-migrate.js`)
       run from a controlled one-off release step (advisory lock acquired).
       Not from persistent API startup.
@@ -47,8 +53,9 @@ production deployment.
 
 - [ ] `npm run smoke:deployment -- --base-url https://api-staging.towncivic.org \
  --environment staging --expect-commit <sha> --auth-enabled false` passes.
-- [ ] Production smoke (`https://api.towncivic.org`) only after that host is
-      provisioned. Skip while production DNS/service is absent.
+- [ ] `npm run smoke:deployment -- --base-url https://api.towncivic.org \
+ --environment production --expect-commit <sha>` passes. Production
+      (`api.towncivic.org`) has been live since 2026-08. Do not skip this step.
 - [ ] Unauthorized routes still return `401` when auth is enabled, or `404`
       when `--auth-enabled false`.
 - [ ] Invalid Stripe webhook signatures on `POST /v1/billing/stripe/webhook`
