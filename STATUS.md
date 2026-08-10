@@ -31,19 +31,45 @@ readiness follow-through).
   opens/closes a GitHub issue (label `automated-health-alert`) instead of
   relying on someone remembering to look at a dashboard. PR #114.
 
-## In place but not yet functional — needs one human step
+## CI-driven auto-deploy — now working, verified end-to-end
 
-- **CI-driven auto-deploy** (`deploy-staging` / `deploy-production` jobs in
-  `ci.yml`, both `town-api` and `town-public`): the code is on `main`, but it
-  needs a `RAILWAY_TOKEN` GitHub Environment secret (Settings → Environments
-  → `staging` / `production`, both repos) using a Railway project token. No
-  tool available to this session can mint that token — Railway doesn't expose
-  token creation over the API, only the dashboard (Account/Project Settings →
-  Tokens). Until it's added, these jobs fail loudly on every merge to `main`
-  (by design — not a silent no-op) and the manual "Deploy Latest Commit" in
-  the Railway dashboard remains the fallback.
-  - **Action needed from you:** create the token, add it as `RAILWAY_TOKEN`
-    in both environments in both repos.
+`RAILWAY_TOKEN` is configured in both `staging` and `production` GitHub
+Environments, both repos. Two real bugs found and fixed while verifying this
+(not assumed — actually triggered deploys and read the logs):
+
+1. **Token was empty on first attempt** (`Invalid RAILWAY_TOKEN` in the CI
+   log) — regenerated and re-added, confirmed working.
+2. **Every service's `watchPatterns` build filter
+   (`/.railway/manual-release-only/**`) was silently SKIPPING every deploy**,
+including CLI-triggered ones — contradicting the assumption in PR #113
+that `railway up`sidesteps it. Cleared`watchPatterns`on all 4 services
+(town-api, town-api-staging, town-public, town-public-staging) with your
+explicit go-ahead. Confirmed via Railway deployment records: builds now
+actually run instead of showing`SKIPPED`.
+
+**Verified live right now** (checked deploy logs directly, not just CI
+green): `api.towncivic.org` and `api-staging.towncivic.org` are both running
+commit `095bd7e3` with `/health/ready` returning `200`. `town-public`'s
+full CI-gated pipeline (staging → production) ran end-to-end successfully.
+
+**Open decision, not yet resolved:** clearing `watchPatterns` also
+re-enabled Railway's own _native_ GitHub auto-deploy (separate from our
+CI-gated `railway up` jobs), which fires immediately on push — it does not
+wait for our `ci.yml` quality job. In practice this means a push to `main`
+can deploy before CI has finished, and our CI-gated deploy job then runs
+redundantly a moment later (observed one redundant deploy get discarded
+automatically by Railway's zero-downtime rollout when it failed its
+healthcheck — no outage, but it's wasted work and defeats the "wait for CI"
+point of the pipeline). Two ways to resolve, need your call:
+
+- Disable Railway's native "deploy on push" for these 4 services (dashboard
+  setting, not exposed via the tools available this session), keeping only
+  the CI-gated `railway up` jobs — restores the original "CI gates deploy"
+  intent.
+- Or drop the CI-gated deploy jobs from `ci.yml`/`e2e.yml` and rely on
+  Railway's native auto-deploy, keeping CI as a required PR check before
+  merge (already true) as the actual gate — simpler, one mechanism instead
+  of two.
 
 ## Not done — explicitly, not silently
 
