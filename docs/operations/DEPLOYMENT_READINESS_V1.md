@@ -43,9 +43,9 @@ Current repository journal (authoritative for pre-flight checks): 22 entries
 live HTTP traffic, last confirmed 2026-08-10). PostgreSQL 18 in both.
 
 | APP_ENV      | Public URL                          | Region                        | Notes                                                                                                  |
-| ------------ | ------------------------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `staging`    | `https://api-staging.towncivic.org` | `europe-west4` (Netherlands)  | Stripe test mode. Staging public site talks to this API.                                                |
-| `production` | `https://api.towncivic.org`         | `asia-southeast1` (Singapore) | **Live.** Public site `towncivic.org` talks to this API. Stripe live mode required if billing enabled.  |
+| ------------ | ----------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `staging`    | `https://api-staging.towncivic.org` | `europe-west4` (Netherlands)  | Stripe test mode. Staging public site talks to this API.                                               |
+| `production` | `https://api.towncivic.org`         | `asia-southeast1` (Singapore) | **Live.** Public site `towncivic.org` talks to this API. Stripe live mode required if billing enabled. |
 
 **Known region mismatch:** production runs in `asia-southeast1` (Singapore)
 while staging runs in `europe-west4` (Netherlands). TOWN's entire community
