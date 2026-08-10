@@ -522,6 +522,99 @@ describe('staging seed runner integration', () => {
     }
   });
 
+  it('completes a canonical subset even when unrelated real activity already exists', async () => {
+    await seedPriorExactCanonicalSubset();
+
+    const activityDb = createDatabase({
+      connectionString: databaseUrl,
+      poolMax: 2,
+      connectionTimeoutMs: 3000,
+      idleTimeoutMs: 1000,
+    });
+    try {
+      // Organic staging activity unrelated to the communities/signals
+      // catalog: real civic actors and a real signal confirmation.
+      // seedFoundationContent and seedControlledActor never read or mutate
+      // these rows, so their presence must not block completing the subset.
+      await activityDb.db.insert(actors).values([
+        {
+          id: '00000000-0000-4000-8000-000000000901',
+          kind: 'civic',
+          status: 'active',
+          displayLabel: 'Real staging member 1',
+          communityId: FOUNDATION_COMMUNITY_IDS.milanoIt,
+          accountId: null,
+          createdAt: '2026-08-01T08:00:00.000Z',
+          updatedAt: '2026-08-01T08:00:00.000Z',
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000902',
+          kind: 'civic',
+          status: 'active',
+          displayLabel: 'Real staging member 2',
+          communityId: FOUNDATION_COMMUNITY_IDS.munichDe,
+          accountId: null,
+          createdAt: '2026-08-01T08:00:00.000Z',
+          updatedAt: '2026-08-01T08:00:00.000Z',
+        },
+      ]);
+      await activityDb.db.insert(signalConfirmations).values({
+        id: '00000000-0000-4000-8000-000000000601',
+        signalId: FOUNDATION_SIGNAL_IDS.munichSignal1,
+        actorId: '00000000-0000-4000-8000-000000000902',
+        confirmedAt: '2026-08-01T09:00:00.000Z',
+        createdAt: '2026-08-01T09:00:00.000Z',
+      });
+    } finally {
+      await activityDb.close();
+    }
+
+    expect(await readCounts()).toEqual({
+      communities: 17,
+      signals: 51,
+      actors: 3,
+      controlledActors: 1,
+      confirmations: 1,
+    });
+
+    const result = await runStagingSeed({ env: stagingEnv });
+    expect(result.outcome).toBe('completed_subset');
+    expect(result.counts).toEqual({
+      communities: 22,
+      signals: 66,
+      actors: 3,
+      controlledActors: 1,
+      confirmations: 1,
+    });
+
+    const verify = createDatabase({
+      connectionString: databaseUrl,
+      poolMax: 2,
+      connectionTimeoutMs: 3000,
+      idleTimeoutMs: 1000,
+    });
+    try {
+      const realActor = await verify.db
+        .select()
+        .from(actors)
+        .where(eq(actors.id, '00000000-0000-4000-8000-000000000902'));
+      expect(realActor).toHaveLength(1);
+      expect(realActor[0]?.communityId).toBe(FOUNDATION_COMMUNITY_IDS.munichDe);
+      const confirmation = await verify.db
+        .select()
+        .from(signalConfirmations)
+        .where(eq(signalConfirmations.id, '00000000-0000-4000-8000-000000000601'));
+      expect(confirmation).toHaveLength(1);
+      const madrid = await verify.db
+        .select()
+        .from(communities)
+        .where(eq(communities.id, FOUNDATION_COMMUNITY_IDS.madridEs));
+      expect(madrid).toHaveLength(1);
+    } finally {
+      await verify.close();
+    }
+  });
+
   it('refuses a prior-canonical subset when a present row has drifted content', async () => {
     await seedPriorExactCanonicalSubset();
     const database = createDatabase({

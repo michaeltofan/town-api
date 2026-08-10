@@ -335,15 +335,6 @@ async function presentRowsExactCanonicalSubset(db: Db): Promise<boolean> {
 async function assessBaseline(db: Db): Promise<BaselineAssessment> {
   const counts = await readCounts(db);
 
-  if (counts.confirmations > 0) {
-    return {
-      kind: 'refuse',
-      refuseCode: 'PREFLIGHT_CONFIRMATIONS_PRESENT',
-      refuseReason: 'signal_confirmations_must_be_zero',
-      counts,
-    };
-  }
-
   const controlledRows = await db
     .select()
     .from(actors)
@@ -393,6 +384,48 @@ async function assessBaseline(db: Db): Promise<BaselineAssessment> {
     };
   }
 
+  // Communities/signals row counts beyond the manifest size always indicate
+  // corruption, regardless of unrelated actor/confirmation activity.
+  if (counts.communities > EXPECTED_COMMUNITY_COUNT || counts.signals > EXPECTED_SIGNAL_COUNT) {
+    return {
+      kind: 'refuse',
+      refuseCode: 'PREFLIGHT_UNEXPECTED_ROWS',
+      refuseReason: 'unexpected_rows_prevent_exact_invariants',
+      counts,
+    };
+  }
+
+  // Growing-catalog completion: every present canonical community/signal row
+  // matches the manifest exactly and the manifest has entries not yet
+  // present. seedFoundationContent/seedControlledActor only ever insert new
+  // canonical rows or upsert-in-place existing canonical rows by fixed ID —
+  // they never read or mutate any actor row besides the single controlled
+  // test actor, and never touch signal_confirmations at all. Organic activity
+  // accumulated on staging (real actors, real confirmations) is therefore
+  // provably safe to leave untouched and must not block adding new
+  // communities/signals to the catalog.
+  if (await presentRowsExactCanonicalSubset(db)) {
+    return { kind: 'canonical_subset', counts };
+  }
+
+  if (counts.confirmations > 0) {
+    return {
+      kind: 'refuse',
+      refuseCode: 'PREFLIGHT_CONFIRMATIONS_PRESENT',
+      refuseReason: 'signal_confirmations_must_be_zero',
+      counts,
+    };
+  }
+
+  if (counts.actors > 1) {
+    return {
+      kind: 'refuse',
+      refuseCode: 'PREFLIGHT_UNEXPECTED_ROWS',
+      refuseReason: 'unexpected_rows_prevent_exact_invariants',
+      counts,
+    };
+  }
+
   // Unexpected extras or incomplete subsets — never truncate/repair.
   const hasAnyCanonicalCommunity = await db
     .select({ value: count() })
@@ -405,25 +438,6 @@ async function assessBaseline(db: Db): Promise<BaselineAssessment> {
   const canonicalCommunityPresent = (hasAnyCanonicalCommunity[0]?.value ?? 0) > 0;
   const canonicalSignalPresent = (hasAnyCanonicalSignal[0]?.value ?? 0) > 0;
   const controlledPresent = counts.controlledActors > 0;
-
-  if (
-    counts.communities > EXPECTED_COMMUNITY_COUNT ||
-    counts.signals > EXPECTED_SIGNAL_COUNT ||
-    counts.actors > 1
-  ) {
-    return {
-      kind: 'refuse',
-      refuseCode: 'PREFLIGHT_UNEXPECTED_ROWS',
-      refuseReason: 'unexpected_rows_prevent_exact_invariants',
-      counts,
-    };
-  }
-
-  // Prior exact-canonical staging baseline (e.g. 2/6) with an expanded
-  // manifest (e.g. 3/9): every present row matches, missing rows may be added.
-  if (await presentRowsExactCanonicalSubset(db)) {
-    return { kind: 'canonical_subset', counts };
-  }
 
   if (canonicalCommunityPresent || canonicalSignalPresent || controlledPresent) {
     return {
@@ -442,7 +456,10 @@ async function assessBaseline(db: Db): Promise<BaselineAssessment> {
   };
 }
 
-async function assertPostInvariants(db: Db): Promise<StagingSeedResult['counts']> {
+async function assertPostInvariants(
+  db: Db,
+  baselineCounts: StagingSeedResult['counts'],
+): Promise<StagingSeedResult['counts']> {
   const counts = await readCounts(db);
   const communitiesOk = await communitiesMatchCanonical(db);
   const signalsOk = await signalsMatchCanonical(db);
@@ -493,12 +510,21 @@ async function assertPostInvariants(db: Db): Promise<StagingSeedResult['counts']
     return communitySignals.some((row) => row.id === id);
   });
 
+  // seedControlledActor only ever inserts the single fixed-ID controlled
+  // actor when it was missing and upserts it in place otherwise — it never
+  // touches any other actor row. The mutation never touches
+  // signal_confirmations. So the only actor-count change a correct run can
+  // produce is gaining exactly the controlled actor if it did not already
+  // exist; every other actor and every confirmation must pass through
+  // unchanged from whatever was present before the mutation.
+  const expectedActors = baselineCounts.actors + (baselineCounts.controlledActors === 0 ? 1 : 0);
+
   if (
     counts.communities !== EXPECTED_COMMUNITY_COUNT ||
     counts.signals !== EXPECTED_SIGNAL_COUNT ||
-    counts.actors !== 1 ||
+    counts.actors !== expectedActors ||
     counts.controlledActors !== 1 ||
-    counts.confirmations !== 0 ||
+    counts.confirmations !== baselineCounts.confirmations ||
     !communitiesOk ||
     !signalsOk ||
     !actorOk ||
@@ -569,7 +595,7 @@ export async function runStagingSeed(
     }
 
     if (baseline.kind === 'exact') {
-      const counts = await assertPostInvariants(db);
+      const counts = await assertPostInvariants(db, baseline.counts);
       logEvent('postcheck', 'ok', { ...counts, outcome: 'already_canonical' });
       logEvent('complete', 'ok', { outcome: 'already_canonical', ...counts });
       return { outcome: 'already_canonical', counts };
@@ -589,7 +615,7 @@ export async function runStagingSeed(
       if (options.injectFailureAfterMutation === true) {
         throw new StagingSeedError('INJECTED_FAILURE', 'Injected failure after mutation');
       }
-      return await assertPostInvariants(txDb);
+      return await assertPostInvariants(txDb, baseline.counts);
     });
 
     const outcome: StagingSeedOutcome =
