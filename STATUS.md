@@ -52,24 +52,20 @@ green): `api.towncivic.org` and `api-staging.towncivic.org` are both running
 commit `095bd7e3` with `/health/ready` returning `200`. `town-public`'s
 full CI-gated pipeline (staging → production) ran end-to-end successfully.
 
-**Open decision, not yet resolved:** clearing `watchPatterns` also
+**Decided, one manual click still needed:** clearing `watchPatterns` also
 re-enabled Railway's own _native_ GitHub auto-deploy (separate from our
-CI-gated `railway up` jobs), which fires immediately on push — it does not
-wait for our `ci.yml` quality job. In practice this means a push to `main`
-can deploy before CI has finished, and our CI-gated deploy job then runs
-redundantly a moment later (observed one redundant deploy get discarded
-automatically by Railway's zero-downtime rollout when it failed its
-healthcheck — no outage, but it's wasted work and defeats the "wait for CI"
-point of the pipeline). Two ways to resolve, need your call:
+CI-gated `railway up` jobs), which fires immediately on push and does not
+wait for our `ci.yml` quality job — observed one redundant deploy get
+discarded automatically by Railway's zero-downtime rollout when it failed
+its healthcheck (no outage, just wasted work). Decision: keep only the
+CI-gated pipeline.
 
-- Disable Railway's native "deploy on push" for these 4 services (dashboard
-  setting, not exposed via the tools available this session), keeping only
-  the CI-gated `railway up` jobs — restores the original "CI gates deploy"
-  intent.
-- Or drop the CI-gated deploy jobs from `ci.yml`/`e2e.yml` and rely on
-  Railway's native auto-deploy, keeping CI as a required PR check before
-  merge (already true) as the actual gate — simpler, one mechanism instead
-  of two.
+- **Action needed from you:** for each of the 4 services (town-api,
+  town-api-staging, town-public, town-public-staging) — Service → Settings →
+  Source (GitHub) → click **Disable** on automatic deployments. Not exposed
+  via any tool available to this session; it's a one-click dashboard toggle.
+  Once disabled, the only thing that deploys is the CI-gated `railway up`
+  job after `ci.yml`/`e2e.yml`'s quality job passes.
 
 ## Not done — explicitly, not silently
 
