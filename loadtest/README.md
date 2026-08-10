@@ -66,3 +66,25 @@ currently identical single-replica config — see
 `docs/operations/DEPLOYMENT_READINESS_V1.md` §3), and it is not evidence
 about write-heavy load (confirmations/proposals/votes), which this version
 does not exercise.
+
+## Results
+
+**2026-08-10, first real run** ([workflow run #1](https://github.com/michaeltofan/town-api/actions/runs/31431253708)),
+ramping 0→100 VUs over 1 minute, holding 100 for 2 minutes, ramping down over
+30s (3m30s total), plus a continuous `/health/ready` probe:
+
+| Metric | Result |
+| --- | --- |
+| Total requests | 10,591 (49.66 req/s average) |
+| Failed requests | 0 (`http_req_failed` = 0.00%, threshold was `<1%`) |
+| Completed iterations | 4,594 full browse-feed journeys, 0 interrupted |
+| `community_signals` p95 | 296.64ms (threshold `<800ms`) |
+| `signal_detail` p95 | 281.24ms (threshold `<500ms`) |
+| `civic_process` p95 | 272.7ms (threshold `<500ms`) |
+| `/health/ready` under load | Stayed `200` for the full 3m30s — never flipped to `503` |
+
+All k6 thresholds passed; exit code was clean. Staging's current
+single-replica deployment handled ~100 concurrent readers without shedding
+requests or degrading readiness. This is evidence for read capacity only —
+see the Scope section above for what it does not cover (writes, auth,
+production's identically-sized replica count under real user load).
