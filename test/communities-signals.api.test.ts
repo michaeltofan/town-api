@@ -52,7 +52,7 @@ describe('communities and signals API', () => {
     expect(response.headers['content-type']).toMatch(/^application\/json/);
 
     const body = response.json<{ data: Record<string, unknown>[] }>();
-    expect(body.data).toHaveLength(17);
+    expect(body.data).toHaveLength(22);
     expect(body.data[0]).toEqual({
       id: milano.id,
       slug: 'milano-it',
