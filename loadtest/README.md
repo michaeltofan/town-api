@@ -74,7 +74,7 @@ ramping 0→100 VUs over 1 minute, holding 100 for 2 minutes, ramping down over
 30s (3m30s total), plus a continuous `/health/ready` probe:
 
 | Metric                     | Result                                                   |
-| --------------------------- | ----------------------------------------------------------- |
+| -------------------------- | -------------------------------------------------------- |
 | Total requests             | 10,591 (49.66 req/s average)                             |
 | Failed requests            | 0 (`http_req_failed` = 0.00%, threshold was `<1%`)       |
 | Completed iterations       | 4,594 full browse-feed journeys, 0 interrupted           |
