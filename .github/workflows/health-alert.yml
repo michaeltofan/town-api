@@ -1,0 +1,126 @@
+name: Health alert
+
+# Runs on a schedule, independent of deploys or pushes. This is the loud
+# alarm that DEPLOYMENT_READINESS_V1.md's passive /health/ready and
+# /v1/platform/status previously lacked: nobody was notified automatically
+# when either went unhealthy. This workflow checks the public, unauthenticated
+# probes (/health/live, /health/ready) for both environments and opens/updates
+# a tracking issue the moment either fails, then closes it on recovery.
+#
+# It deliberately does NOT call /v1/platform/status: that route requires an
+# authenticated ops_admin session, and storing an operator credential in a
+# GitHub secret just to poll it would trade one risk for another. Component
+# detail (config/database/migrations) is still visible to a human operator
+# in the platform console; this workflow only proves the outside world can
+# reach the service and get a healthy response.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    name: Check production + staging health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe health endpoints
+        id: probe
+        run: |
+          set +e
+          failures=""
+
+          check() {
+            local label="$1" url="$2"
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url")
+            if [ "$code" != "200" ]; then
+              echo "FAIL: $label ($url) -> HTTP $code"
+              failures="${failures}- **${label}** (\`${url}\`) returned HTTP ${code}\n"
+            else
+              echo "OK: $label ($url) -> HTTP $code"
+            fi
+          }
+
+          check "production /health/live" "https://api.towncivic.org/health/live"
+          check "production /health/ready" "https://api.towncivic.org/health/ready"
+          check "staging /health/live" "https://api-staging.towncivic.org/health/live"
+          check "staging /health/ready" "https://api-staging.towncivic.org/health/ready"
+
+          {
+            echo "failures<<EOF"
+            echo -e "$failures"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ -n "$failures" ]; then
+            echo "unhealthy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "unhealthy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update incident issue
+        if: steps.probe.outputs.unhealthy == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const failures = `${{ steps.probe.outputs.failures }}`;
+            const title = 'Automated health alert: town-api unhealthy';
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automated-health-alert',
+            });
+            const body = [
+              'Automated health check failed at ' + new Date().toISOString() + '.',
+              '',
+              failures,
+              '',
+              'This issue is updated on every failing run and closed automatically once both environments report healthy again. Workflow: `.github/workflows/health-alert.yml`.',
+            ].join('\n');
+            if (existing.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing[0].number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['automated-health-alert'],
+              });
+            }
+
+      - name: Close incident issue on recovery
+        if: steps.probe.outputs.unhealthy == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automated-health-alert',
+            });
+            for (const issue of existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: 'Both environments reported healthy at ' + new Date().toISOString() + '. Closing.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+            }
