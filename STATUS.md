@@ -41,11 +41,11 @@ Environments, both repos. Two real bugs found and fixed while verifying this
    log) — regenerated and re-added, confirmed working.
 2. **Every service's `watchPatterns` build filter
    (`/.railway/manual-release-only/**`) was silently SKIPPING every deploy**,
-   including CLI-triggered ones — contradicting the assumption in PR #113
-   that `railway up`sidesteps it. Cleared`watchPatterns`on all 4 services
-   (town-api, town-api-staging, town-public, town-public-staging) with your
-   explicit go-ahead. Confirmed via Railway deployment records: builds now
-   actually run instead of showing`SKIPPED`.
+including CLI-triggered ones — contradicting the assumption in PR #113
+that `railway up`sidesteps it. Cleared`watchPatterns`on all 4 services
+(town-api, town-api-staging, town-public, town-public-staging) with your
+explicit go-ahead. Confirmed via Railway deployment records: builds now
+actually run instead of showing`SKIPPED`.
 
 **Verified live right now** (checked deploy logs directly, not just CI
 green): `api.towncivic.org` and `api-staging.towncivic.org` are both running
@@ -68,7 +68,6 @@ CI-gated pipeline.
   human verification rather than a completed claim. Once all four toggles
   are disabled, only the CI-gated `railway up` jobs deploy after the
   `ci.yml`/`e2e.yml` quality jobs pass.
-
 
 ## Not done — explicitly, not silently
 
