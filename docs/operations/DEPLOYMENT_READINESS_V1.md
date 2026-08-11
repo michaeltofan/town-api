@@ -298,16 +298,21 @@ until the deployment reaches a terminal status and exits non-zero on
 failure — a real CI gate, not a fire-and-forget trigger. `deploy-production`
 `needs: deploy-staging`, so production only deploys after staging succeeds.
 
-This deliberately does not rely on Railway's own "auto-deploy from GitHub"
-feature: every Railway service in this project (`town-api`,
-`town-api-staging`, `town-public`, `town-public-staging`) still carries a
-`watchPatterns` build filter that only matches
-`/.railway/manual-release-only/**`, so Railway's own GitHub integration
-silently `SKIPS` ordinary pushes. That filter is left in place intentionally
-as a second safety net; the GitHub Actions jobs push the build via the CLI
-instead of asking Railway to pull from GitHub, which also sidesteps a
-Railway bug this project hit repeatedly where a triggered deploy would
-resolve to a stale prior snapshot instead of the latest commit.
+This deliberately must not rely on Railway's own "auto-deploy from GitHub"
+feature. On 2026-08-10, the `watchPatterns` filters were cleared from all four
+Railway services (`town-api`, `town-api-staging`, `town-public`,
+`town-public-staging`) after direct deployment evidence showed that the
+filters also caused the CI-triggered `railway up` deployments to be skipped.
+The filters are therefore **not** a current safety control.
+
+Clearing `watchPatterns` re-enabled the possibility of Railway native
+GitHub auto-deploys, which can race with the CI-gated pipeline and create
+redundant deployments. The intended configuration is to disable Railway
+native automatic deployments for all four services in the dashboard, leaving
+the GitHub Actions `railway up` jobs as the only deployment trigger. The
+native auto-deploy toggle is not exposed by the available read-only tooling;
+until its disabled state is verified directly in the dashboard, treat this as
+an open human verification step rather than a completed control.
 
 **Requires `RAILWAY_TOKEN` configured as a GitHub Environment secret** (via
 repo Settings → Environments → `staging` / `production`) in both

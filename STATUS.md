@@ -60,12 +60,14 @@ discarded automatically by Railway's zero-downtime rollout when it failed
 its healthcheck (no outage, just wasted work). Decision: keep only the
 CI-gated pipeline.
 
-- **Action needed from you:** for each of the 4 services (town-api,
-  town-api-staging, town-public, town-public-staging) — Service → Settings →
-  Source (GitHub) → click **Disable** on automatic deployments. Not exposed
-  via any tool available to this session; it's a one-click dashboard toggle.
-  Once disabled, the only thing that deploys is the CI-gated `railway up`
-  job after `ci.yml`/`e2e.yml`'s quality job passes.
+- **Action needed from you:** verify in the Railway dashboard that automatic
+  deployments are **Disabled** for each of the 4 services (`town-api`,
+  `town-api-staging`, `town-public`, `town-public-staging`) under
+  Service → Settings → Source (GitHub). The current toggle state is not
+  exposed by the available read-only tooling, so this remains an explicit
+  human verification rather than a completed claim. Once all four toggles
+  are disabled, only the CI-gated `railway up` jobs deploy after the
+  `ci.yml`/`e2e.yml` quality jobs pass.
 
 ## Not done — explicitly, not silently
 
