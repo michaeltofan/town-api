@@ -220,6 +220,16 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: Set deployment commit identity
+        # `railway up` uploads a local snapshot instead of triggering a
+        # GitHub-linked build, so Railway never injects RAILWAY_GIT_COMMIT_SHA
+        # for this deploy. Per docs/operations/DEPLOYMENT_READINESS_V1.md,
+        # CI/non-Git deploy mechanisms must set APP_COMMIT_SHA explicitly, or
+        # the app refuses to boot (env.ts requires one of the two in staging).
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway variable set "APP_COMMIT_SHA=${{ github.sha }}" --service town-api-staging --skip-deploys
+
       - name: Deploy town-api-staging
         # Deliberately not using --ci: attached mode blocks until the
         # deployment reaches a terminal status and exits non-zero on
@@ -246,6 +256,14 @@ jobs:
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli
+
+      - name: Set deployment commit identity
+        # See the equivalent step in deploy-staging: `railway up` deploys
+        # don't get RAILWAY_GIT_COMMIT_SHA from Railway, so APP_COMMIT_SHA
+        # must be set explicitly or the app refuses to boot.
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway variable set "APP_COMMIT_SHA=${{ github.sha }}" --service town-api --skip-deploys
 
       - name: Deploy town-api (production)
         env:
