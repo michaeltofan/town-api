@@ -41,19 +41,24 @@ jobs:
             exit 0
           fi
           RESPONSE=$(railway api \
-            'query($input: DeploymentListInput!) { deployments(input: $input, first: 2) { edges { node { id status createdAt canRollback } } } }' \
+            'query($input: DeploymentListInput!) { deployments(input: $input, first: 10) { edges { node { id status createdAt canRollback } } } }' \
             --var 'input={"projectId":"8fd67de0-2ed1-4906-bf5a-36207191c613","serviceId":"b8f13b10-4207-4196-a301-3daa1db178af","environmentId":"a7e3d77f-269e-432c-b2e3-c2d777ee668a","status":{"successfulOnly":true}}' \
             --compact)
           echo "$RESPONSE"
+          # Skip index 0 (the current deployment) and take the first
+          # candidate with canRollback=true. Railway prunes deployments to
+          # REMOVED (canRollback=false) fairly quickly, so the deployment
+          # immediately before the current one is not always still
+          # eligible -- confirmed the hard way during a burst of rapid
+          # staging deploys, where index 1 had already been pruned.
           PREV_ID=$(echo "$RESPONSE" | node -e "
             const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             const edges = d.data.deployments.edges;
-            if (edges.length < 2) throw new Error('no previous successful deployment found to roll back to');
-            const prev = edges[1].node;
-            if (prev.canRollback !== true) throw new Error('previous deployment ' + prev.id + ' is not rollback-eligible (canRollback=' + prev.canRollback + ')');
-            console.log(prev.id);
+            const candidate = edges.slice(1).find((edge) => edge.node.canRollback === true);
+            if (!candidate) throw new Error('no rollback-eligible deployment found among the last ' + edges.length + ' successful deployments');
+            console.log(candidate.node.id);
           ")
-          echo "Resolved previous successful deployment: ${PREV_ID}"
+          echo "Resolved rollback-eligible deployment: ${PREV_ID}"
           echo "id=${PREV_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Roll back
