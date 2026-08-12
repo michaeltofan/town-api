@@ -88,6 +88,26 @@ summary line (`outcome`, per-check results, counts) and nothing else.
 - Threshold from the plan: RPO <= 15 minutes, RTO <= 60 minutes, or a new
   accepted threshold recorded here after a real run if those aren't met.
 
+## Credentials
+
+`railway postgres pitr restore` creates a new service, which is an
+account/workspace-level operation, not a project-level one. The Railway CLI
+has two separate, mutually exclusive auth env vars (setting both errors
+out):
+
+- `RAILWAY_TOKEN` -- project-scoped, generated from a project's own tokens
+  page. Sufficient for `railway up` / `railway variable set`, but gets
+  `Unauthorized` on `pitr restore`.
+- `RAILWAY_API_TOKEN` -- account or workspace-scoped, generated from
+  **Account Settings > Tokens** (`railway.com/account/tokens`), not from
+  inside the project. Required for `pitr restore` and `service delete`.
+
+This workflow uses a dedicated `RAILWAY_ACCOUNT_TOKEN` GitHub secret (an
+Account token, "No workspace" scope) passed to the CLI as `RAILWAY_API_TOKEN`
+-- deliberately separate from the `RAILWAY_TOKEN` project token that
+`ci.yml`'s deploy jobs use, so this workflow can't accidentally widen or
+narrow those jobs' credentials.
+
 ## Recording the attestation
 
 The workflow's own operator identity has no passkey session, so it cannot
