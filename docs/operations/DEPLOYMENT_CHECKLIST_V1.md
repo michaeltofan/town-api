@@ -87,10 +87,14 @@ production deployment.
 
 - [ ] Confirm PostgreSQL 18 backup / PITR status with the platform admin and
       record verification in `/platform/` Monitor → Backup (`POST /v1/platform/backup/verify`).
-- [ ] Confirm a restore drill was performed out-of-band (Railway disposable
-      clone / PITR) and record attestation in `/platform/` Monitor → Restore
-      (`POST /v1/platform/restore/attest`). Do not restore into staging/prod
-      from the console.
+- [ ] Confirm a restore drill was performed: run the "Production restore
+      drill" GitHub Actions workflow (`.github/workflows/restore-drill.yml`,
+      see `docs/operations/RESTORE_DRILL_RUNBOOK.md`), which restores
+      production's PITR archive into an isolated, disposable sibling
+      service, validates it, and deletes it -- production is never
+      restored over. Then record attestation in `/platform/` Monitor →
+      Restore (`POST /v1/platform/restore/attest`) using the workflow's
+      printed RPO/RTO. Do not restore into staging/prod from the console.
 - [ ] For support/investigation handoffs, use `/platform/` Investigate →
       Download pack (`GET /v1/platform/accounts/:accountId/export`). Packs
       omit Stripe provider IDs and secrets.

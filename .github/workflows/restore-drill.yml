@@ -1,0 +1,174 @@
+name: Production restore drill
+
+# Etapa 3 (Backup and restore) of the TOWN deployment plan.
+#
+# Restores the production Postgres PITR archive into a brand-new, isolated
+# sibling service, validates data integrity there, then deletes it. Per
+# Railway's PITR design, the source service is never touched and never
+# serves the restored data -- see docs/operations/RESTORE_DRILL_RUNBOOK.md
+# for the full write-up of why this is safe and how to run it by hand.
+
+on:
+  workflow_dispatch:
+    inputs:
+      restore_minutes_ago:
+        description: 'How many minutes before now to target for the restore point (most recent healthy point by default)'
+        required: false
+        type: string
+        default: '3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restore-drill-town-api-production-postgres
+  cancel-in-progress: false
+
+jobs:
+  restore-drill:
+    name: Isolated PITR restore drill (production Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      SOURCE_SERVICE: Postgres-9UWs
+      RAILWAY_PROJECT_ID: 8fd67de0-2ed1-4906-bf5a-36207191c613
+      RAILWAY_ENVIRONMENT: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: PITR status (read-only)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          railway postgres pitr status \
+            --service "$SOURCE_SERVICE" \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT"
+
+      - name: Restore to an isolated sibling service
+        id: restore
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          RESTORE_POINT_AT=$(date -u -d "${{ github.event.inputs.restore_minutes_ago || '3' }} minutes ago" '+%Y-%m-%dT%H:%M:%SZ')
+          DRILL_START=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          NEW_SERVICE_NAME="restore-drill-${{ github.run_id }}"
+          echo "restore_point_at=${RESTORE_POINT_AT}" >> "$GITHUB_OUTPUT"
+          echo "drill_start=${DRILL_START}" >> "$GITHUB_OUTPUT"
+          echo "new_service_name=${NEW_SERVICE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Restoring '${SOURCE_SERVICE}' to ${RESTORE_POINT_AT} as isolated sibling '${NEW_SERVICE_NAME}'"
+          railway postgres pitr restore \
+            --service "$SOURCE_SERVICE" \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT" \
+            --at "$RESTORE_POINT_AT" \
+            --new-service-name "$NEW_SERVICE_NAME" \
+            --yes
+
+      - name: Wait for the isolated instance to accept connections and validate integrity
+        id: validate
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          NEW_SERVICE_NAME: ${{ steps.restore.outputs.new_service_name }}
+        run: |
+          set -euo pipefail
+          READY=""
+          for attempt in $(seq 1 40); do
+            echo "Attempt ${attempt}/40: opening tunnel to ${NEW_SERVICE_NAME}..."
+            rm -f tunnel.out
+            ( railway connect "$NEW_SERVICE_NAME" \
+                --project "$RAILWAY_PROJECT_ID" \
+                --environment "$RAILWAY_ENVIRONMENT" \
+                --tunnel-only > tunnel.out 2>&1 & echo $! > tunnel.pid )
+            for wait_tick in $(seq 1 15); do
+              if grep -qE 'postgres(ql)?://' tunnel.out 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            if grep -qE 'postgres(ql)?://' tunnel.out 2>/dev/null; then
+              CANDIDATE_URL=$(grep -oE 'postgres(ql)?://[^[:space:]]+' tunnel.out | head -1)
+              echo "::add-mask::${CANDIDATE_URL}"
+              if PGCONNECT_TIMEOUT=5 psql "$CANDIDATE_URL" -v ON_ERROR_STOP=1 -tAc 'SELECT 1' > /dev/null 2>&1; then
+                echo "$CANDIDATE_URL" > restored_db_url.secret
+                READY=1
+                break
+              fi
+            fi
+            if [[ -f tunnel.pid ]]; then
+              kill "$(cat tunnel.pid)" 2>/dev/null || true
+              rm -f tunnel.pid
+            fi
+            sleep 15
+          done
+          if [[ -z "$READY" ]]; then
+            echo "::error::Restored instance never became reachable within the wait window"
+            exit 1
+          fi
+          RESTORED_DB_URL=$(cat restored_db_url.secret)
+          echo "::add-mask::${RESTORED_DB_URL}"
+          DATABASE_URL="$RESTORED_DB_URL" npm run restore-drill:validate
+          VALIDATE_EXIT=$?
+          if [[ -f tunnel.pid ]]; then
+            kill "$(cat tunnel.pid)" 2>/dev/null || true
+          fi
+          rm -f restored_db_url.secret tunnel.pid tunnel.out
+          if [[ "$VALIDATE_EXIT" -ne 0 ]]; then
+            echo "outcome=failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "outcome=passed" >> "$GITHUB_OUTPUT"
+
+      - name: Report RPO / RTO and attestation values
+        if: always()
+        env:
+          RESTORE_POINT_AT: ${{ steps.restore.outputs.restore_point_at }}
+          DRILL_START: ${{ steps.restore.outputs.drill_start }}
+          OUTCOME: ${{ steps.validate.outputs.outcome || 'failed' }}
+        run: |
+          set -euo pipefail
+          DRILL_END=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          RPO_SECONDS=$(( $(date -u -d "$DRILL_START" +%s) - $(date -u -d "$RESTORE_POINT_AT" +%s) ))
+          RTO_SECONDS=$(( $(date -u -d "$DRILL_END" +%s) - $(date -u -d "$DRILL_START" +%s) ))
+          echo "restore_point_at=${RESTORE_POINT_AT}"
+          echo "drill_start=${DRILL_START}"
+          echo "drill_end=${DRILL_END}"
+          echo "rpo_seconds=${RPO_SECONDS}"
+          echo "rto_seconds=${RTO_SECONDS}"
+          echo "outcome=${OUTCOME}"
+          echo ""
+          echo "Attestation body for POST /v1/platform/restore/attest (submit with an ops_admin+ operator session):"
+          echo "{\"method\":\"railway_pitr_point_in_time\",\"outcome\":\"${OUTCOME}\",\"restorePointAt\":\"${RESTORE_POINT_AT}\",\"note\":\"drill run ${{ github.run_id }}; RPO=${RPO_SECONDS}s RTO=${RTO_SECONDS}s\"}"
+
+      - name: Delete the isolated restored service (always runs)
+        if: always()
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          NEW_SERVICE_NAME: ${{ steps.restore.outputs.new_service_name }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NEW_SERVICE_NAME:-}" ]]; then
+            echo "No restored service was created; nothing to delete."
+            exit 0
+          fi
+          railway service delete \
+            --service "$NEW_SERVICE_NAME" \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT" \
+            --yes || echo "::warning::Failed to delete ${NEW_SERVICE_NAME} -- delete it manually from the Railway dashboard"
