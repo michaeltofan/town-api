@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_production:
-        description: "Deploy to production (requires explicit GO — leave false to just run tests/staging)"
+        description: 'Deploy to production (requires explicit GO — leave false to just run tests/staging)'
         type: boolean
         default: false
 
