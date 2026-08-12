@@ -71,7 +71,15 @@ production deployment.
 
 ## Rollback
 
-- [ ] Roll back to the previous container image.
+- [ ] Staging: run the `Rollback staging` GitHub Actions workflow
+      (`workflow_dispatch`, no input needed for "previous good deployment").
+      It waits for `/health/ready` and runs `smoke:deployment` before
+      finishing.
+- [ ] Production: no one-click automation; roll back from the Railway
+      dashboard or the `deploymentRollback` API mutation, then run
+      `smoke:deployment` against `https://api.towncivic.org` manually.
+- [ ] Rollback restores the previous container image and its variables, not
+      the database.
 - [ ] Do NOT attempt schema rollback. Author a new forward migration if a
       schema change must be reversed.
 

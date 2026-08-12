@@ -350,7 +350,23 @@ Order for staging or production deployment:
 
 Rollback:
 
-- Revert the platform to the previous container image.
+- Staging: run the `Rollback staging` workflow
+  (`.github/workflows/rollback-staging.yml`, `workflow_dispatch`). With no
+  input it resolves and rolls back to the successful deployment immediately
+  before the current one (via the Railway public API's
+  `deploymentRollback` mutation); pass `deployment_id` to target a specific
+  deployment instead. The job blocks until `/health/ready` returns `200`
+  again, then runs `smoke:deployment` against the rolled-back release before
+  finishing — a rollback that leaves staging unhealthy fails the job.
+- Production: no automated rollback job exists yet (deliberately — a
+  production rollback should stay a deliberate human action, not a
+  one-click automation, until there's real operational experience with the
+  staging version). Roll back the same way from the Railway dashboard
+  (`canRollback` deployments only) or via the same `deploymentRollback`
+  mutation, then verify with `npm run smoke:deployment -- --base-url
+https://api.towncivic.org --environment production`.
+- Revert the platform to the previous container image; rollback restores
+  the image and its variables, not the database.
 - Do NOT roll back migrations automatically. Slice 1 ships no destructive
   down migrations. If a schema rollback is required, it must be authored as
   a new forward migration in a subsequent slice.
