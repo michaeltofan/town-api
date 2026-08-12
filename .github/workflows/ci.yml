@@ -6,6 +6,7 @@ on:
       - main
       - cursor/**
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -242,8 +243,13 @@ jobs:
 
   deploy-production:
     name: Deploy to production (Railway)
-    needs: deploy-staging
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Deliberately NOT triggered by push: production must never start
+    # automatically as a side effect of merging to main. A human triggers
+    # this job explicitly ("Run workflow" in the Actions tab), which also
+    # re-runs `quality` fresh in the same run since workflow_dispatch is
+    # not filtered out of that job's trigger.
+    needs: quality
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
