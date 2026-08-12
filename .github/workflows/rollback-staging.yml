@@ -82,8 +82,12 @@ jobs:
         run: |
           set -euo pipefail
           echo "Rolling back town-api-staging to deployment ${{ steps.target.outputs.id }}"
+          # Confirmed via live schema introspection: deploymentRollback(id: String!)
+          # returns a bare Boolean, not an object -- a selection set like
+          # `{ id status }` on a scalar return is a GraphQL validation error,
+          # which Railway surfaces as HTTP 400 Bad Request.
           RESPONSE=$(railway api \
-            'mutation($id: String!) { deploymentRollback(id: $id) { id status } }' \
+            'mutation($id: String!) { deploymentRollback(id: $id) }' \
             --variables "{\"id\":\"${{ steps.target.outputs.id }}\"}" \
             --allow-errors \
             --compact)
@@ -91,7 +95,7 @@ jobs:
           echo "$RESPONSE" | node -e "
             const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             if (d.errors) throw new Error('GraphQL errors: ' + JSON.stringify(d.errors));
-            if (!d.data || !d.data.deploymentRollback || !d.data.deploymentRollback.id) throw new Error('unexpected response shape: ' + JSON.stringify(d));
+            if (d.data?.deploymentRollback !== true) throw new Error('unexpected response shape: ' + JSON.stringify(d));
           "
 
       - name: Wait for staging to become ready
