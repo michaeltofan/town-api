@@ -55,13 +55,21 @@ jobs:
             --allow-errors \
             --compact)
           echo "$RESPONSE"
-          # Skip index 0 (the current deployment) and take the first SUCCESS
-          # deployment after it with canRollback=true.
+          # Skip index 0 (the current deployment) and take the first
+          # candidate with canRollback=true. Seen against a real response:
+          # Railway reports canRollback=true on deployments whose status
+          # has moved to REMOVED (superseded by a later deploy) -- REMOVED
+          # here means "no longer active", not "not rollback-eligible".
+          # Requiring status === 'SUCCESS' (the previous version of this
+          # check) excluded every real candidate, since the *current*
+          # deployment is the only one still reporting SUCCESS. Only
+          # exclude statuses that were never a good release to begin with.
           PREV_ID=$(echo "$RESPONSE" | node -e "
             const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             if (d.errors) throw new Error('GraphQL errors: ' + JSON.stringify(d.errors));
             const edges = d.data.deployments.edges;
-            const candidate = edges.slice(1).find((edge) => edge.node.status === 'SUCCESS' && edge.node.canRollback === true);
+            const neverGood = new Set(['FAILED', 'CRASHED', 'SKIPPED']);
+            const candidate = edges.slice(1).find((edge) => edge.node.canRollback === true && !neverGood.has(edge.node.status));
             if (!candidate) throw new Error('no rollback-eligible deployment found among the last ' + edges.length + ' deployments');
             console.log(candidate.node.id);
           ")
