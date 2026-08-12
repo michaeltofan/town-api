@@ -39,18 +39,28 @@ the WAL archive without digging into history.
 
 The workflow (`.github/workflows/restore-drill.yml`):
 
-1. `railway postgres pitr status --service Postgres-9UWs` -- confirms the
+1. Generates a fresh, throwaway ed25519 keypair and registers the public
+   half with `railway ssh keys add`. The restored sibling has no public
+   TCP proxy, so `railway connect --tunnel-only` always falls back to an
+   SSH tunnel, which requires a key registered on the account -- a bare CI
+   runner has none by default.
+2. `railway postgres pitr status --service Postgres-9UWs` -- confirms the
    archiver is healthy before attempting anything.
-2. `railway postgres pitr restore --service Postgres-9UWs --at <timestamp>
---new-service-name restore-drill-<run id> --yes` -- creates the isolated
-   sibling. Records `restore_point_at` (the target) and `drill_start` (RTO
-   clock start, taken right before this command).
-3. Opens a private SSH tunnel to the new service only (`railway connect
+3. `railway postgres pitr restore --service Postgres-9UWs --at <timestamp>
+--new-service-name restore-drill-<run id> --yes` -- starts an
+   **asynchronous** background provisioning workflow on Railway's side and
+   returns immediately (confirmed from live output: "This runs in the
+   background; the new service will appear in the dashboard once
+   provisioning completes."). Records `restore_point_at` (the target) and
+   `drill_start` (RTO clock start, taken right before this command).
+4. Opens a private SSH tunnel to the new service only (`railway connect
 --tunnel-only`; the restored service has no public TCP proxy, so this is
-   the only reachable path) and polls until it accepts connections.
-4. Runs `npm run restore-drill:validate` against the tunnel -- see below.
-5. Prints RPO, RTO, and the exact JSON body for the attestation call.
-6. Deletes the restored sibling service, unconditionally.
+   the only reachable path) and polls until it accepts connections --
+   up to 90 attempts, ~35s apart, since provisioning a production-sized
+   restore can itself take several minutes before the service even exists.
+5. Runs `npm run restore-drill:validate` against the tunnel -- see below.
+6. Prints RPO, RTO, and the exact JSON body for the attestation call.
+7. Deletes the restored sibling service, unconditionally.
 
 ## What gets validated
 
@@ -130,6 +140,10 @@ Content-Type: application/json
 
 ## Manual equivalent (CLI, no CI)
 
+If `railway connect` reports "no SSH keys found", register one first:
+`ssh-keygen -t ed25519` then `railway ssh keys add --key ~/.ssh/id_ed25519.pub`.
+Most machines that already use `railway ssh` day to day have one registered.
+
 ```bash
 railway postgres pitr status --service Postgres-9UWs --environment production
 
@@ -137,6 +151,9 @@ RESTORE_AT=$(date -u -d '3 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')
 railway postgres pitr restore \
   --service Postgres-9UWs --environment production \
   --at "$RESTORE_AT" --new-service-name restore-drill-manual --yes
+# This starts an async background workflow -- wait a few minutes and check
+# the Railway dashboard before the next step, the new service is not
+# necessarily up yet even though this command returns immediately.
 
 railway connect restore-drill-manual --environment production --tunnel-only
 # in another shell, using the printed connection URL:

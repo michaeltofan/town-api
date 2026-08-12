@@ -50,6 +50,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Register a throwaway SSH key for this run
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The restored sibling has no public TCP proxy, so `railway
+          # connect --tunnel-only` falls back to an SSH tunnel (per
+          # `railway connect` docs). That requires a key registered on the
+          # Railway account -- confirmed missing in a live run ("no SSH
+          # keys found ... generate one with ssh-keygen -t ed25519, then
+          # register it with railway ssh keys add"), which is why every
+          # tunnel attempt failed even after the restore itself succeeded.
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          # Standard default identity filename so the CLI's own ~/.ssh
+          # discovery picks it up automatically (railway connect has no
+          # --identity-file flag of its own to point at a custom path).
+          ssh-keygen -t ed25519 -f "$HOME/.ssh/id_ed25519" -N "" -q
+          railway ssh keys add \
+            --key "$HOME/.ssh/id_ed25519.pub" \
+            --name "restore-drill-${{ github.run_id }}"
+
       - name: PITR status (read-only)
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
