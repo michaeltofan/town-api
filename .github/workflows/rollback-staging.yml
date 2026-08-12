@@ -28,6 +28,21 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: DEBUG - introspect deploymentRollback mutation
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          railway api \
+            '{ __type(name: "Mutation") { fields(includeDeprecated: true) { name args { name type { kind name ofType { kind name ofType { kind name } } } } type { kind name ofType { kind name } } } } }' \
+            --allow-errors \
+            --compact \
+            | node -e "
+              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              const f = d.data.__type.fields.find((x) => x.name === 'deploymentRollback');
+              console.log(JSON.stringify(f, null, 2));
+            "
+
       - name: Resolve target deployment
         id: target
         env:
