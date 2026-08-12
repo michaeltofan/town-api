@@ -246,6 +246,32 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: railway up --service town-api-staging
 
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Smoke test deployed staging
+        # docs/operations/DEPLOYMENT_READINESS_V1.md step 7: health, build
+        # identity + commit match, unauthenticated route returns 401, CORS
+        # (authorized/unauthorized/preflight), Stripe webhook signature
+        # rejection, and a scan for leaked secret sentinels. Railway's own
+        # preDeployCommand + /health/ready healthcheck already gate the
+        # rollout itself; this is the independent, CI-visible confirmation
+        # that the live deployment actually behaves as expected — and it
+        # fails the job (not just a log line) if it doesn't.
+        run: |
+          npm run smoke:deployment -- \
+            --base-url https://api-staging.towncivic.org \
+            --environment staging \
+            --expect-commit "${{ github.sha }}" \
+            --authorized-origin https://towncivic.org \
+            --unauthorized-origin https://smoke-test-unauthorized.invalid
+
   deploy-production:
     name: Deploy to production (Railway)
     # Deliberately NOT triggered by push, and NOT by a bare workflow_dispatch
@@ -285,3 +311,22 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: railway up --service town-api
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Smoke test deployed production
+        # See the equivalent step in deploy-staging for what this covers.
+        run: |
+          npm run smoke:deployment -- \
+            --base-url https://api.towncivic.org \
+            --environment production \
+            --expect-commit "${{ github.sha }}" \
+            --authorized-origin https://towncivic.org \
+            --unauthorized-origin https://smoke-test-unauthorized.invalid

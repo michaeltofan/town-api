@@ -1,0 +1,99 @@
+name: Rollback staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: 'Deployment ID to roll back to (leave empty to use the successful deployment before the current one)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rollback-town-api-staging
+  cancel-in-progress: false
+
+jobs:
+  rollback-staging:
+    name: Roll back town-api-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Resolve target deployment
+        id: target
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          DEPLOYMENT_ID_INPUT: ${{ github.event.inputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${DEPLOYMENT_ID_INPUT}" ]]; then
+            echo "Using explicitly provided deployment id: ${DEPLOYMENT_ID_INPUT}"
+            echo "id=${DEPLOYMENT_ID_INPUT}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          RESPONSE=$(railway api \
+            'query($input: DeploymentListInput!) { deployments(input: $input, first: 2) { edges { node { id status createdAt canRollback } } } }' \
+            --var 'input={"projectId":"8fd67de0-2ed1-4906-bf5a-36207191c613","serviceId":"b8f13b10-4207-4196-a301-3daa1db178af","environmentId":"a7e3d77f-269e-432c-b2e3-c2d777ee668a","status":{"successfulOnly":true}}' \
+            --compact)
+          echo "$RESPONSE"
+          PREV_ID=$(echo "$RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            const edges = d.data.deployments.edges;
+            if (edges.length < 2) throw new Error('no previous successful deployment found to roll back to');
+            const prev = edges[1].node;
+            if (prev.canRollback !== true) throw new Error('previous deployment ' + prev.id + ' is not rollback-eligible (canRollback=' + prev.canRollback + ')');
+            console.log(prev.id);
+          ")
+          echo "Resolved previous successful deployment: ${PREV_ID}"
+          echo "id=${PREV_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Roll back
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Rolling back town-api-staging to deployment ${{ steps.target.outputs.id }}"
+          railway api \
+            'mutation($id: String!) { deploymentRollback(id: $id) { id status } }' \
+            --var "id=${{ steps.target.outputs.id }}"
+
+      - name: Wait for staging to become ready
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 40); do
+            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' https://api-staging.towncivic.org/health/ready || echo 000)
+            if [[ "${STATUS}" == "200" ]]; then
+              echo "Ready after $((i * 5))s"
+              exit 0
+            fi
+            echo "Attempt ${i}: status ${STATUS}, retrying..."
+            sleep 5
+          done
+          echo "::error::Staging did not become ready within the wait window"
+          exit 1
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Confirm rolled-back deployment health/build
+        run: |
+          npm run smoke:deployment -- \
+            --base-url https://api-staging.towncivic.org \
+            --environment staging \
+            --authorized-origin https://towncivic.org \
+            --unauthorized-origin https://smoke-test-unauthorized.invalid
