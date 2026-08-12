@@ -40,22 +40,29 @@ jobs:
             echo "id=${DEPLOYMENT_ID_INPUT}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # Two real live-test failures both came back "Railway API request
+          # failed with HTTP 400 Bad Request" -- a malformed request, not a
+          # canRollback/pruning issue as first assumed (that theory was
+          # never actually confirmed against these logs). Suspected cause:
+          # `--var input={...}` handing the CLI a JSON *object* value is
+          # unreliable; `--variables` is the documented, unambiguous way to
+          # pass a full variables object. Also dropped the `status` filter
+          # (unverified against the live schema) in favor of filtering by
+          # status client-side below.
           RESPONSE=$(railway api \
-            'query($input: DeploymentListInput!) { deployments(input: $input, first: 10) { edges { node { id status createdAt canRollback } } } }' \
-            --var 'input={"projectId":"8fd67de0-2ed1-4906-bf5a-36207191c613","serviceId":"b8f13b10-4207-4196-a301-3daa1db178af","environmentId":"a7e3d77f-269e-432c-b2e3-c2d777ee668a","status":{"successfulOnly":true}}' \
+            'query($input: DeploymentListInput!) { deployments(input: $input, first: 15) { edges { node { id status createdAt canRollback } } } }' \
+            --variables '{"input":{"projectId":"8fd67de0-2ed1-4906-bf5a-36207191c613","serviceId":"b8f13b10-4207-4196-a301-3daa1db178af","environmentId":"a7e3d77f-269e-432c-b2e3-c2d777ee668a"}}' \
+            --allow-errors \
             --compact)
           echo "$RESPONSE"
-          # Skip index 0 (the current deployment) and take the first
-          # candidate with canRollback=true. Railway prunes deployments to
-          # REMOVED (canRollback=false) fairly quickly, so the deployment
-          # immediately before the current one is not always still
-          # eligible -- confirmed the hard way during a burst of rapid
-          # staging deploys, where index 1 had already been pruned.
+          # Skip index 0 (the current deployment) and take the first SUCCESS
+          # deployment after it with canRollback=true.
           PREV_ID=$(echo "$RESPONSE" | node -e "
             const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('GraphQL errors: ' + JSON.stringify(d.errors));
             const edges = d.data.deployments.edges;
-            const candidate = edges.slice(1).find((edge) => edge.node.canRollback === true);
-            if (!candidate) throw new Error('no rollback-eligible deployment found among the last ' + edges.length + ' successful deployments');
+            const candidate = edges.slice(1).find((edge) => edge.node.status === 'SUCCESS' && edge.node.canRollback === true);
+            if (!candidate) throw new Error('no rollback-eligible deployment found among the last ' + edges.length + ' deployments');
             console.log(candidate.node.id);
           ")
           echo "Resolved rollback-eligible deployment: ${PREV_ID}"
@@ -67,9 +74,17 @@ jobs:
         run: |
           set -euo pipefail
           echo "Rolling back town-api-staging to deployment ${{ steps.target.outputs.id }}"
-          railway api \
+          RESPONSE=$(railway api \
             'mutation($id: String!) { deploymentRollback(id: $id) { id status } }' \
-            --var "id=${{ steps.target.outputs.id }}"
+            --variables "{\"id\":\"${{ steps.target.outputs.id }}\"}" \
+            --allow-errors \
+            --compact)
+          echo "$RESPONSE"
+          echo "$RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('GraphQL errors: ' + JSON.stringify(d.errors));
+            if (!d.data || !d.data.deploymentRollback || !d.data.deploymentRollback.id) throw new Error('unexpected response shape: ' + JSON.stringify(d));
+          "
 
       - name: Wait for staging to become ready
         run: |
