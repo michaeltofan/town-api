@@ -7,6 +7,11 @@ on:
       - cursor/**
   pull_request:
   workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: 'Deploy to production (requires explicit GO — leave false to just run tests/staging)'
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -243,13 +248,18 @@ jobs:
 
   deploy-production:
     name: Deploy to production (Railway)
-    # Deliberately NOT triggered by push: production must never start
-    # automatically as a side effect of merging to main. A human triggers
-    # this job explicitly ("Run workflow" in the Actions tab), which also
-    # re-runs `quality` fresh in the same run since workflow_dispatch is
-    # not filtered out of that job's trigger.
+    # Deliberately NOT triggered by push, and NOT by a bare workflow_dispatch
+    # either: a plain "Run workflow" click (e.g. to re-run the test suite)
+    # must never deploy production as a side effect. The equivalent job in
+    # town-public's e2e.yml bit us for real this way — re-running that
+    # workflow to repeat the E2E suite silently redeployed production,
+    # because at the time it only checked the event name. Production now
+    # requires the deploy_production input to be explicitly set to true on
+    # top of workflow_dispatch, so a human has to opt in on that specific
+    # run. `quality` re-runs fresh in that same manual run since
+    # workflow_dispatch is not filtered out of its trigger.
     needs: quality
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_production == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
