@@ -28,7 +28,7 @@ jobs:
   restore-drill:
     name: Isolated PITR restore drill (production Postgres)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 65
     environment: production
     env:
       SOURCE_SERVICE: Postgres-9UWs
@@ -73,6 +73,11 @@ jobs:
           echo "drill_start=${DRILL_START}" >> "$GITHUB_OUTPUT"
           echo "new_service_name=${NEW_SERVICE_NAME}" >> "$GITHUB_OUTPUT"
           echo "Restoring '${SOURCE_SERVICE}' to ${RESTORE_POINT_AT} as isolated sibling '${NEW_SERVICE_NAME}'"
+          # This call only starts an async createServiceFromPITR workflow on
+          # Railway's side and returns immediately -- confirmed from a live
+          # run's own output ("This runs in the background; the new service
+          # will appear in the dashboard once provisioning completes."). The
+          # next step must poll for actual readiness, not assume it here.
           railway postgres pitr restore \
             --service "$SOURCE_SERVICE" \
             --project "$RAILWAY_PROJECT_ID" \
@@ -89,8 +94,9 @@ jobs:
         run: |
           set -euo pipefail
           READY=""
-          for attempt in $(seq 1 40); do
-            echo "Attempt ${attempt}/40: opening tunnel to ${NEW_SERVICE_NAME}..."
+          MAX_ATTEMPTS=90
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "Attempt ${attempt}/${MAX_ATTEMPTS}: opening tunnel to ${NEW_SERVICE_NAME}..."
             rm -f tunnel.out
             ( railway connect "$NEW_SERVICE_NAME" \
                 --project "$RAILWAY_PROJECT_ID" \
@@ -109,13 +115,21 @@ jobs:
                 echo "$CANDIDATE_URL" > restored_db_url.secret
                 READY=1
                 break
+              else
+                echo "Tunnel opened but psql could not connect yet."
               fi
+            else
+              # Mask any URL-shaped substring before printing, then show the
+              # tunnel's own diagnostic output (e.g. "service not found",
+              # "no active deployment") so a future failure doesn't require
+              # another blind multi-minute round trip to debug.
+              sed -E 's#postgres(ql)?://[^[:space:]]+#[redacted]#g' tunnel.out | tail -5
             fi
             if [[ -f tunnel.pid ]]; then
               kill "$(cat tunnel.pid)" 2>/dev/null || true
               rm -f tunnel.pid
             fi
-            sleep 15
+            sleep 20
           done
           if [[ -z "$READY" ]]; then
             echo "::error::Restored instance never became reachable within the wait window"
