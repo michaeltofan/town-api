@@ -1,0 +1,157 @@
+name: Restore drill Phase A (investigation, temporary)
+
+# Etapa 3 investigation step, authorized explicitly by the user after two
+# real drill runs proved the external SSH-tunnel path
+# (`railway connect --tunnel-only` from GitHub Actions) is unreliable
+# against freshly PITR-restored sibling services specifically -- see
+# docs/operations/RESTORE_DRILL_RUNBOOK.md and the tunnel-diagnostic
+# workflow (confirmed the same tunnel mechanism works fine against an
+# ordinary, already-existing service).
+#
+# This workflow does ONLY the restore + wait-for-ready half of the drill,
+# using Railway's own deploy logs (not an external tunnel) to detect
+# readiness. Unlike the main restore-drill.yml, it deliberately does NOT
+# validate or delete the restored sibling -- a follow-up validator service,
+# deployed into the SAME project+environment so it reaches the sibling
+# over Railway's private network instead of an external tunnel, is set up
+# separately (by an operator, via Railway MCP tools) immediately after
+# this workflow confirms readiness. That keeps this investigation
+# reproducible from the job output while avoiding a second blind ~80
+# minute restore cycle for something that isn't the actual bottleneck.
+#
+# Conditions (per the user's explicit authorization): Production source is
+# never touched, the restored sibling never receives traffic, no
+# migrations/seed/writes ever run against it, and it is deleted promptly
+# once the follow-up validator has read from it. This workflow is
+# temporary and will be removed once Etapa 3 closes with the final clean
+# drill (restore -> wait -> validate -> cleanup, fully automated in one
+# run).
+
+on:
+  workflow_dispatch:
+    inputs:
+      restore_minutes_ago:
+        description: 'How many minutes before now to target for the restore point'
+        required: false
+        type: string
+        default: '3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restore-drill-town-api-production-postgres
+  cancel-in-progress: false
+
+jobs:
+  restore-and-wait:
+    name: Restore PITR sibling and wait for Postgres readiness (no tunnel, no validation, no delete)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      SOURCE_SERVICE: Postgres-9UWs
+      RAILWAY_PROJECT_ID: 8fd67de0-2ed1-4906-bf5a-36207191c613
+      RAILWAY_ENVIRONMENT: production
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: PITR status (read-only)
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: |
+          set -euo pipefail
+          railway postgres pitr status \
+            --service "$SOURCE_SERVICE" \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT"
+
+      - name: Restore to an isolated sibling service
+        id: restore
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: |
+          set -euo pipefail
+          RESTORE_POINT_AT=$(date -u -d "${{ github.event.inputs.restore_minutes_ago || '3' }} minutes ago" '+%Y-%m-%dT%H:%M:%SZ')
+          DRILL_START=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          NEW_SERVICE_NAME="restore-drill-phase-a-${{ github.run_id }}"
+          echo "restore_point_at=${RESTORE_POINT_AT}" >> "$GITHUB_OUTPUT"
+          echo "drill_start=${DRILL_START}" >> "$GITHUB_OUTPUT"
+          echo "new_service_name=${NEW_SERVICE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Restoring '${SOURCE_SERVICE}' to ${RESTORE_POINT_AT} as isolated sibling '${NEW_SERVICE_NAME}'"
+          railway postgres pitr restore \
+            --service "$SOURCE_SERVICE" \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT" \
+            --at "$RESTORE_POINT_AT" \
+            --new-service-name "$NEW_SERVICE_NAME" \
+            --yes
+
+      - name: Wait for Postgres to report itself ready (via deploy logs, not a tunnel)
+        id: wait
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+          NEW_SERVICE_NAME: ${{ steps.restore.outputs.new_service_name }}
+        run: |
+          set -euo pipefail
+          READY=""
+          # Two real runs today confirmed Postgres itself becomes ready in
+          # ~14.5 minutes; the previous 80-minute external-tunnel timeouts
+          # were caused by the tunnel path, not by this. 30 minutes is a
+          # generous margin without repeating the same blind-long-wait
+          # mistake.
+          DEADLINE=$(( $(date -u +%s) + 30 * 60 ))
+          attempt=0
+          while [[ "$(date -u +%s)" -lt "$DEADLINE" ]]; do
+            attempt=$((attempt + 1))
+            REMAINING_MIN=$(( (DEADLINE - $(date -u +%s)) / 60 ))
+            echo "Attempt ${attempt}: checking ${NEW_SERVICE_NAME} deploy logs for readiness (~${REMAINING_MIN}min left)..."
+            if railway logs \
+                --service "$NEW_SERVICE_NAME" \
+                --project "$RAILWAY_PROJECT_ID" \
+                --environment "$RAILWAY_ENVIRONMENT" \
+                --lines 300 2>/dev/null | grep -q 'database system is ready to accept connections'; then
+              READY=1
+              break
+            fi
+            sleep 20
+          done
+          if [[ -z "$READY" ]]; then
+            echo "::group::Deploy logs for ${NEW_SERVICE_NAME} (diagnostic)"
+            railway logs \
+              --service "$NEW_SERVICE_NAME" \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT" \
+              --lines 200 || echo "Could not fetch deploy logs"
+            echo "::endgroup::"
+            echo "::group::Build logs for ${NEW_SERVICE_NAME}"
+            railway logs \
+              --service "$NEW_SERVICE_NAME" \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT" \
+              --build \
+              --lines 200 || echo "Could not fetch build logs"
+            echo "::endgroup::"
+            echo "::error::${NEW_SERVICE_NAME} never reported readiness -- deleting it, nothing to validate"
+            railway service delete \
+              --service "$NEW_SERVICE_NAME" \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT" \
+              --yes || echo "::warning::Failed to delete ${NEW_SERVICE_NAME} -- delete it manually"
+            exit 1
+          fi
+          echo "${NEW_SERVICE_NAME} is ready to accept connections."
+          echo ""
+          echo "NEXT STEP (manual, Phase A investigation only): deploy a temporary"
+          echo "validator service into this SAME project+environment, with"
+          echo "DATABASE_URL=\${{ ${NEW_SERVICE_NAME}.DATABASE_URL }} (Railway private"
+          echo "network reference -- never leaves the platform), running"
+          echo "'node dist/scripts/restore-drill-validate.js' from the town-api repo."
+          echo "Read its deploy logs for the JSON validation summary, then delete BOTH"
+          echo "the validator service and ${NEW_SERVICE_NAME}."
+          echo ""
+          echo "::warning::${NEW_SERVICE_NAME} is left running intentionally for the Phase A"
+          echo "validator step. It must be deleted promptly once validation is read --"
+          echo "it is isolated (no domain, no traffic, no writes) but is not"
+          echo "self-cleaning in this workflow."
