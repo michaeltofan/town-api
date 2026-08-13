@@ -12,8 +12,11 @@ export default tseslint.config(
       'docs/**',
       'drizzle/**',
       // k6 scripts run in k6's own JS runtime, not Node — not part of the
-      // TypeScript project (see loadtest/README.md).
-      'loadtest/**',
+      // TypeScript project (see loadtest/README.md). loadtest/*.ts (data
+      // provisioning/verification/teardown) are ordinary Node scripts and
+      // are linted normally.
+      'loadtest/**/*.js',
+      'loadtest/.manifest.json',
     ],
   },
   eslint.configs.recommended,

@@ -1,4 +1,4 @@
-import { count, eq, inArray } from 'drizzle-orm';
+import { count, eq, inArray, isNull, ne, or } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool, type PoolClient } from 'pg';
 import { toIsoTimestamp } from '../lib/timestamps.js';
@@ -15,6 +15,7 @@ import {
   type CanonicalCommunity,
   type CanonicalSignal,
 } from './seeds/foundation-content.js';
+import { LOADTEST_VOTING_ARENA_COMMUNITY_ID } from './seeds/loadtest-voting-arena.js';
 import { seedControlledActor } from './seeds/seed-controlled-actor.js';
 import { seedFoundationContent } from './seeds/seed-foundation.js';
 
@@ -167,16 +168,41 @@ function normalizeSignal(row: typeof signals.$inferSelect): CanonicalSignal {
   };
 }
 
+/**
+ * Rows scoped to `LOADTEST_VOTING_ARENA_COMMUNITY_ID` are a deliberately
+ * permanent fixture (see `./seeds/loadtest-voting-arena.ts`) maintained by
+ * `loadtest/ensure-voting-arena.ts`, not canonical foundation content or
+ * incidental drift -- excluded here so their permanent presence never trips
+ * this preflight guard.
+ */
 async function readCounts(db: Db): Promise<StagingSeedResult['counts']> {
   // Sequential queries avoid pg driver deprecation for concurrent query on one client.
-  const communityCount = await db.select({ value: count() }).from(communities);
-  const signalCount = await db.select({ value: count() }).from(signals);
-  const actorCount = await db.select({ value: count() }).from(actors);
+  const communityCount = await db
+    .select({ value: count() })
+    .from(communities)
+    .where(ne(communities.id, LOADTEST_VOTING_ARENA_COMMUNITY_ID));
+  const signalCount = await db
+    .select({ value: count() })
+    .from(signals)
+    .where(ne(signals.communityId, LOADTEST_VOTING_ARENA_COMMUNITY_ID));
+  const actorCount = await db
+    .select({ value: count() })
+    .from(actors)
+    // communityId is nullable (actors created before community commitment);
+    // ne() against NULL never matches, so it has to be OR'd with isNull()
+    // to avoid silently excluding every not-yet-committed actor.
+    .where(
+      or(isNull(actors.communityId), ne(actors.communityId, LOADTEST_VOTING_ARENA_COMMUNITY_ID)),
+    );
   const controlledCount = await db
     .select({ value: count() })
     .from(actors)
     .where(eq(actors.id, CONTROLLED_TEST_ACTOR_ID));
-  const confirmationCount = await db.select({ value: count() }).from(signalConfirmations);
+  const confirmationCount = await db
+    .select({ value: count() })
+    .from(signalConfirmations)
+    .innerJoin(actors, eq(actors.id, signalConfirmations.actorId))
+    .where(ne(actors.communityId, LOADTEST_VOTING_ARENA_COMMUNITY_ID));
 
   return {
     communities: communityCount[0]?.value ?? 0,
@@ -275,8 +301,14 @@ async function canonicalIdentityPresent(db: Db): Promise<boolean> {
  * still has communities and/or signals not yet inserted.
  */
 async function presentRowsExactCanonicalSubset(db: Db): Promise<boolean> {
-  const communityRows = await db.select().from(communities);
-  const signalRows = await db.select().from(signals);
+  const communityRows = await db
+    .select()
+    .from(communities)
+    .where(ne(communities.id, LOADTEST_VOTING_ARENA_COMMUNITY_ID));
+  const signalRows = await db
+    .select()
+    .from(signals)
+    .where(ne(signals.communityId, LOADTEST_VOTING_ARENA_COMMUNITY_ID));
 
   if (communityRows.length === 0 && signalRows.length === 0) {
     return false;
