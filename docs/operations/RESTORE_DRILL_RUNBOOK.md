@@ -254,7 +254,7 @@ railway service delete --service restore-drill-manual --environment production -
   raw GraphQL response before parsing it, so a schema or permissions error
   is visible directly in the job output. Re-run
   `.github/workflows/railway-api-introspect.yml` (or `railway api
-  describe <Type>` by hand) against the live schema before changing a
+describe <Type>` by hand) against the live schema before changing a
   mutation shape -- don't guess field names.
 - **Validation fails**: do not delete the sibling automatically -- the
   workflow still deletes both services (nothing here should be treated as
