@@ -1,0 +1,99 @@
+name: Etapa 4 emergency teardown
+
+# One-off / rare recovery tool: tears down a specific ephemeral load-test
+# community pair by ID when the normal manifest-driven loadtest/teardown.ts
+# can't run because the manifest was never written -- e.g. provision.ts
+# crashed partway through account provisioning, before reaching its final
+# writeFileSync, leaving communities/signals/accounts behind with no
+# manifest to identify them.
+#
+# This workflow only supplies the two community IDs a different way (typed
+# in by hand, read from a previous failed run's log output). Every actual
+# safety property still comes from teardown.ts itself: the append-only
+# civic_ballot_eligible_actors check, the FK-safe delete order, the single
+# transaction, and (as of the teardown.ts robustness fix that motivated
+# adding this workflow) deriving account IDs to delete from actors linked
+# to the given communities, not just an account list -- so an empty
+# accounts array here is enough.
+
+on:
+  workflow_dispatch:
+    inputs:
+      community_a_id:
+        description: "Ephemeral communityA UUID to tear down (from a previous provision.ts run's log output)"
+        required: true
+        type: string
+      community_b_id:
+        description: 'Ephemeral communityB UUID to tear down'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  emergency-teardown:
+    name: Emergency teardown by community ID
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      TARGET_SERVICE: Postgres
+      RAILWAY_PROJECT_ID: 8fd67de0-2ed1-4906-bf5a-36207191c613
+      RAILWAY_ENVIRONMENT: staging
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+      APP_ENV: staging
+      LOADTEST_MANIFEST_PATH: loadtest/.emergency-manifest.json
+      COMMUNITY_A_ID: ${{ inputs.community_a_id }}
+      COMMUNITY_B_ID: ${{ inputs.community_b_id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Register a throwaway SSH key for this run
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          ssh-keygen -t ed25519 -f "$HOME/.ssh/id_ed25519" -N "" -q
+          railway ssh keys add \
+            --key "$HOME/.ssh/id_ed25519.pub" \
+            --name "emergency-teardown-${{ github.run_id }}"
+
+      - name: Write emergency manifest
+        run: |
+          set -euo pipefail
+          uuid_re='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+          if [[ ! "$COMMUNITY_A_ID" =~ $uuid_re ]]; then
+            echo "::error::community_a_id is not a UUID: $COMMUNITY_A_ID"
+            exit 1
+          fi
+          if [[ ! "$COMMUNITY_B_ID" =~ $uuid_re ]]; then
+            echo "::error::community_b_id is not a UUID: $COMMUNITY_B_ID"
+            exit 1
+          fi
+          cat > "$LOADTEST_MANIFEST_PATH" <<EOF
+          {
+            "communityA": { "id": "$COMMUNITY_A_ID" },
+            "communityB": { "id": "$COMMUNITY_B_ID" },
+            "accounts": []
+          }
+          EOF
+          cat "$LOADTEST_MANIFEST_PATH"
+
+      - name: Teardown
+        run: |
+          set -euo pipefail
+          ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/teardown.ts

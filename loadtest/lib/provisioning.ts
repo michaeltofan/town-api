@@ -21,6 +21,7 @@ import {
   linkActorToAccount,
 } from '../../src/identity/repositories/actor-link.js';
 import { addAccountEmail, verifyEmail } from '../../src/identity/repositories/emails.js';
+import { addPasskeyCredential } from '../../src/identity/repositories/passkeys.js';
 import {
   createAccountPasswordCredential,
   revokeAccountPasswordCredential,
@@ -160,6 +161,19 @@ export async function createLoginAccount(
     accountId,
     handle: randomBytes(32),
     now: input.at,
+  });
+  // assertActiveRequirements (accounts.ts) requires at least one active
+  // passkey credential row to reach 'active', regardless of auth method --
+  // these load-test accounts only ever authenticate with a password (see
+  // capacity-1000.js), so this credential is synthetic and never used for
+  // a real WebAuthn ceremony; it exists purely to satisfy that invariant.
+  await addPasskeyCredential(db, {
+    id: randomUUID(),
+    accountId,
+    credentialId: randomBytes(32),
+    publicKey: randomBytes(65),
+    signCount: 0,
+    createdAt: input.at,
   });
 
   const actorId = input.actorId ?? randomUUID();
