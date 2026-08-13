@@ -85,10 +85,12 @@ jobs:
       - name: Run 1 -- DB snapshot (before k6)
         run: |
           set -euo pipefail
-          ./scripts/ci/with-staging-tunnel.sh -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
-            "SELECT count(*) AS connections FROM pg_stat_activity;" \
-            -c "SELECT count(*) AS locks FROM pg_locks;" \
-            | tee run1-db-before.txt
+          # shellcheck disable=SC2016  # deliberate: $DATABASE_URL expands inside the nested bash -c, after with-staging-tunnel.sh exports it -- not in this shell.
+          ./scripts/ci/with-staging-tunnel.sh -- bash -c '
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+              -c "SELECT count(*) AS connections FROM pg_stat_activity;" \
+              -c "SELECT count(*) AS locks FROM pg_locks;"
+          ' | tee run1-db-before.txt
 
       - name: Run 1 -- k6
         run: |
@@ -99,10 +101,12 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          ./scripts/ci/with-staging-tunnel.sh -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
-            "SELECT count(*) AS connections FROM pg_stat_activity;" \
-            -c "SELECT count(*) AS locks FROM pg_locks;" \
-            | tee run1-db-after.txt
+          # shellcheck disable=SC2016  # deliberate: $DATABASE_URL expands inside the nested bash -c, after with-staging-tunnel.sh exports it -- not in this shell.
+          ./scripts/ci/with-staging-tunnel.sh -- bash -c '
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+              -c "SELECT count(*) AS connections FROM pg_stat_activity;" \
+              -c "SELECT count(*) AS locks FROM pg_locks;"
+          ' | tee run1-db-after.txt
 
       - name: Run 1 -- verify
         if: always()
@@ -133,10 +137,12 @@ jobs:
       - name: Run 2 -- DB snapshot (before k6)
         run: |
           set -euo pipefail
-          ./scripts/ci/with-staging-tunnel.sh -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
-            "SELECT count(*) AS connections FROM pg_stat_activity;" \
-            -c "SELECT count(*) AS locks FROM pg_locks;" \
-            | tee run2-db-before.txt
+          # shellcheck disable=SC2016  # deliberate: $DATABASE_URL expands inside the nested bash -c, after with-staging-tunnel.sh exports it -- not in this shell.
+          ./scripts/ci/with-staging-tunnel.sh -- bash -c '
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+              -c "SELECT count(*) AS connections FROM pg_stat_activity;" \
+              -c "SELECT count(*) AS locks FROM pg_locks;"
+          ' | tee run2-db-before.txt
 
       - name: Run 2 -- k6
         run: |
@@ -147,10 +153,12 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          ./scripts/ci/with-staging-tunnel.sh -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
-            "SELECT count(*) AS connections FROM pg_stat_activity;" \
-            -c "SELECT count(*) AS locks FROM pg_locks;" \
-            | tee run2-db-after.txt
+          # shellcheck disable=SC2016  # deliberate: $DATABASE_URL expands inside the nested bash -c, after with-staging-tunnel.sh exports it -- not in this shell.
+          ./scripts/ci/with-staging-tunnel.sh -- bash -c '
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+              -c "SELECT count(*) AS connections FROM pg_stat_activity;" \
+              -c "SELECT count(*) AS locks FROM pg_locks;"
+          ' | tee run2-db-after.txt
 
       - name: Run 2 -- verify
         if: always()

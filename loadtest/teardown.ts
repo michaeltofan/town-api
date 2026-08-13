@@ -26,6 +26,14 @@ import { requireDatabaseUrl, requireStagingEnv } from './lib/env.js';
  *
  * Idempotent: safe to run against a pool that's already torn down (or was
  * never provisioned -- a missing manifest is a no-op, not an error).
+ *
+ * Account IDs to delete are the union of the manifest's account list and
+ * whatever `actors` rows are actually linked to the ephemeral communities
+ * in the database -- not the manifest alone. `provision.ts` links each
+ * actor to its account before the final 'active' transition, so a run
+ * that crashes partway through account provisioning (after the manifest
+ * would have been written) still leaves a fully discoverable, fully
+ * teardownable account via its actor's community_id.
  */
 
 type Manifest = {
@@ -55,7 +63,7 @@ async function runTeardown(): Promise<void> {
   }
 
   const communityIds = [manifest.communityA.id, manifest.communityB.id];
-  const accountIds = manifest.accounts.map((a) => a.accountId);
+  const manifestAccountIds = manifest.accounts.map((a) => a.accountId);
 
   const pool = new Pool({ connectionString: databaseUrl, max: 1, connectionTimeoutMillis: 10_000 });
   const client: PoolClient = await pool.connect();
@@ -68,6 +76,15 @@ async function runTeardown(): Promise<void> {
 
   try {
     await client.query('BEGIN');
+
+    const linkedAccounts = await client.query<{ account_id: string }>(
+      `SELECT DISTINCT account_id FROM town.actors
+       WHERE community_id = ANY($1::uuid[]) AND account_id IS NOT NULL`,
+      [communityIds],
+    );
+    const accountIds = [
+      ...new Set([...manifestAccountIds, ...linkedAccounts.rows.map((r) => r.account_id)]),
+    ];
 
     const eligibleActorsCheck = await client.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM town.civic_ballot_eligible_actors t
@@ -138,6 +155,11 @@ async function runTeardown(): Promise<void> {
     await del(
       'account_sessions',
       `DELETE FROM town.account_sessions WHERE account_id = ANY($1::uuid[])`,
+      [accountIds],
+    );
+    await del(
+      'passkey_credentials',
+      `DELETE FROM town.passkey_credentials WHERE account_id = ANY($1::uuid[])`,
       [accountIds],
     );
     await del(
