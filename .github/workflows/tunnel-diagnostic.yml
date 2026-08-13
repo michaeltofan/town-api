@@ -1,0 +1,91 @@
+name: Tunnel diagnostic (temporary)
+
+# One-off diagnostic for the restore-drill tunnel failure investigation
+# (see docs/operations/RESTORE_DRILL_RUNBOOK.md). Every restore-drill run
+# has shown the same pattern: `railway connect --tunnel-only` opens a local
+# port and prints a connection string, but psql then gets
+# "server closed the connection unexpectedly" on every attempt, even long
+# after Postgres's own deploy logs confirm it's ready to accept
+# connections. This workflow isolates the variable cheaply: does the exact
+# same SSH-tunnel mechanism work at all against an ordinary, existing
+# service (staging Postgres) from a GitHub Actions runner? No PITR
+# restore, no production contact -- just a read-only SELECT 1 against
+# staging. Delete this workflow once the investigation concludes.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  tunnel-diagnostic:
+    name: Tunnel to staging Postgres (no PITR, no production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      TARGET_SERVICE: Postgres
+      RAILWAY_PROJECT_ID: 8fd67de0-2ed1-4906-bf5a-36207191c613
+      RAILWAY_ENVIRONMENT: staging
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Register a throwaway SSH key for this run
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          ssh-keygen -t ed25519 -f "$HOME/.ssh/id_ed25519" -N "" -q
+          railway ssh keys add \
+            --key "$HOME/.ssh/id_ed25519.pub" \
+            --name "tunnel-diagnostic-${{ github.run_id }}"
+
+      - name: Tunnel to staging Postgres and run SELECT 1
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            echo "Attempt ${attempt}: opening tunnel to ${TARGET_SERVICE}..."
+            rm -f tunnel.out
+            ( railway connect "$TARGET_SERVICE" \
+                --project "$RAILWAY_PROJECT_ID" \
+                --environment "$RAILWAY_ENVIRONMENT" \
+                --tunnel-only > tunnel.out 2>&1 & echo $! > tunnel.pid )
+            for wait_tick in $(seq 1 15); do
+              if grep -qE 'postgres(ql)?://' tunnel.out 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            if grep -qE 'postgres(ql)?://' tunnel.out 2>/dev/null; then
+              CANDIDATE_URL=$(grep -oE 'postgres(ql)?://[^[:space:]]+' tunnel.out | head -1)
+              echo "::add-mask::${CANDIDATE_URL}"
+              if PSQL_OUTPUT=$(PGCONNECT_TIMEOUT=5 psql "$CANDIDATE_URL" -v ON_ERROR_STOP=1 -tAc 'SELECT 1' 2>&1); then
+                echo "SUCCESS: tunnel + psql both work against an ordinary existing service."
+                echo "psql returned: ${PSQL_OUTPUT}"
+                if [[ -f tunnel.pid ]]; then
+                  pkill -P "$(cat tunnel.pid)" 2>/dev/null || true
+                  kill "$(cat tunnel.pid)" 2>/dev/null || true
+                fi
+                exit 0
+              else
+                SANITIZED_ERR=$(printf '%s' "$PSQL_OUTPUT" | sed -E 's#postgres(ql)?://[^[:space:]]+#[redacted]#g' | tr '\n' ' ')
+                echo "Tunnel opened but psql failed: ${SANITIZED_ERR}"
+              fi
+            else
+              sed -E 's#postgres(ql)?://[^[:space:]]+#[redacted]#g' tunnel.out | tail -5
+            fi
+            if [[ -f tunnel.pid ]]; then
+              pkill -P "$(cat tunnel.pid)" 2>/dev/null || true
+              kill "$(cat tunnel.pid)" 2>/dev/null || true
+              rm -f tunnel.pid
+            fi
+            sleep 5
+          done
+          echo "::error::Tunnel to an ordinary, existing service also failed -- this is not PITR-sibling-specific."
+          exit 1
