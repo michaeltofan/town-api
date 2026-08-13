@@ -3,10 +3,26 @@ name: Production restore drill
 # Etapa 3 (Backup and restore) of the TOWN deployment plan.
 #
 # Restores the production Postgres PITR archive into a brand-new, isolated
-# sibling service, validates data integrity there, then deletes it. Per
-# Railway's PITR design, the source service is never touched and never
-# serves the restored data -- see docs/operations/RESTORE_DRILL_RUNBOOK.md
-# for the full write-up of why this is safe and how to run it by hand.
+# sibling service, validates data integrity there, then deletes both the
+# sibling and the validator. Per Railway's PITR design, the source service
+# is never touched and never serves the restored data -- see
+# docs/operations/RESTORE_DRILL_RUNBOOK.md for the full write-up of why
+# this is safe and how to run it by hand.
+#
+# Validation reaches the restored sibling over Railway's private network
+# (<service>.railway.internal), not an external SSH tunnel. Multiple live
+# runs confirmed `railway connect --tunnel-only` from a GitHub Actions
+# runner is unreliable specifically against freshly PITR-restored sibling
+# services (the tunnel opens, but the connection is dropped before ever
+# reaching Postgres, confirmed by a tunnel diagnostic against an ordinary
+# service working fine). A throwaway validator deployed as an ordinary
+# Railway service in the same project+environment reaches the sibling the
+# same way the real town-api service reaches Postgres-9UWs -- proven end
+# to end in a live investigation run, all 22 integrity checks passing
+# within a second of container start. Creating/configuring/deleting that
+# validator happens via `railway api` (raw GraphQL) since the CLI has no
+# `service create` subcommand -- schema confirmed via introspection
+# (`railway api describe`/`search`), not guessed.
 
 on:
   workflow_dispatch:
@@ -28,49 +44,17 @@ jobs:
   restore-drill:
     name: Isolated PITR restore drill (production Postgres)
     runs-on: ubuntu-latest
-    timeout-minutes: 110
+    timeout-minutes: 60
     environment: production
     env:
       SOURCE_SERVICE: Postgres-9UWs
       RAILWAY_PROJECT_ID: 8fd67de0-2ed1-4906-bf5a-36207191c613
       RAILWAY_ENVIRONMENT: production
+      RAILWAY_ENVIRONMENT_ID: d6297195-3013-441d-b19f-e9fcfbb62b24
+      VALIDATOR_REPO: michaeltofan/town-api
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Install Railway CLI
         run: npm install -g @railway/cli
-
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Register a throwaway SSH key for this run
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-        run: |
-          set -euo pipefail
-          # The restored sibling has no public TCP proxy, so `railway
-          # connect --tunnel-only` falls back to an SSH tunnel (per
-          # `railway connect` docs). That requires a key registered on the
-          # Railway account -- confirmed missing in a live run ("no SSH
-          # keys found ... generate one with ssh-keygen -t ed25519, then
-          # register it with railway ssh keys add"), which is why every
-          # tunnel attempt failed even after the restore itself succeeded.
-          mkdir -p "$HOME/.ssh"
-          chmod 700 "$HOME/.ssh"
-          # Standard default identity filename so the CLI's own ~/.ssh
-          # discovery picks it up automatically (railway connect has no
-          # --identity-file flag of its own to point at a custom path).
-          ssh-keygen -t ed25519 -f "$HOME/.ssh/id_ed25519" -N "" -q
-          railway ssh keys add \
-            --key "$HOME/.ssh/id_ed25519.pub" \
-            --name "restore-drill-${{ github.run_id }}"
 
       - name: PITR status (read-only)
         env:
@@ -95,11 +79,8 @@ jobs:
           echo "drill_start=${DRILL_START}" >> "$GITHUB_OUTPUT"
           echo "new_service_name=${NEW_SERVICE_NAME}" >> "$GITHUB_OUTPUT"
           echo "Restoring '${SOURCE_SERVICE}' to ${RESTORE_POINT_AT} as isolated sibling '${NEW_SERVICE_NAME}'"
-          # This call only starts an async createServiceFromPITR workflow on
-          # Railway's side and returns immediately -- confirmed from a live
-          # run's own output ("This runs in the background; the new service
-          # will appear in the dashboard once provisioning completes."). The
-          # next step must poll for actual readiness, not assume it here.
+          # Async: starts a background createServiceFromPITR workflow and
+          # returns immediately. The next step polls for actual readiness.
           railway postgres pitr restore \
             --service "$SOURCE_SERVICE" \
             --project "$RAILWAY_PROJECT_ID" \
@@ -108,84 +89,35 @@ jobs:
             --new-service-name "$NEW_SERVICE_NAME" \
             --yes
 
-      - name: Wait for the isolated instance to accept connections and validate integrity
-        id: validate
+      - name: Wait for Postgres to report itself ready (via deploy logs, not a tunnel)
+        id: wait
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
           NEW_SERVICE_NAME: ${{ steps.restore.outputs.new_service_name }}
         run: |
           set -euo pipefail
           READY=""
-          # Time-based, not attempt-count-based: a live run confirmed the
-          # SSH tunnel itself opens quickly (auth works), but psql can't
-          # connect for a long stretch afterward -- Postgres is still
-          # replaying WAL from the base backup forward to the target time,
-          # and a production-sized replay can genuinely take well over 30
-          # minutes. 80 minutes of real wall-clock budget, not a fixed
-          # attempt count, so this isn't sensitive to how long each cycle
-          # happens to take.
-          DEADLINE=$(( $(date -u +%s) + 80 * 60 ))
+          # Two live runs confirmed Postgres itself becomes ready in
+          # 8-15 minutes; the previous 80-minute external-tunnel timeouts
+          # were caused by the tunnel path (now removed), not by this.
+          DEADLINE=$(( $(date -u +%s) + 30 * 60 ))
           attempt=0
           while [[ "$(date -u +%s)" -lt "$DEADLINE" ]]; do
             attempt=$((attempt + 1))
             REMAINING_MIN=$(( (DEADLINE - $(date -u +%s)) / 60 ))
-            echo "Attempt ${attempt}: opening tunnel to ${NEW_SERVICE_NAME} (~${REMAINING_MIN}min left in budget)..."
-            rm -f tunnel.out
-            ( railway connect "$NEW_SERVICE_NAME" \
+            echo "Attempt ${attempt}: checking ${NEW_SERVICE_NAME} deploy logs for readiness (~${REMAINING_MIN}min left)..."
+            if railway logs \
+                --service "$NEW_SERVICE_NAME" \
                 --project "$RAILWAY_PROJECT_ID" \
                 --environment "$RAILWAY_ENVIRONMENT" \
-                --tunnel-only > tunnel.out 2>&1 & echo $! > tunnel.pid )
-            for wait_tick in $(seq 1 15); do
-              if grep -qE 'postgres(ql)?://' tunnel.out 2>/dev/null; then
-                break
-              fi
-              sleep 1
-            done
-            if grep -qE 'postgres(ql)?://' tunnel.out 2>/dev/null; then
-              CANDIDATE_URL=$(grep -oE 'postgres(ql)?://[^[:space:]]+' tunnel.out | head -1)
-              echo "::add-mask::${CANDIDATE_URL}"
-              # Capture psql's actual error instead of discarding it -- a
-              # live run showed the tunnel opening in ~1s on all 227
-              # attempts across a full 80-minute budget, yet psql never
-              # connected once. A generic "not ready yet" message can't
-              # distinguish "still replaying WAL" (FATAL: the database
-              # system is starting up / in recovery mode) from "nothing is
-              # listening" (connection refused) or a tunnel/routing
-              # problem, and guessing between those instead of reading the
-              # real error is exactly the kind of improvisation to avoid.
-              if PSQL_OUTPUT=$(PGCONNECT_TIMEOUT=5 psql "$CANDIDATE_URL" -v ON_ERROR_STOP=1 -tAc 'SELECT 1' 2>&1); then
-                echo "$CANDIDATE_URL" > restored_db_url.secret
-                READY=1
-                break
-              else
-                SANITIZED_ERR=$(printf '%s' "$PSQL_OUTPUT" | sed -E 's#postgres(ql)?://[^[:space:]]+#[redacted]#g' | tr '\n' ' ')
-                echo "Tunnel opened but psql could not connect yet: ${SANITIZED_ERR}"
-              fi
-            else
-              # Mask any URL-shaped substring before printing, then show the
-              # tunnel's own diagnostic output (e.g. "service not found",
-              # "no active deployment") so a future failure doesn't require
-              # another blind multi-minute round trip to debug.
-              sed -E 's#postgres(ql)?://[^[:space:]]+#[redacted]#g' tunnel.out | tail -5
-            fi
-            if [[ -f tunnel.pid ]]; then
-              # `railway connect --tunnel-only` forks its own ssh child;
-              # killing just the captured PID left ssh processes orphaned
-              # in a live run. Kill the whole process group instead.
-              pkill -P "$(cat tunnel.pid)" 2>/dev/null || true
-              kill "$(cat tunnel.pid)" 2>/dev/null || true
-              rm -f tunnel.pid
+                --lines 300 2>/dev/null | grep -q 'database system is ready to accept connections'; then
+              READY=1
+              break
             fi
             sleep 20
           done
           if [[ -z "$READY" ]]; then
-            # Pull the restored service's own logs before the cleanup step
-            # deletes it -- otherwise a failure here means the drill has to
-            # be re-run from scratch (another ~80 minutes) just to find out
-            # why. Deploy logs show what Postgres itself printed on startup
-            # (recovery progress, a crash, a config error); build logs
-            # cover the case where the service never got past provisioning.
-            echo "::group::Deploy logs for ${NEW_SERVICE_NAME} (diagnostic -- read before assuming another timeout bump will fix it)"
+            echo "::group::Deploy logs for ${NEW_SERVICE_NAME} (diagnostic)"
             railway logs \
               --service "$NEW_SERVICE_NAME" \
               --project "$RAILWAY_PROJECT_ID" \
@@ -200,22 +132,166 @@ jobs:
               --build \
               --lines 200 || echo "Could not fetch build logs"
             echo "::endgroup::"
-            echo "::error::Restored instance never became reachable within the wait window"
+            echo "::error::${NEW_SERVICE_NAME} never reported readiness within the wait window"
             exit 1
           fi
-          RESTORED_DB_URL=$(cat restored_db_url.secret)
-          echo "::add-mask::${RESTORED_DB_URL}"
-          DATABASE_URL="$RESTORED_DB_URL" npm run restore-drill:validate
-          VALIDATE_EXIT=$?
-          if [[ -f tunnel.pid ]]; then
-            kill "$(cat tunnel.pid)" 2>/dev/null || true
-          fi
-          rm -f restored_db_url.secret tunnel.pid tunnel.out
-          if [[ "$VALIDATE_EXIT" -ne 0 ]]; then
+          echo "${NEW_SERVICE_NAME} is ready to accept connections."
+
+      - name: Deploy a validator into the same project, reachable over private networking only
+        id: validate
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+          NEW_SERVICE_NAME: ${{ steps.restore.outputs.new_service_name }}
+        run: |
+          set -euo pipefail
+
+          # Built at runtime from separate pieces, never written literally
+          # as a contiguous dollar-brace-brace sequence -- GitHub Actions'
+          # own expression scanner reads the raw YAML text (comments
+          # included) before bash ever runs, so writing that sequence
+          # anywhere in this file, even inside a comment, gets parsed as an
+          # expression and fails. Confirmed the hard way earlier in this
+          # same effort.
+          DOLLAR='$'
+          BRACE='{'
+          DATABASE_URL_REF="${DOLLAR}${BRACE}${BRACE}${NEW_SERVICE_NAME}.DATABASE_URL}}"
+
+          VALIDATOR_NAME="restore-drill-validator-${{ github.run_id }}"
+          echo "validator_name=${VALIDATOR_NAME}" >> "$GITHUB_OUTPUT"
+
+          # 1. Create the validator service, sourced from this repo, with
+          #    its DATABASE_URL set to a Railway private-network reference
+          #    variable pointing at the restored sibling -- resolved by
+          #    Railway at deploy time, never touches this job's own logs.
+          CREATE_INPUT=$(VALIDATOR_NAME="$VALIDATOR_NAME" DATABASE_URL_REF="$DATABASE_URL_REF" node -e "
+            console.log(JSON.stringify({
+              input: {
+                projectId: process.env.RAILWAY_PROJECT_ID,
+                environmentId: process.env.RAILWAY_ENVIRONMENT_ID,
+                name: process.env.VALIDATOR_NAME,
+                source: { repo: process.env.VALIDATOR_REPO },
+                branch: 'main',
+                variables: { DATABASE_URL: process.env.DATABASE_URL_REF },
+              },
+            }));
+          ")
+          CREATE_RESPONSE=$(railway api \
+            'mutation($input: ServiceCreateInput!) { serviceCreate(input: $input) { id name } }' \
+            --variables "$CREATE_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$CREATE_RESPONSE"
+          VALIDATOR_ID=$(echo "$CREATE_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceCreate GraphQL errors: ' + JSON.stringify(d.errors));
+            const id = d.data?.serviceCreate?.id;
+            if (!id) throw new Error('unexpected serviceCreate response shape: ' + JSON.stringify(d));
+            console.log(id);
+          ")
+          echo "validator_id=${VALIDATOR_ID}" >> "$GITHUB_OUTPUT"
+          echo "Created validator service ${VALIDATOR_NAME} (${VALIDATOR_ID})"
+
+          # 2. Configure it: run the compiled, production-safe validator
+          #    entrypoint and exit -- never restart on exit (it's a one-shot
+          #    check, not a server).
+          UPDATE_INPUT='{"serviceId":"'"$VALIDATOR_ID"'","environmentId":"'"$RAILWAY_ENVIRONMENT_ID"'","input":{"startCommand":"node dist/scripts/restore-drill-validate.js","restartPolicyType":"NEVER"}}'
+          UPDATE_RESPONSE=$(railway api \
+            'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
+            --variables "$UPDATE_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$UPDATE_RESPONSE"
+          echo "$UPDATE_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceInstanceUpdate GraphQL errors: ' + JSON.stringify(d.errors));
+            if (d.data?.serviceInstanceUpdate !== true) throw new Error('unexpected serviceInstanceUpdate response shape: ' + JSON.stringify(d));
+          "
+
+          # 3. Deploy it -- first deploy for this service, now correctly
+          #    configured from the start (no wasted build-then-redeploy
+          #    cycle).
+          DEPLOY_INPUT='{"environmentId":"'"$RAILWAY_ENVIRONMENT_ID"'","serviceId":"'"$VALIDATOR_ID"'"}'
+          DEPLOY_RESPONSE=$(railway api \
+            'mutation($environmentId: String!, $serviceId: String!) { serviceInstanceDeployV2(environmentId: $environmentId, serviceId: $serviceId) }' \
+            --variables "$DEPLOY_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$DEPLOY_RESPONSE"
+          DEPLOYMENT_ID=$(echo "$DEPLOY_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceInstanceDeployV2 GraphQL errors: ' + JSON.stringify(d.errors));
+            const id = d.data?.serviceInstanceDeployV2;
+            if (!id) throw new Error('unexpected serviceInstanceDeployV2 response shape: ' + JSON.stringify(d));
+            console.log(id);
+          ")
+          echo "Deployment ${DEPLOYMENT_ID} triggered for ${VALIDATOR_NAME}"
+
+          # 4. Poll for a terminal status.
+          TERMINAL=""
+          STATUS=""
+          for tick in $(seq 1 60); do
+            STATUS_RESPONSE=$(railway api \
+              'query($id: String!) { deployment(id: $id) { status } }' \
+              --variables "{\"id\":\"${DEPLOYMENT_ID}\"}" \
+              --allow-errors \
+              --compact)
+            STATUS=$(echo "$STATUS_RESPONSE" | node -e "
+              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
+              console.log(d.data?.deployment?.status ?? 'UNKNOWN');
+            ")
+            echo "Deployment status: ${STATUS}"
+            case "$STATUS" in
+              SUCCESS|FAILED|CRASHED|REMOVED)
+                TERMINAL=1
+                break
+                ;;
+            esac
+            sleep 5
+          done
+          if [[ -z "$TERMINAL" ]]; then
+            echo "::error::Validator deployment never reached a terminal status (last: ${STATUS})"
             echo "outcome=failed" >> "$GITHUB_OUTPUT"
             exit 1
           fi
-          echo "outcome=passed" >> "$GITHUB_OUTPUT"
+
+          # 5. Read the validator's own deploy logs for the JSON summary.
+          #    Railway's log pipeline parses JSON stdout lines into
+          #    structured attributes rather than keeping a single message
+          #    string, confirmed against a live run -- read attributes, not
+          #    message.
+          LOGS_RESPONSE=$(railway api \
+            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+            --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":200}" \
+            --allow-errors \
+            --compact)
+          echo "$LOGS_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
+            const logs = d.data?.deploymentLogs ?? [];
+            const attrs = {};
+            for (const log of logs) {
+              for (const a of (log.attributes || [])) {
+                if (a.key === 'outcome' || a.key === 'checks' || a.key === 'counts') {
+                  attrs[a.key] = a.value;
+                }
+              }
+            }
+            if (!attrs.outcome) {
+              console.error('No validation summary found in deploy logs (raw logs): ' + JSON.stringify(logs));
+              process.exit(1);
+            }
+            console.log('outcome=' + JSON.parse(attrs.outcome));
+            console.log('checks=' + (attrs.checks ?? '[]'));
+            console.log('counts=' + (attrs.counts ?? '{}'));
+          " > validate_result.txt || { cat validate_result.txt 2>/dev/null; echo "outcome=failed" >> "$GITHUB_OUTPUT"; exit 1; }
+          cat validate_result.txt
+          OUTCOME=$(grep '^outcome=' validate_result.txt | cut -d= -f2-)
+          echo "Validation outcome: ${OUTCOME}"
+          echo "outcome=${OUTCOME}" >> "$GITHUB_OUTPUT"
+          if [[ "$OUTCOME" != "passed" ]]; then
+            exit 1
+          fi
 
       - name: Report RPO / RTO and attestation values
         if: always()
@@ -238,19 +314,22 @@ jobs:
           echo "Attestation body for POST /v1/platform/restore/attest (submit with an ops_admin+ operator session):"
           echo "{\"method\":\"railway_pitr_point_in_time\",\"outcome\":\"${OUTCOME}\",\"restorePointAt\":\"${RESTORE_POINT_AT}\",\"note\":\"drill run ${{ github.run_id }}; RPO=${RPO_SECONDS}s RTO=${RTO_SECONDS}s\"}"
 
-      - name: Delete the isolated restored service (always runs)
+      - name: Delete the isolated restored service and the validator (always runs)
         if: always()
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
           NEW_SERVICE_NAME: ${{ steps.restore.outputs.new_service_name }}
+          VALIDATOR_NAME: ${{ steps.validate.outputs.validator_name }}
         run: |
           set -euo pipefail
-          if [[ -z "${NEW_SERVICE_NAME:-}" ]]; then
-            echo "No restored service was created; nothing to delete."
-            exit 0
-          fi
-          railway service delete \
-            --service "$NEW_SERVICE_NAME" \
-            --project "$RAILWAY_PROJECT_ID" \
-            --environment "$RAILWAY_ENVIRONMENT" \
-            --yes || echo "::warning::Failed to delete ${NEW_SERVICE_NAME} -- delete it manually from the Railway dashboard"
+          for name in "$NEW_SERVICE_NAME" "$VALIDATOR_NAME"; do
+            if [[ -z "$name" ]]; then
+              continue
+            fi
+            echo "Deleting service: ${name}"
+            railway service delete \
+              --service "$name" \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT" \
+              --yes || echo "::warning::Failed to delete ${name} -- delete it manually from the Railway dashboard"
+          done

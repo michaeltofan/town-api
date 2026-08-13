@@ -11,21 +11,23 @@ separate sibling Postgres service** and replays the source's archived WAL
 into it. The source keeps serving traffic the entire time and is never
 modified. This drill uses that guarantee to restore the most recent healthy
 point from production's PITR archive into a disposable, isolated service,
-validates the data there, and deletes it.
+validates the data there using a second disposable service, and deletes
+both.
 
 Non-negotiable properties of every run:
 
 - The production Postgres service (`Postgres-9UWs`) is the read-only WAL
   source and is never written to, restored over, or restarted.
 - The restored sibling service never receives application traffic: no app
-  service is ever pointed at it, and it gets no public domain.
+  service is ever pointed at it, and it gets no public domain. Neither does
+  the validator service that reads from it.
 - No migrations, seeds, or writes of any kind run against the restored
-  sibling. `scripts/restore-drill-validate.ts` issues only `SELECT`
-  statements.
+  sibling. `src/platform/run-restore-drill-validate.ts` issues only
+  `SELECT` statements.
 - Validation output is row counts and pass/fail booleans only -- no email
   addresses, names, or credential material are ever printed or logged.
-- The restored sibling is deleted at the end of the run, success or failure
-  (`if: always()` in the workflow).
+- Both the restored sibling and the validator service are deleted at the
+  end of the run, success or failure (`if: always()` in the workflow).
 
 ## Automated run
 
@@ -39,40 +41,84 @@ the WAL archive without digging into history.
 
 The workflow (`.github/workflows/restore-drill.yml`):
 
-1. Generates a fresh, throwaway ed25519 keypair and registers the public
-   half with `railway ssh keys add`. The restored sibling has no public
-   TCP proxy, so `railway connect --tunnel-only` always falls back to an
-   SSH tunnel, which requires a key registered on the account -- a bare CI
-   runner has none by default.
-2. `railway postgres pitr status --service Postgres-9UWs` -- confirms the
+1. `railway postgres pitr status --service Postgres-9UWs` -- confirms the
    archiver is healthy before attempting anything.
-3. `railway postgres pitr restore --service Postgres-9UWs --at <timestamp>
+2. `railway postgres pitr restore --service Postgres-9UWs --at <timestamp>
 --new-service-name restore-drill-<run id> --yes` -- starts an
    **asynchronous** background provisioning workflow on Railway's side and
-   returns immediately (confirmed from live output: "This runs in the
-   background; the new service will appear in the dashboard once
-   provisioning completes."). Records `restore_point_at` (the target) and
+   returns immediately. Records `restore_point_at` (the target) and
    `drill_start` (RTO clock start, taken right before this command).
-4. Opens a private SSH tunnel to the new service only (`railway connect
---tunnel-only`; the restored service has no public TCP proxy, so this is
-   the only reachable path) and polls until it accepts connections, for up
-   to 80 minutes of wall-clock budget (not a fixed attempt count -- a live
-   run showed WAL replay on a production-sized restore can take well over
-   30 minutes, and per-attempt timing isn't predictable enough to budget
-   by attempt count). Each failed attempt logs psql's actual error
-   (sanitized), not a generic message, so a stuck run is diagnosable from
-   the job output alone. If the deadline is reached, it pulls the restored
-   service's own deploy and build logs before giving up -- the cleanup
-   step deletes the service unconditionally afterward, so this is the only
-   chance to see what Postgres itself was doing (or why it never started).
-5. Runs `npm run restore-drill:validate` against the tunnel -- see below.
-6. Prints RPO, RTO, and the exact JSON body for the attestation call.
-7. Deletes the restored sibling service, unconditionally.
+3. Polls the restored sibling's own deploy logs (`railway logs`) for
+   `database system is ready to accept connections`, for up to 30 minutes.
+   Two live runs took 8-15 minutes for Postgres itself to become ready.
+4. Deploys a throwaway **validator service** into the same Railway
+   project+environment as the restored sibling, sourced from this repo,
+   with its `DATABASE_URL` set to a Railway private-network reference
+   variable (`${{<sibling>.DATABASE_URL}}`) pointing at the sibling, and a
+   start command of `node dist/scripts/restore-drill-validate.js`. Because
+   it's an ordinary Railway service in the same project+environment, it
+   reaches the sibling over `<service>.railway.internal` -- the same path
+   the real `town-api` service uses to reach `Postgres-9UWs` -- with no
+   tunnel and no public exposure. Polls the deployment to a terminal
+   status, then reads its own deploy logs for the validation script's JSON
+   summary.
+5. Prints RPO, RTO, and the exact JSON body for the attestation call.
+6. Deletes both the restored sibling and the validator service,
+   unconditionally.
+
+Creating, configuring, and deploying the validator service goes through
+`railway api` (raw GraphQL) since the CLI has no `service create`
+subcommand -- see "Why raw GraphQL" below.
+
+### Why raw GraphQL, and why not the SSH tunnel
+
+Earlier versions of this workflow used `railway connect --tunnel-only` to
+reach the restored sibling from the GitHub Actions runner directly. Three
+live production runs showed that path is unreliable specifically against
+freshly PITR-restored sibling services: the SSH tunnel opened in about a
+second every time, but `psql` got `server closed the connection
+unexpectedly` on every attempt, for the full length of an 80-minute wait
+budget -- even long after the restored Postgres's own deploy logs showed it
+was ready and accepting connections. A dedicated diagnostic workflow then
+confirmed the exact same tunnel mechanism worked fine, first try, against
+an ordinary already-existing service (staging Postgres) -- isolating the
+problem to something in how Railway wires up the SSH-tunnel relay for
+newly created siblings specifically, not a timing issue and not fixable by
+waiting longer.
+
+The fix is to not use that path at all. A validator deployed as an
+ordinary Railway service in the same project+environment reaches the
+sibling over Railway's private network, the same way any other service in
+a Railway project reaches another -- proven in a live investigation run,
+all 22 integrity checks passing within a second of the validator
+container starting.
+
+The Railway CLI doesn't have a `service create` subcommand, so creating
+that throwaway validator has to go through `railway api` (raw GraphQL) --
+the same escape hatch `rollback-staging.yml` already uses for
+`deploymentRollback`. That workflow's own history shows guessing
+mutation/field names caused two real failures before schema introspection
+fixed it, so the mutations here (`serviceCreate`, `serviceInstanceUpdate`,
+`serviceInstanceDeployV2`, the `deployment`/`deploymentLogs` queries) were
+all confirmed against the live schema via `railway api describe` /
+`railway api search` before being used, not guessed.
+
+One schema detail worth knowing if this ever needs debugging: Railway's
+log pipeline parses JSON stdout lines into structured `attributes`
+(key/value pairs) rather than keeping the raw JSON as a single `message`
+string. The validation script's JSON summary line shows up as
+`attributes: [{key: "outcome", value: "\"passed\""}, {key: "checks",
+value: "[...]"}, ...]`, not as `message`. Each attribute value is itself a
+JSON-encoded string (double-encoded), so reading it back out needs a
+second `JSON.parse`.
 
 ## What gets validated
 
-`scripts/restore-drill-validate.ts` connects only to the URL it's given
-(must be the restored sibling) and checks, read-only:
+`src/platform/run-restore-drill-validate.ts` (compiled to
+`dist/scripts/restore-drill-validate.js` for the validator service;
+`scripts/restore-drill-validate.ts` is the equivalent `tsx` entrypoint for
+local/manual runs) connects only to the `DATABASE_URL` it's given (must be
+the restored sibling) and checks, read-only:
 
 - Connectivity and that the `town` schema exists.
 - The expected core tables are present.
@@ -101,29 +147,44 @@ summary line (`outcome`, per-check results, counts) and nothing else.
   (commits are archived continuously; `archive_timeout` forces a push at
   least every 60s even when idle).
 - **RTO** (time to a validated, usable restore) = time from issuing the
-  restore command to the validation script reporting `passed`.
+  restore command to the validator reporting `passed`.
 - Threshold from the plan: RPO <= 15 minutes, RTO <= 60 minutes, or a new
   accepted threshold recorded here after a real run if those aren't met.
+  Live runs on 2026-08-13 measured RPO of 180s (3 minutes, the input
+  default) and Postgres readiness alone at 8-15 minutes -- both comfortably
+  inside threshold.
 
 ## Credentials
 
-`railway postgres pitr restore` creates a new service, which is an
-account/workspace-level operation, not a project-level one. The Railway CLI
-has two separate, mutually exclusive auth env vars (setting both errors
-out):
+`railway postgres pitr restore` and the `railway api` service-management
+mutations are account/workspace-level operations, not project-level ones.
+The Railway CLI has two separate, mutually exclusive auth env vars
+(setting both errors out):
 
 - `RAILWAY_TOKEN` -- project-scoped, generated from a project's own tokens
   page. Sufficient for `railway up` / `railway variable set`, but gets
-  `Unauthorized` on `pitr restore`.
+  `Unauthorized` on `pitr restore` and on service-management mutations.
 - `RAILWAY_API_TOKEN` -- account or workspace-scoped, generated from
   **Account Settings > Tokens** (`railway.com/account/tokens`), not from
-  inside the project. Required for `pitr restore` and `service delete`.
+  inside the project. Required for `pitr restore`, `service delete`, and
+  `railway api`.
 
 This workflow uses a dedicated `RAILWAY_ACCOUNT_TOKEN` GitHub secret (an
 Account token, "No workspace" scope) passed to the CLI as `RAILWAY_API_TOKEN`
 -- deliberately separate from the `RAILWAY_TOKEN` project token that
 `ci.yml`'s deploy jobs use, so this workflow can't accidentally widen or
 narrow those jobs' credentials.
+
+### GitHub Actions minutes
+
+Each run costs real GitHub Actions minutes against the repository's
+included-usage quota (or a configured spending budget once that's
+exhausted -- confirmed on 2026-08-13 that Actions minutes and "AI Credit"
+usage are billed under separate budgets/SKUs in GitHub's billing UI, so a
+budget created for one does not cover the other). A run now takes roughly
+15-45 minutes (dominated by the Postgres-readiness wait), well under the
+`timeout-minutes: 60` cap -- much cheaper than the earlier tunnel-based
+version, which could run the full 80-110 minutes on every failure.
 
 ## Recording the attestation
 
@@ -147,9 +208,10 @@ Content-Type: application/json
 
 ## Manual equivalent (CLI, no CI)
 
-If `railway connect` reports "no SSH keys found", register one first:
-`ssh-keygen -t ed25519` then `railway ssh keys add --key ~/.ssh/id_ed25519.pub`.
-Most machines that already use `railway ssh` day to day have one registered.
+Creating the validator service by hand is easiest from the Railway
+dashboard (New Service -> GitHub Repo -> town-api -> set the start command
+and `DATABASE_URL` in Settings), not the CLI, since `railway` has no
+`service create` subcommand. The rest works from a terminal:
 
 ```bash
 railway postgres pitr status --service Postgres-9UWs --environment production
@@ -158,14 +220,18 @@ RESTORE_AT=$(date -u -d '3 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')
 railway postgres pitr restore \
   --service Postgres-9UWs --environment production \
   --at "$RESTORE_AT" --new-service-name restore-drill-manual --yes
-# This starts an async background workflow -- wait a few minutes and check
-# the Railway dashboard before the next step, the new service is not
-# necessarily up yet even though this command returns immediately.
+# Async -- wait for "database system is ready to accept connections" in
+# `railway logs --service restore-drill-manual --environment production`
+# before creating the validator.
 
-railway connect restore-drill-manual --environment production --tunnel-only
-# in another shell, using the printed connection URL:
-DATABASE_URL="<printed URL>" npm run restore-drill:validate
+# In the Railway dashboard: New Service -> GitHub Repo -> town-api,
+# environment production, name e.g. restore-drill-validator-manual.
+# Settings -> Variables: DATABASE_URL = ${{restore-drill-manual.DATABASE_URL}}
+# Settings -> Deploy: Start Command = node dist/scripts/restore-drill-validate.js
+# Restart Policy = Never. Then deploy, and read its deploy logs for the
+# JSON summary.
 
+railway service delete --service restore-drill-validator-manual --environment production --yes
 railway service delete --service restore-drill-manual --environment production --yes
 ```
 
@@ -177,26 +243,21 @@ railway service delete --service restore-drill-manual --environment production -
 - **Restore times out / sibling never reachable**: read the "Deploy logs"
   and "Build logs" groups the wait step prints right before it fails --
   they're pulled from the restored service itself, before cleanup deletes
-  it, specifically so this doesn't require another ~80-minute blind
-  re-run. What they show determines the fix:
-  - `FATAL: the database system is starting up` / `in recovery mode` in
-    the deploy logs: WAL replay is genuinely still running. The fix is a
-    longer wait budget (currently 80 minutes), not a code change.
-  - `Connection refused`, or no deploy logs at all: Postgres never started
-    listening. Check the build logs for a provisioning failure, and check
-    the Railway dashboard for the deployment's actual status
-    (crashed / stuck initializing) before assuming this is a timing issue.
-  - A run on 2026-08-13 (run 31654393755) hit exactly this ambiguity: the
-    SSH tunnel opened in ~1s on all 227 attempts across the full
-    80-minute budget, but psql never connected once, and the wait loop
-    only logged a generic "not ready yet" instead of psql's real error.
-    That gap is why the loop now logs the actual (sanitized) psql error on
-    every attempt and pulls deploy/build logs on timeout -- re-run and
-    read those before changing the budget again.
-  - Delete the stuck sibling manually from the Railway dashboard if the
-    workflow's own cleanup step couldn't reach it.
+  it. `FATAL: the database system is starting up` / `in recovery mode`
+  means WAL replay is genuinely still running (the fix is a longer wait
+  budget, not a code change); `Connection refused` or no deploy logs at
+  all means Postgres never started listening (check the build logs and
+  the Railway dashboard for a provisioning failure before assuming this is
+  a timing issue).
+- **Validator service creation/deploy fails**: the `serviceCreate` /
+  `serviceInstanceUpdate` / `serviceInstanceDeployV2` steps each print the
+  raw GraphQL response before parsing it, so a schema or permissions error
+  is visible directly in the job output. Re-run
+  `.github/workflows/railway-api-introspect.yml` (or `railway api
+  describe <Type>` by hand) against the live schema before changing a
+  mutation shape -- don't guess field names.
 - **Validation fails**: do not delete the sibling automatically -- the
-  workflow still deletes it (nothing here should be treated as a
-  substitute for production data, and keeping a stale isolated copy around
-  is its own risk) but capture the failing check names and counts from the
-  job output before it's gone, then escalate.
+  workflow still deletes both services (nothing here should be treated as
+  a substitute for production data, and keeping a stale isolated copy
+  around is its own risk) but capture the failing check names and counts
+  from the job output before they're gone, then escalate.
