@@ -144,12 +144,22 @@ jobs:
             if grep -qE 'postgres(ql)?://' tunnel.out 2>/dev/null; then
               CANDIDATE_URL=$(grep -oE 'postgres(ql)?://[^[:space:]]+' tunnel.out | head -1)
               echo "::add-mask::${CANDIDATE_URL}"
-              if PGCONNECT_TIMEOUT=5 psql "$CANDIDATE_URL" -v ON_ERROR_STOP=1 -tAc 'SELECT 1' > /dev/null 2>&1; then
+              # Capture psql's actual error instead of discarding it -- a
+              # live run showed the tunnel opening in ~1s on all 227
+              # attempts across a full 80-minute budget, yet psql never
+              # connected once. A generic "not ready yet" message can't
+              # distinguish "still replaying WAL" (FATAL: the database
+              # system is starting up / in recovery mode) from "nothing is
+              # listening" (connection refused) or a tunnel/routing
+              # problem, and guessing between those instead of reading the
+              # real error is exactly the kind of improvisation to avoid.
+              if PSQL_OUTPUT=$(PGCONNECT_TIMEOUT=5 psql "$CANDIDATE_URL" -v ON_ERROR_STOP=1 -tAc 'SELECT 1' 2>&1); then
                 echo "$CANDIDATE_URL" > restored_db_url.secret
                 READY=1
                 break
               else
-                echo "Tunnel opened but psql could not connect yet."
+                SANITIZED_ERR=$(printf '%s' "$PSQL_OUTPUT" | sed -E 's#postgres(ql)?://[^[:space:]]+#[redacted]#g' | tr '\n' ' ')
+                echo "Tunnel opened but psql could not connect yet: ${SANITIZED_ERR}"
               fi
             else
               # Mask any URL-shaped substring before printing, then show the
@@ -169,6 +179,27 @@ jobs:
             sleep 20
           done
           if [[ -z "$READY" ]]; then
+            # Pull the restored service's own logs before the cleanup step
+            # deletes it -- otherwise a failure here means the drill has to
+            # be re-run from scratch (another ~80 minutes) just to find out
+            # why. Deploy logs show what Postgres itself printed on startup
+            # (recovery progress, a crash, a config error); build logs
+            # cover the case where the service never got past provisioning.
+            echo "::group::Deploy logs for ${NEW_SERVICE_NAME} (diagnostic -- read before assuming another timeout bump will fix it)"
+            railway logs \
+              --service "$NEW_SERVICE_NAME" \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT" \
+              --lines 200 || echo "Could not fetch deploy logs"
+            echo "::endgroup::"
+            echo "::group::Build logs for ${NEW_SERVICE_NAME}"
+            railway logs \
+              --service "$NEW_SERVICE_NAME" \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT" \
+              --build \
+              --lines 200 || echo "Could not fetch build logs"
+            echo "::endgroup::"
             echo "::error::Restored instance never became reachable within the wait window"
             exit 1
           fi
