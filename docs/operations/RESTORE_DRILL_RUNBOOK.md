@@ -55,9 +55,16 @@ The workflow (`.github/workflows/restore-drill.yml`):
    `drill_start` (RTO clock start, taken right before this command).
 4. Opens a private SSH tunnel to the new service only (`railway connect
 --tunnel-only`; the restored service has no public TCP proxy, so this is
-   the only reachable path) and polls until it accepts connections --
-   up to 90 attempts, ~35s apart, since provisioning a production-sized
-   restore can itself take several minutes before the service even exists.
+   the only reachable path) and polls until it accepts connections, for up
+   to 80 minutes of wall-clock budget (not a fixed attempt count -- a live
+   run showed WAL replay on a production-sized restore can take well over
+   30 minutes, and per-attempt timing isn't predictable enough to budget
+   by attempt count). Each failed attempt logs psql's actual error
+   (sanitized), not a generic message, so a stuck run is diagnosable from
+   the job output alone. If the deadline is reached, it pulls the restored
+   service's own deploy and build logs before giving up -- the cleanup
+   step deletes the service unconditionally afterward, so this is the only
+   chance to see what Postgres itself was doing (or why it never started).
 5. Runs `npm run restore-drill:validate` against the tunnel -- see below.
 6. Prints RPO, RTO, and the exact JSON body for the attestation call.
 7. Deletes the restored sibling service, unconditionally.
@@ -167,9 +174,27 @@ railway service delete --service restore-drill-manual --environment production -
 - **PITR status unhealthy**: stop, do not restore. File a follow-up before
   the next scheduled drill; production's actual recovery capability is
   unverified until this is fixed.
-- **Restore times out / sibling never reachable**: check the new service's
-  deploy logs in the Railway dashboard before retrying. Delete the stuck
-  sibling manually if the workflow's cleanup step couldn't reach it.
+- **Restore times out / sibling never reachable**: read the "Deploy logs"
+  and "Build logs" groups the wait step prints right before it fails --
+  they're pulled from the restored service itself, before cleanup deletes
+  it, specifically so this doesn't require another ~80-minute blind
+  re-run. What they show determines the fix:
+  - `FATAL: the database system is starting up` / `in recovery mode` in
+    the deploy logs: WAL replay is genuinely still running. The fix is a
+    longer wait budget (currently 80 minutes), not a code change.
+  - `Connection refused`, or no deploy logs at all: Postgres never started
+    listening. Check the build logs for a provisioning failure, and check
+    the Railway dashboard for the deployment's actual status
+    (crashed / stuck initializing) before assuming this is a timing issue.
+  - A run on 2026-08-13 (run 31654393755) hit exactly this ambiguity: the
+    SSH tunnel opened in ~1s on all 227 attempts across the full
+    80-minute budget, but psql never connected once, and the wait loop
+    only logged a generic "not ready yet" instead of psql's real error.
+    That gap is why the loop now logs the actual (sanitized) psql error on
+    every attempt and pulls deploy/build logs on timeout -- re-run and
+    read those before changing the budget again.
+  - Delete the stuck sibling manually from the Railway dashboard if the
+    workflow's own cleanup step couldn't reach it.
 - **Validation fails**: do not delete the sibling automatically -- the
   workflow still deletes it (nothing here should be treated as a
   substitute for production data, and keeping a stale isolated copy around
