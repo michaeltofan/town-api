@@ -28,6 +28,7 @@
     "db:migrate:verify": "tsx scripts/db-migrate-verify.ts",
     "smoke:deployment": "tsx scripts/smoke-deployment.ts",
     "restore-drill:validate": "tsx scripts/restore-drill-validate.ts",
+    "restore-drill:validate:production": "node dist/scripts/restore-drill-validate.js",
     "db:seed:foundation": "tsx scripts/seed-foundation-content.ts",
     "db:seed:foundation:production": "node dist/scripts/seed-foundation-content.js",
     "db:seed:foundation:staging:production": "node dist/scripts/seed-foundation-staging.js",
