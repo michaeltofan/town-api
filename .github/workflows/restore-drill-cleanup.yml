@@ -1,0 +1,53 @@
+name: Restore drill cleanup (temporary)
+
+# Deletes named throwaway services left over from a Phase A investigation
+# run (restore-drill-phase-a.yml intentionally does not delete the
+# restored sibling, and its follow-up validator service is created
+# out-of-band via Railway MCP tools, which have no delete capability).
+# Not part of the final, fully automated closing drill for Etapa 3 -- this
+# exists only to promptly clean up after the investigation. Delete this
+# workflow once Etapa 3 closes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_names:
+        description: 'Comma-separated Railway service names to delete'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Delete named throwaway services
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      RAILWAY_PROJECT_ID: 8fd67de0-2ed1-4906-bf5a-36207191c613
+      RAILWAY_ENVIRONMENT: production
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Delete each named service
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+          SERVICE_NAMES: ${{ github.event.inputs.service_names }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra NAMES <<< "$SERVICE_NAMES"
+          for name in "${NAMES[@]}"; do
+            trimmed=$(echo "$name" | xargs)
+            if [[ -z "$trimmed" ]]; then
+              continue
+            fi
+            echo "Deleting service: ${trimmed}"
+            railway service delete \
+              --service "$trimmed" \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT" \
+              --yes || echo "::warning::Failed to delete ${trimmed} -- delete it manually from the Railway dashboard"
+          done
