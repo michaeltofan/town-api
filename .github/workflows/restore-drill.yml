@@ -28,7 +28,7 @@ jobs:
   restore-drill:
     name: Isolated PITR restore drill (production Postgres)
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 110
     environment: production
     env:
       SOURCE_SERVICE: Postgres-9UWs
@@ -116,9 +116,20 @@ jobs:
         run: |
           set -euo pipefail
           READY=""
-          MAX_ATTEMPTS=90
-          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            echo "Attempt ${attempt}/${MAX_ATTEMPTS}: opening tunnel to ${NEW_SERVICE_NAME}..."
+          # Time-based, not attempt-count-based: a live run confirmed the
+          # SSH tunnel itself opens quickly (auth works), but psql can't
+          # connect for a long stretch afterward -- Postgres is still
+          # replaying WAL from the base backup forward to the target time,
+          # and a production-sized replay can genuinely take well over 30
+          # minutes. 80 minutes of real wall-clock budget, not a fixed
+          # attempt count, so this isn't sensitive to how long each cycle
+          # happens to take.
+          DEADLINE=$(( $(date -u +%s) + 80 * 60 ))
+          attempt=0
+          while [[ "$(date -u +%s)" -lt "$DEADLINE" ]]; do
+            attempt=$((attempt + 1))
+            REMAINING_MIN=$(( (DEADLINE - $(date -u +%s)) / 60 ))
+            echo "Attempt ${attempt}: opening tunnel to ${NEW_SERVICE_NAME} (~${REMAINING_MIN}min left in budget)..."
             rm -f tunnel.out
             ( railway connect "$NEW_SERVICE_NAME" \
                 --project "$RAILWAY_PROJECT_ID" \
@@ -148,6 +159,10 @@ jobs:
               sed -E 's#postgres(ql)?://[^[:space:]]+#[redacted]#g' tunnel.out | tail -5
             fi
             if [[ -f tunnel.pid ]]; then
+              # `railway connect --tunnel-only` forks its own ssh child;
+              # killing just the captured PID left ssh processes orphaned
+              # in a live run. Kill the whole process group instead.
+              pkill -P "$(cat tunnel.pid)" 2>/dev/null || true
               kill "$(cat tunnel.pid)" 2>/dev/null || true
               rm -f tunnel.pid
             fi
