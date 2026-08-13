@@ -1,0 +1,222 @@
+name: Etapa 4 capacity drill
+
+# Etapa 4 (Capacitate pentru 1.000 de utilizatori) of the TOWN deployment
+# plan. Runs the full write-capable capacity scenario against staging
+# twice consecutively: provision ephemeral load-test data -> ensure the
+# permanent voting-arena fixture -> k6 (100 VUs/30min + 200-VU/5min spike)
+# -> DB-level integrity verification -> teardown of the ephemeral data.
+#
+# Never touches production. Never sends real email or calls real Stripe
+# (see loadtest/README.md). DB-touching scripts reach staging Postgres via
+# a short-lived `railway connect --tunnel-only` SSH tunnel per script
+# invocation (scripts/ci/with-staging-tunnel.sh) -- proven reliable
+# against staging Postgres specifically (an ordinary, already-existing
+# service; the tunnel's known unreliability is specific to freshly
+# PITR-restored siblings, see docs/operations/RESTORE_DRILL_RUNBOOK.md).
+# k6 itself talks to the public staging API over HTTPS, not through the
+# tunnel.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: capacity-drill-town-api-staging
+  cancel-in-progress: false
+
+jobs:
+  capacity-drill:
+    name: Provision -> k6 -> verify -> teardown (x2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: production
+    env:
+      TARGET_SERVICE: Postgres
+      RAILWAY_PROJECT_ID: 8fd67de0-2ed1-4906-bf5a-36207191c613
+      RAILWAY_ENVIRONMENT: staging
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+      BASE_URL: https://api-staging.towncivic.org
+      APP_ENV: staging
+      LOADTEST_VU_POOL_SIZE: '250'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Register a throwaway SSH key for this run
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          ssh-keygen -t ed25519 -f "$HOME/.ssh/id_ed25519" -N "" -q
+          railway ssh keys add \
+            --key "$HOME/.ssh/id_ed25519.pub" \
+            --name "capacity-drill-${{ github.run_id }}"
+
+      - name: Run 1 -- provision
+        run: |
+          set -euo pipefail
+          LOADTEST_RUN_TAG="run1-${{ github.run_id }}" \
+          LOADTEST_MANIFEST_PATH=loadtest/.manifest.json \
+            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/provision.ts
+
+      - name: Run 1 -- ensure voting arena
+        run: |
+          set -euo pipefail
+          LOADTEST_VOTING_ARENA_MANIFEST_PATH=loadtest/.voting-arena-manifest.json \
+            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/ensure-voting-arena.ts
+
+      - name: Run 1 -- DB snapshot (before k6)
+        run: |
+          set -euo pipefail
+          ./scripts/ci/with-staging-tunnel.sh -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+            "SELECT count(*) AS connections FROM pg_stat_activity;" \
+            -c "SELECT count(*) AS locks FROM pg_locks;" \
+            | tee run1-db-before.txt
+
+      - name: Run 1 -- k6
+        run: |
+          set -euo pipefail
+          k6 run --summary-export=run1-k6-summary.json loadtest/capacity-1000.js
+
+      - name: Run 1 -- DB snapshot (after k6)
+        if: always()
+        run: |
+          set -euo pipefail
+          ./scripts/ci/with-staging-tunnel.sh -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+            "SELECT count(*) AS connections FROM pg_stat_activity;" \
+            -c "SELECT count(*) AS locks FROM pg_locks;" \
+            | tee run1-db-after.txt
+
+      - name: Run 1 -- verify
+        if: always()
+        run: |
+          set -euo pipefail
+          ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/verify.ts | tee run1-verify.json
+
+      - name: Run 1 -- teardown
+        if: always()
+        run: |
+          set -euo pipefail
+          LOADTEST_MANIFEST_PATH=loadtest/.manifest.json \
+            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/teardown.ts | tee run1-teardown.json
+
+      - name: Run 2 -- provision
+        run: |
+          set -euo pipefail
+          LOADTEST_RUN_TAG="run2-${{ github.run_id }}" \
+          LOADTEST_MANIFEST_PATH=loadtest/.manifest.json \
+            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/provision.ts
+
+      - name: Run 2 -- ensure voting arena
+        run: |
+          set -euo pipefail
+          LOADTEST_VOTING_ARENA_MANIFEST_PATH=loadtest/.voting-arena-manifest.json \
+            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/ensure-voting-arena.ts
+
+      - name: Run 2 -- DB snapshot (before k6)
+        run: |
+          set -euo pipefail
+          ./scripts/ci/with-staging-tunnel.sh -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+            "SELECT count(*) AS connections FROM pg_stat_activity;" \
+            -c "SELECT count(*) AS locks FROM pg_locks;" \
+            | tee run2-db-before.txt
+
+      - name: Run 2 -- k6
+        run: |
+          set -euo pipefail
+          k6 run --summary-export=run2-k6-summary.json loadtest/capacity-1000.js
+
+      - name: Run 2 -- DB snapshot (after k6)
+        if: always()
+        run: |
+          set -euo pipefail
+          ./scripts/ci/with-staging-tunnel.sh -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+            "SELECT count(*) AS connections FROM pg_stat_activity;" \
+            -c "SELECT count(*) AS locks FROM pg_locks;" \
+            | tee run2-db-after.txt
+
+      - name: Run 2 -- verify
+        if: always()
+        run: |
+          set -euo pipefail
+          ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/verify.ts | tee run2-verify.json
+
+      - name: Run 2 -- teardown
+        if: always()
+        run: |
+          set -euo pipefail
+          LOADTEST_MANIFEST_PATH=loadtest/.manifest.json \
+            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/teardown.ts | tee run2-teardown.json
+
+      - name: Best-effort CPU/RAM metrics (Railway)
+        if: always()
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "CPU/RAM are read from the Railway dashboard (Metrics tab, town-api-staging service) for the drill's time window -- not fetched automatically here. See docs/operations/CAPACITY_DRILL_RUNBOOK.md for why: the Railway metrics GraphQL schema was not introspected/validated as part of this workflow, and this project's own history (see rollback-staging.yml, restore-drill.yml) is to introspect the live schema before writing a query, never guess field names." \
+            | tee metrics-note.txt
+
+      - name: Write job summary
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "# Etapa 4 capacity drill -- run ${{ github.run_id }}"
+            echo
+            echo "## Run 1"
+            echo '```json'
+            cat run1-verify.json 2>/dev/null || echo '(missing)'
+            echo '```'
+            echo "DB connections/locks before/after: see run1-db-before.txt / run1-db-after.txt (job artifacts)"
+            echo
+            echo "## Run 2"
+            echo '```json'
+            cat run2-verify.json 2>/dev/null || echo '(missing)'
+            echo '```'
+            echo "DB connections/locks before/after: see run2-db-before.txt / run2-db-after.txt (job artifacts)"
+            echo
+            echo "k6 threshold pass/fail is the step's own exit code -- a failed \"Run N -- k6\" step means p95/p99 or the failure-rate thresholds were not met."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-drill-${{ github.run_id }}
+          retention-days: 30
+          path: |
+            run1-k6-summary.json
+            run1-db-before.txt
+            run1-db-after.txt
+            run1-verify.json
+            run1-teardown.json
+            run2-k6-summary.json
+            run2-db-before.txt
+            run2-db-after.txt
+            run2-verify.json
+            run2-teardown.json
+          if-no-files-found: warn
+
+      - name: Final safety-net teardown
+        if: always()
+        run: |
+          set -euo pipefail
+          LOADTEST_MANIFEST_PATH=loadtest/.manifest.json \
+            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/teardown.ts || true
