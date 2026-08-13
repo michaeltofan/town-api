@@ -10,6 +10,18 @@ name: Railway API introspection (temporary)
 # shows guessing field/mutation names caused two real failures before
 # schema introspection fixed it. This workflow only reads the schema, no
 # mutations. Delete once the closing drill is built and working.
+#
+# First round (describe Mutation / ServiceCreateInput /
+# ServiceInstanceUpdateInput, search service / deployment / variable)
+# already confirmed: serviceCreate(input: ServiceCreateInput!) -> Service!,
+# serviceDelete(id: String!, environmentId: String) -> Boolean!,
+# serviceInstanceUpdate(serviceId: String!, input: ServiceInstanceUpdateInput!,
+# environmentId: String) -> Boolean!, deploymentLogs(deploymentId: String!,
+# filter, limit, startDate, endDate) -> [Log!]!. Still need
+# ServiceSourceInput (for pointing serviceCreate at the town-api GitHub
+# repo) and VariableUpsertInput (for setting the validator's DATABASE_URL
+# reference variable) -- this round is scoped to just those two, to keep
+# the job (and its Actions-minutes cost) small.
 
 on:
   workflow_dispatch: {}
@@ -19,7 +31,7 @@ permissions:
 
 jobs:
   introspect:
-    name: Print relevant Railway API schema sections
+    name: Print remaining Railway API schema sections
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: production
@@ -27,32 +39,12 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Describe Mutation type
+      - name: Describe ServiceSourceInput
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-        run: railway api describe Mutation
+        run: railway api describe ServiceSourceInput || true
 
-      - name: Search for service-related fields
+      - name: Describe VariableUpsertInput
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-        run: railway api search service
-
-      - name: Describe ServiceCreateInput
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-        run: railway api describe ServiceCreateInput || true
-
-      - name: Describe ServiceInstanceUpdateInput
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-        run: railway api describe ServiceInstanceUpdateInput || true
-
-      - name: Search for deployment-related fields
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-        run: railway api search deployment
-
-      - name: Search for variable-related fields
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-        run: railway api search variable
+        run: railway api describe VariableUpsertInput || true
