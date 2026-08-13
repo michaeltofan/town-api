@@ -1,0 +1,58 @@
+name: Railway API introspection (temporary)
+
+# Read-only schema introspection for the final Etapa 3 closing drill. The
+# closing drill needs to create/configure/delete a throwaway validator
+# service entirely from within a single GitHub Actions run (no live
+# operator via chat/MCP, per "pasii trebuie sa poata fi repetati fara
+# informatii din chat"). The Railway CLI has no `service create` command,
+# so this must go through `railway api` (raw GraphQL), same escape hatch
+# already used in rollback-staging.yml -- and that workflow's own history
+# shows guessing field/mutation names caused two real failures before
+# schema introspection fixed it. This workflow only reads the schema, no
+# mutations. Delete once the closing drill is built and working.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  introspect:
+    name: Print relevant Railway API schema sections
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Describe Mutation type
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: railway api describe Mutation
+
+      - name: Search for service-related fields
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: railway api search service
+
+      - name: Describe ServiceCreateInput
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: railway api describe ServiceCreateInput || true
+
+      - name: Describe ServiceInstanceUpdateInput
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: railway api describe ServiceInstanceUpdateInput || true
+
+      - name: Search for deployment-related fields
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: railway api search deployment
+
+      - name: Search for variable-related fields
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: railway api search variable
