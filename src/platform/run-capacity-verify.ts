@@ -83,10 +83,15 @@ async function runCapacityVerify(): Promise<void> {
     });
 
     await check('preflight_writes_present', async () => {
-      const mainActorId = mainAccountsA()[4]!.actorId;
-      const mainSignalId = mainSignalIdsA()[0]!;
-      const arenaActorId = arenaAccounts()[5]!.actorId;
-      const arenaSignalId = arenaSignalIds()[0]!;
+      const mainAccount = mainAccountsA()[4];
+      const mainSignalId = mainSignalIdsA()[0];
+      const arenaAccount = arenaAccounts()[5];
+      const arenaSignalId = arenaSignalIds()[0];
+      if (!mainAccount || !mainSignalId || !arenaAccount || !arenaSignalId) {
+        throw new Error('Capacity preflight fixtures are incomplete');
+      }
+      const mainActorId = mainAccount.actorId;
+      const arenaActorId = arenaAccount.actorId;
       const [confirmation, proposal, vote] = await Promise.all([
         pool.query<{ count: string }>(
           `SELECT count(*)::text AS count

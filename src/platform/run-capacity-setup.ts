@@ -221,8 +221,16 @@ async function runCapacitySetup(): Promise<void> {
         // Leave the first signal one confirmation short of the proposals
         // threshold. The one-user preflight supplies the fifth confirmation,
         // then proves a real proposal can be written synchronously.
+        const preflightSignalId = signalsA[0];
+        if (!preflightSignalId) {
+          throw new Error('Capacity preflight signal fixture is missing');
+        }
         for (const actor of mainAccountsA().slice(0, ADVANCER_COUNT - 1)) {
-          await ensureParticipantSignalConfirmation(database.db, actor.actorId, signalsA[0]!);
+          await ensureParticipantSignalConfirmation(
+            database.db,
+            actor.actorId,
+            preflightSignalId,
+          );
         }
 
         counts.main_signals = signalsA.length + signalsB.length;
@@ -271,7 +279,7 @@ async function runCapacitySetup(): Promise<void> {
 
         counts.arena_signals = signalIds.length;
         counts.arena_accounts = arenaAccountList.length;
-        counts.synthetic_sessions = Number(counts.main_accounts ?? 0) + arenaAccountList.length;
+        counts.synthetic_sessions = (counts.main_accounts ?? 0) + arenaAccountList.length;
         return `arena=${arena.id} signals=${String(signalIds.length)} accounts=${String(arenaAccountList.length)}, all advanced to voting`;
       });
     } finally {
