@@ -41,7 +41,7 @@ export function requirePasskeyManagementConfig(env: Env): PasskeyManagementConfi
     nodeEnv: env.NODE_ENV,
     appEnv: env.APP_ENV,
   });
-  if (env.NODE_ENV === 'production') {
+  if (env.APP_ENV === 'production') {
     assertProductionWebAuthnPolicy(auth.rpId, allowedOrigins);
   }
 

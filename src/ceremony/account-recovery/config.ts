@@ -64,7 +64,7 @@ export function requireAccountRecoveryConfig(env: Env): AccountRecoveryConfig {
     nodeEnv: env.NODE_ENV,
     appEnv: env.APP_ENV,
   });
-  if (env.NODE_ENV === 'production') {
+  if (env.APP_ENV === 'production') {
     assertProductionWebAuthnPolicy(rpId, allowedOrigins);
   }
 
