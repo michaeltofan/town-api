@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 
 const SAMPLE_INTERVAL_MS = 2_000;
@@ -33,11 +33,7 @@ function isCapacityMonitorEnabled(): boolean {
   );
 }
 
-function capacityDatabaseMonitorPlugin(
-  app: FastifyInstance,
-  _options: Record<string, never>,
-  done: (error?: Error) => void,
-): void {
+const capacityDatabaseMonitorPlugin: FastifyPluginCallback = (app, _options, done) => {
   if (!isCapacityMonitorEnabled()) {
     done();
     return;
@@ -169,7 +165,7 @@ function capacityDatabaseMonitorPlugin(
   });
 
   done();
-}
+};
 
 export const capacityDatabaseMonitor = fp(capacityDatabaseMonitorPlugin, {
   name: 'capacity-database-monitor',
