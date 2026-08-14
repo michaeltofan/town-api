@@ -226,11 +226,7 @@ async function runCapacitySetup(): Promise<void> {
           throw new Error('Capacity preflight signal fixture is missing');
         }
         for (const actor of mainAccountsA().slice(0, ADVANCER_COUNT - 1)) {
-          await ensureParticipantSignalConfirmation(
-            database.db,
-            actor.actorId,
-            preflightSignalId,
-          );
+          await ensureParticipantSignalConfirmation(database.db, actor.actorId, preflightSignalId);
         }
 
         counts.main_signals = signalsA.length + signalsB.length;
