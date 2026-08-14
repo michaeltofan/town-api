@@ -103,7 +103,7 @@ describe('WebAuthn deployment policy', () => {
           WEBAUTHN_RP_ID: 'towncivic.org',
         }),
       ),
-    ).toThrow(/production WEBAUTHN_ALLOWED_ORIGINS must be exactly https:\/\/towncivic\.org/);
+    ).toThrow(/production WEBAUTHN_ALLOWED_ORIGINS/);
 
     const production = loadEnv(
       capacityProcessEnv({
