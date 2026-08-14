@@ -35,7 +35,9 @@ function metricSeries(document, name) {
 
 function nearestLimit(usageSample, limits) {
   const timestamped = limits
-    .filter((sample) => Number.isFinite(sample.timestamp) && sample.timestamp <= usageSample.timestamp)
+    .filter(
+      (sample) => Number.isFinite(sample.timestamp) && sample.timestamp <= usageSample.timestamp,
+    )
     .at(-1);
   return timestamped ?? limits.at(-1);
 }
@@ -66,8 +68,7 @@ function resourceSummary(document, service) {
     cpuAveragePercent,
     cpuPeakPercent,
     memoryPeakPercent,
-    passed:
-      cpuAveragePercent < 70 && cpuPeakPercent < 85 && memoryPeakPercent < 80,
+    passed: cpuAveragePercent < 70 && cpuPeakPercent < 85 && memoryPeakPercent < 80,
   };
 }
 
