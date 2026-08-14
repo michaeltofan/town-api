@@ -244,7 +244,11 @@ async function runCapacitySetup(): Promise<void> {
         }
         for (const preflightSignalId of preflightSignalIds) {
           for (const actor of mainAccountsA(cycle).slice(0, ADVANCER_COUNT - 1)) {
-            await ensureParticipantSignalConfirmation(database.db, actor.actorId, preflightSignalId);
+            await ensureParticipantSignalConfirmation(
+              database.db,
+              actor.actorId,
+              preflightSignalId,
+            );
           }
         }
 
