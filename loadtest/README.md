@@ -35,7 +35,7 @@ propose, and vote all mutate the database and are gated by session auth,
 civic-actor/community matching, and (for votes) a single-use ballot token.
 None of that can be exercised by a read-only script.
 
-### Why this runs in a temporary, isolated environment, not shared Staging
+### Why this runs against a dedicated, permanent environment, not shared Staging
 
 Earlier iterations provisioned an ephemeral dataset directly in the shared
 Staging Postgres and deleted it afterward. That is no longer possible:
@@ -49,19 +49,22 @@ undeletable the instant it exists. Row-level teardown of load-test data in
 a shared database is therefore not viable at all, regardless of how
 carefully scoped.
 
-The fix is architectural, not a smaller teardown script: run the entire
-drill against a **brand-new, empty, temporary Postgres and a temporary API
-service**, both created fresh for one run and deleted as whole Railway
-services afterward (deleting a service doesn't fire row-level DML
-triggers). See `.github/workflows/capacity-drill.yml` and
+A later iteration tried creating and destroying a temporary Postgres + API
+service on every run instead. Two real dispatches of that design failed on
+Railway infrastructure races (a missing volume, then a stale deployment
+snapshot) before ever reaching the k6 step. The current design targets a
+**permanent, dedicated Railway environment named `capacity`**, provisioned
+once by hand, whose database schema is reset (dropped and re-migrated)
+before each run instead of the services themselves being recreated. See
+`.github/workflows/capacity-drill.yml` and
 `docs/operations/CAPACITY_DRILL_RUNBOOK.md`.
 
 ### Fixed-identity fixtures, not a manifest file
 
-Because the temporary database is always brand-new and empty, every
-ID/slug/email/password the drill uses is a **fixed constant**, not
-generated per run — see `src/platform/capacity-drill/fixtures.ts`. This
-lets the setup phase (running inside the temporary Railway service) and
+Because the schema reset guarantees the database is empty before every
+run, every ID/slug/email/password the drill uses is a **fixed constant**,
+not generated per run — see `src/platform/capacity-drill/fixtures.ts`.
+This lets the setup phase (running inside `town-api-capacity`) and
 `capacity-1000.js` (running on the GitHub Actions runner, with no shared
 filesystem) independently compute the same identity without passing a
 manifest file between two different machines. `capacity-1000.js` mirrors
@@ -69,15 +72,18 @@ manifest file between two different machines. `capacity-1000.js` mirrors
 in sync by hand if either changes.
 
 `src/platform/run-capacity-setup.ts` (compiled to
-`dist/scripts/capacity-setup.js`) runs migrations, seeds the deterministic
-foundation content, then provisions two ephemeral-shaped communities (the
-main confirm/propose pool) plus a small voting arena (signals already
-advanced to `voting`, mirroring the old permanent voting-arena fixture's
-shape) — all inside the one temporary database, so nothing needs to
-survive past this one run. `src/platform/run-capacity-verify.ts`
-(`dist/scripts/capacity-verify.js`) then checks DB-level integrity
-(duplicate/cross-community confirmations, proposals, ballot tokens, and
-that consumed ballot tokens exactly match cast votes).
+`dist/scripts/capacity-setup.js`) resets the `town`/`drizzle` Postgres
+schemas (refusing unless `RAILWAY_ENVIRONMENT_NAME` is exactly
+`capacity`), runs migrations, seeds the deterministic foundation content,
+then provisions two ephemeral-shaped communities (the main confirm/propose
+pool) plus a small voting arena (signals already advanced to `voting`,
+mirroring the old permanent voting-arena fixture's shape). Every run
+starts from a genuinely empty schema, so nothing needs to survive past one
+run despite the underlying service being permanent.
+`src/platform/run-capacity-verify.ts` (`dist/scripts/capacity-verify.js`)
+then checks DB-level integrity (duplicate/cross-community confirmations,
+proposals, ballot tokens, that consumed ballot tokens exactly match cast
+votes, and a `pg_stat_activity`/`pg_locks` snapshot).
 
 ### What the script does
 
@@ -126,17 +132,17 @@ Run workflow. It only runs on `workflow_dispatch` — never automatically on
 push or PR — so it never competes with real staging traffic unless someone
 deliberately starts it.
 
-`capacity-1000.js` is only ever meant to run against the temporary API
-service `.github/workflows/capacity-drill.yml` creates — it points
-`BASE_URL` at that service's generated `*.up.railway.app` domain, which
-the host allowlist below already permits. There is no supported way to run
-it by hand against shared Staging or production; the fixed-identity
-fixtures above are only safe in a database that is guaranteed empty. To
-run the whole drill: Actions → "Etapa 4 capacity drill" → Run workflow.
-That single dispatch creates the temporary Postgres and API service,
-migrates, seeds, provisions the fixtures, runs k6, verifies, and deletes
-both temporary services unconditionally (`if: always()`), including on
-failure.
+`capacity-1000.js` is only ever meant to run against `town-api-capacity`,
+the permanent service in the dedicated `capacity` Railway environment — it
+points `BASE_URL` at that service's fixed public domain
+(`town-api-capacity-capacity.up.railway.app`), which the host allowlist
+below already permits. There is no supported way to run it by hand against
+shared Staging or production; the fixed-identity fixtures above are only
+safe immediately after a schema reset. To run the whole drill: Actions →
+"Etapa 4 capacity drill" → Run workflow. That single dispatch resets the
+schema, migrates, seeds, provisions the fixtures, serves, runs k6, and
+verifies — twice, back to back, and the second run only starts if the
+first fully passed.
 
 ## Reading the result
 

@@ -1,3 +1,4 @@
+import { Pool } from 'pg';
 import { runMigrations } from '../db/run-migrations.js';
 import { runStagingSeed } from '../db/run-staging-seed.js';
 import { createDatabase } from '../db/client.js';
@@ -22,12 +23,13 @@ import {
 } from './capacity-drill/provisioning.js';
 
 /**
- * One-shot setup for the Etapa 4 capacity drill's isolated, temporary
- * database: migrate -> seed the deterministic foundation content -> create
- * the ephemeral-shaped capacity-drill fixtures (fixed IDs, see
- * capacity-drill/fixtures.ts). Runs inside a throwaway Railway service
- * whose DATABASE_URL points only at a brand-new, empty Postgres created
- * for this one drill -- never staging, never production.
+ * One-shot setup for the Etapa 4 capacity drill's dedicated, permanent
+ * `capacity` Railway environment: reset the database schema -> migrate ->
+ * seed the deterministic foundation content -> create the capacity-drill
+ * fixtures (fixed IDs, see capacity-drill/fixtures.ts). Runs inside
+ * town-api-capacity, whose DATABASE_URL points only at the dedicated
+ * `capacity` environment's Postgres -- never shared Staging, never
+ * production.
  *
  * Prints a single JSON summary line (outcome/checks/counts), read by the
  * orchestrating workflow the same way restore-drill.yml already reads its
@@ -35,6 +37,38 @@ import {
  */
 
 type CheckResult = { name: string; status: 'ok' | 'fail'; detail: string };
+
+const EXPECTED_RAILWAY_ENVIRONMENT_NAME = 'capacity';
+
+/**
+ * Drops and recreates the schemas migrations own (`town`, `drizzle`), so
+ * every drill run starts from a genuinely empty database rather than
+ * accumulating rows across runs. Refuses unconditionally unless Railway's
+ * own `RAILWAY_ENVIRONMENT_NAME` is exactly `capacity` -- this is the one
+ * destructive operation in this script, and it must never be reachable
+ * against the shared Staging or production Postgres, regardless of what
+ * DATABASE_URL happens to be set to.
+ */
+async function resetCapacitySchema(): Promise<string> {
+  const environmentName = process.env.RAILWAY_ENVIRONMENT_NAME;
+  if (environmentName !== EXPECTED_RAILWAY_ENVIRONMENT_NAME) {
+    throw new Error(
+      `Refusing to reset schema: RAILWAY_ENVIRONMENT_NAME is '${environmentName ?? 'unset'}', expected exactly '${EXPECTED_RAILWAY_ENVIRONMENT_NAME}'`,
+    );
+  }
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL is required');
+  }
+  const pool = new Pool({ connectionString: databaseUrl, max: 1, connectionTimeoutMillis: 10_000 });
+  try {
+    await pool.query('DROP SCHEMA IF EXISTS town CASCADE');
+    await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
+  } finally {
+    await pool.end();
+  }
+  return `schemas town, drizzle dropped in environment '${environmentName}'`;
+}
 
 async function runCapacitySetup(): Promise<void> {
   const results: CheckResult[] = [];
@@ -52,6 +86,8 @@ async function runCapacitySetup(): Promise<void> {
   };
 
   try {
+    await check('reset_schema', resetCapacitySchema);
+
     await check('migrate', async () => {
       await runMigrations();
       return 'migrations applied';

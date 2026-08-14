@@ -213,6 +213,20 @@ async function runCapacityVerify(): Promise<void> {
       };
     });
 
+    await check('db_connections_and_locks', async () => {
+      const [connections, locks] = await Promise.all([
+        pool.query<{ count: string }>('SELECT count(*)::text AS count FROM pg_stat_activity'),
+        pool.query<{ count: string }>('SELECT count(*)::text AS count FROM pg_locks'),
+      ]);
+      counts.db_connections = Number(connections.rows[0]?.count ?? 0);
+      counts.db_locks = Number(locks.rows[0]?.count ?? 0);
+      return {
+        name: 'db_connections_and_locks',
+        status: 'ok',
+        detail: `connections=${String(counts.db_connections)} locks=${String(counts.db_locks)} (snapshot taken after k6 load)`,
+      };
+    });
+
     const failed = results.filter((r) => r.status === 'fail');
     const summary = {
       outcome: failed.length === 0 ? 'passed' : 'failed',
