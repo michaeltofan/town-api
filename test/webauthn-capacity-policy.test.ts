@@ -90,6 +90,7 @@ describe('WebAuthn deployment policy', () => {
         capacityProcessEnv({
           APP_ENV: 'production',
           DATABASE_URL: 'postgres://town:secret@production-db.internal:5432/town',
+          WEBAUTHN_ALLOWED_ORIGINS: 'https://towncivic.org',
         }),
       ),
     ).toThrow(/production WEBAUTHN_RP_ID must be exactly towncivic\.org/);
