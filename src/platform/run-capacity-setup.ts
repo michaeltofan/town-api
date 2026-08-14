@@ -317,7 +317,12 @@ async function runCapacitySetup(): Promise<void> {
 }
 
 export function runCapacitySetupCli(): void {
-  runCapacitySetup().catch((error: unknown) => {
+  void (async () => {
+    await runCapacitySetup();
+    if (process.env.CAPACITY_DRILL_SERVE_AFTER_SETUP === 'true') {
+      await import('../server.js');
+    }
+  })().catch((error: unknown) => {
     const message = error instanceof Error ? (error.stack ?? error.message) : 'Setup failed';
     process.stderr.write(`${message}\n`);
     process.exit(1);

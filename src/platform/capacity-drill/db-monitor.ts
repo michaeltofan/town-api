@@ -1,8 +1,26 @@
 import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
+import {
+  arenaAccounts,
+  arenaSignalIds,
+  capacityDrillCycleFromEnv,
+  mainAccountsA,
+  mainSignalIdsA,
+} from './fixtures.js';
 
 const SAMPLE_INTERVAL_MS = 2_000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
+
+type PreflightMode = 'real' | 'synthetic';
+
+type PreflightFixture = {
+  mode: PreflightMode;
+  mainActorId: string;
+  mainSignalId: string;
+  arenaActorId: string;
+  arenaSignalId: string;
+  proposalTitle: string;
+};
 
 type DatabaseSampleRow = {
   current_connections: string;
@@ -58,9 +76,107 @@ const capacityDatabaseMonitorPlugin: FastifyPluginCallback = (app, _options, don
     maxObservedLockWaitMs: 0,
     maxSampleGapMs: 0,
   };
+  const cycle = capacityDrillCycleFromEnv();
+  const mainAccounts = mainAccountsA(cycle);
+  const mainSignals = mainSignalIdsA(cycle);
+  const votingAccounts = arenaAccounts(cycle);
+  const votingSignals = arenaSignalIds(cycle);
+  const preflightFixtures: PreflightFixture[] = [
+    {
+      mode: 'real',
+      mainActorId: mainAccounts[4]?.actorId ?? '',
+      mainSignalId: mainSignals[0] ?? '',
+      arenaActorId: votingAccounts[5]?.actorId ?? '',
+      arenaSignalId: votingSignals[0] ?? '',
+      proposalTitle: 'Capacity drill preflight proposal',
+    },
+    {
+      mode: 'synthetic',
+      mainActorId: mainAccounts[5]?.actorId ?? '',
+      mainSignalId: mainSignals[1] ?? '',
+      arenaActorId: votingAccounts[6]?.actorId ?? '',
+      arenaSignalId: votingSignals[1] ?? '',
+      proposalTitle: 'Capacity drill synthetic preflight proposal',
+    },
+  ];
+  if (
+    preflightFixtures.some(
+      (fixture) =>
+        !fixture.mainActorId ||
+        !fixture.mainSignalId ||
+        !fixture.arenaActorId ||
+        !fixture.arenaSignalId,
+    )
+  ) {
+    done(new Error('Capacity preflight monitor fixtures are incomplete'));
+    return;
+  }
+  const emittedPreflightModes = new Set<PreflightMode>();
 
   const logSummary = (event: 'capacity_db_monitor_heartbeat' | 'capacity_db_monitor_summary') => {
     process.stdout.write(`${JSON.stringify({ event, capacityDbMonitor: { ...summary } })}\n`);
+  };
+
+  const verifyPreflightWrites = async (): Promise<void> => {
+    for (const fixture of preflightFixtures) {
+      if (emittedPreflightModes.has(fixture.mode)) continue;
+      const [confirmation, proposal, vote] = await Promise.all([
+        app.database.pool.query<{ count: string }>(
+          `SELECT count(*)::text AS count
+           FROM town.signal_confirmations
+           WHERE signal_id = $1 AND actor_id = $2`,
+          [fixture.mainSignalId, fixture.mainActorId],
+        ),
+        app.database.pool.query<{ count: string }>(
+          `SELECT count(*)::text AS count
+           FROM town.civic_proposals p
+           JOIN town.civic_processes pr ON pr.id = p.process_id
+           WHERE pr.signal_id = $1 AND p.author_actor_id = $2 AND p.title = $3`,
+          [fixture.mainSignalId, fixture.mainActorId, fixture.proposalTitle],
+        ),
+        app.database.pool.query<{ count: string }>(
+          `SELECT count(*)::text AS count
+           FROM town.civic_ballot_tokens t
+           JOIN town.civic_processes pr ON pr.id = t.process_id
+           WHERE pr.signal_id = $1 AND t.actor_id = $2 AND t.consumed_at IS NOT NULL`,
+          [fixture.arenaSignalId, fixture.arenaActorId],
+        ),
+      ]);
+      const counts = {
+        confirmation: Number(confirmation.rows[0]?.count ?? 0),
+        proposal: Number(proposal.rows[0]?.count ?? 0),
+        vote: Number(vote.rows[0]?.count ?? 0),
+      };
+      if (Object.values(counts).some((count) => count > 1)) {
+        emittedPreflightModes.add(fixture.mode);
+        process.stdout.write(
+          `${JSON.stringify({
+            event: 'capacity_preflight_verify',
+            capacityPreflightVerify: {
+              outcome: 'failed',
+              cycle,
+              mode: fixture.mode,
+              counts,
+            },
+          })}\n`,
+        );
+        continue;
+      }
+      if (Object.values(counts).every((count) => count === 1)) {
+        emittedPreflightModes.add(fixture.mode);
+        process.stdout.write(
+          `${JSON.stringify({
+            event: 'capacity_preflight_verify',
+            capacityPreflightVerify: {
+              outcome: 'passed',
+              cycle,
+              mode: fixture.mode,
+              counts,
+            },
+          })}\n`,
+        );
+      }
+    }
   };
 
   const sample = async (): Promise<void> => {
@@ -130,6 +246,7 @@ const capacityDatabaseMonitorPlugin: FastifyPluginCallback = (app, _options, don
         );
         summary.maxIdleInTransaction = Math.max(summary.maxIdleInTransaction, idleInTransaction);
         summary.maxLockWaiters = Math.max(summary.maxLockWaiters, waitingNow.size);
+        await verifyPreflightWrites();
 
         if (sampledAtMs - lastHeartbeatAtMs >= HEARTBEAT_INTERVAL_MS) {
           lastHeartbeatAtMs = sampledAtMs;

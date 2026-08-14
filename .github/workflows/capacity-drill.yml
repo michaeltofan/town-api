@@ -99,7 +99,7 @@ jobs:
         id: run1_setup
         run: |
           set -euo pipefail
-          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"env CAPACITY_DRILL_CYCLE=1 CAPACITY_DRILL_RESET_SCHEMA=true node dist/scripts/capacity-setup.js","restartPolicyType":"NEVER"}}'
+          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"env CAPACITY_DRILL_CYCLE=1 CAPACITY_DRILL_RESET_SCHEMA=true CAPACITY_DRILL_DB_MONITOR_ENABLED=true CAPACITY_DRILL_SERVE_AFTER_SETUP=true node dist/scripts/capacity-setup.js","restartPolicyType":"NEVER"}}'
           UPDATE_RESPONSE=$(railway api \
             'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
             --variables "$UPDATE_INPUT" \
@@ -127,6 +127,7 @@ jobs:
             console.log(id);
           ")
           echo "Setup deployment ${DEPLOYMENT_ID} triggered"
+          echo "deployment_id=${DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
 
           TERMINAL=""
           STATUS=""
@@ -198,68 +199,26 @@ jobs:
             exit 1
           fi
 
-      - name: Run 1 -- serve (boot the real API server)
+      - name: Run 1 -- serve (reuse the setup deployment)
         id: run1_serve
+        env:
+          SERVER_DEPLOYMENT_ID: ${{ steps.run1_setup.outputs.deployment_id }}
         run: |
           set -euo pipefail
-          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/server.js","restartPolicyType":"ON_FAILURE"}}'
-          UPDATE_RESPONSE=$(railway api \
-            'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
-            --variables "$UPDATE_INPUT" \
+          test -n "$SERVER_DEPLOYMENT_ID"
+          STATUS_RESPONSE=$(railway api \
+            'query($id: String!) { deployment(id: $id) { status } }' \
+            --variables "{\"id\":\"${SERVER_DEPLOYMENT_ID}\"}" \
             --allow-errors \
             --compact)
-          echo "$UPDATE_RESPONSE"
-          echo "$UPDATE_RESPONSE" | node -e "
+          STATUS=$(echo "$STATUS_RESPONSE" | node -e "
             const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('serviceInstanceUpdate GraphQL errors: ' + JSON.stringify(d.errors));
-            if (d.data?.serviceInstanceUpdate !== true) throw new Error('unexpected serviceInstanceUpdate response shape: ' + JSON.stringify(d));
-          "
-
-          DEPLOY_INPUT='{"environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","serviceId":"'"${API_SERVICE_ID}"'"}'
-          DEPLOY_RESPONSE=$(railway api \
-            'mutation($environmentId: String!, $serviceId: String!) { serviceInstanceDeployV2(environmentId: $environmentId, serviceId: $serviceId) }' \
-            --variables "$DEPLOY_INPUT" \
-            --allow-errors \
-            --compact)
-          echo "$DEPLOY_RESPONSE"
-          DEPLOYMENT_ID=$(echo "$DEPLOY_RESPONSE" | node -e "
-            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('serviceInstanceDeployV2 GraphQL errors: ' + JSON.stringify(d.errors));
-            const id = d.data?.serviceInstanceDeployV2;
-            if (!id) throw new Error('unexpected serviceInstanceDeployV2 response shape: ' + JSON.stringify(d));
-            console.log(id);
+            if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
+            console.log(d.data?.deployment?.status ?? 'UNKNOWN');
           ")
-          echo "Serve deployment ${DEPLOYMENT_ID} triggered"
-
-          TERMINAL=""
-          STATUS=""
-          for tick in $(seq 1 120); do
-            STATUS_RESPONSE=$(railway api \
-              'query($id: String!) { deployment(id: $id) { status } }' \
-              --variables "{\"id\":\"${DEPLOYMENT_ID}\"}" \
-              --allow-errors \
-              --compact)
-            STATUS=$(echo "$STATUS_RESPONSE" | node -e "
-              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-              if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
-              console.log(d.data?.deployment?.status ?? 'UNKNOWN');
-            ")
-            echo "Serve deployment status: ${STATUS}"
-            case "$STATUS" in
-              SUCCESS|FAILED|CRASHED|REMOVED)
-                TERMINAL=1
-                break
-                ;;
-            esac
-            sleep 5
-          done
-          if [[ -z "$TERMINAL" || "$STATUS" != "SUCCESS" ]]; then
-            echo "::group::Deploy logs (diagnostic)"
-            railway logs --service "${API_SERVICE_NAME}" --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT" --lines 200 || true
-            echo "::endgroup::"
-            echo "::error::Run 1 serve deployment did not reach SUCCESS (last: ${STATUS})"
-            exit 1
-          fi
+          test "$STATUS" = "SUCCESS"
+          echo "deployment_id=${SERVER_DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
+          echo "Run 1 setup and API server share deployment ${SERVER_DEPLOYMENT_ID}."
 
       - name: Run 1 -- wait for /health/ready
         run: |
@@ -289,19 +248,25 @@ jobs:
           CAPACITY_PREFLIGHT_MODE: real
         run: k6 run --summary-export=run1-preflight-k6-summary.json loadtest/capacity-1000.js
 
-      - name: Run 1 -- verify preflight writes directly in PostgreSQL
+      - name: Run 1 -- verify real-auth preflight writes directly in PostgreSQL
         id: run1_preflight_verify
         if: always() && steps.run1_preflight.outcome == 'success'
         continue-on-error: true
-        run: bash scripts/ci/capacity-run-verifier.sh run1-preflight-verify.txt
+        run: bash scripts/ci/capacity-run-verifier.sh run1-preflight-verify.txt "${{ steps.run1_setup.outputs.deployment_id }}" 1 real
 
-      - name: Run 1 -- restore API after preflight verification
+      - name: Run 1 -- preserve the final API deployment
         id: run1_preflight_restore
         if: always() && steps.run1_preflight.outcome != 'skipped'
         continue-on-error: true
         env:
-          CAPACITY_DB_MONITOR: 'true'
-        run: bash scripts/ci/capacity-restore-server.sh
+          SERVER_DEPLOYMENT_ID: ${{ steps.run1_setup.outputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          test -n "$SERVER_DEPLOYMENT_ID"
+          BODY=$(curl -fsS "${BASE_URL}/health/ready")
+          [[ "$BODY" == *'"status":"ready"'* ]]
+          echo "deployment_id=${SERVER_DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
+          echo "Final API deployment preserved without redeploy."
 
       - name: Run 1 -- exact synthetic-session k6 preflight
         id: run1_synthetic_preflight
@@ -314,17 +279,24 @@ jobs:
           CAPACITY_PREFLIGHT_MODE: synthetic
         run: k6 run --summary-export=run1-synthetic-preflight-k6-summary.json loadtest/capacity-1000.js
 
+      - name: Run 1 -- verify synthetic preflight writes directly in PostgreSQL
+        id: run1_synthetic_preflight_verify
+        if: always() && steps.run1_synthetic_preflight.outcome == 'success'
+        continue-on-error: true
+        run: bash scripts/ci/capacity-run-verifier.sh run1-synthetic-preflight-verify.txt "${{ steps.run1_setup.outputs.deployment_id }}" 1 synthetic
+
       - name: Run 1 -- preflight gate
         if: always() && steps.run1_preflight.outcome != 'skipped'
         env:
           HTTP_OUTCOME: ${{ steps.run1_preflight.outcome }}
-          DB_OUTCOME: ${{ steps.run1_preflight_verify.outcome }}
+          REAL_DB_OUTCOME: ${{ steps.run1_preflight_verify.outcome }}
           RESTORE_OUTCOME: ${{ steps.run1_preflight_restore.outcome }}
           SYNTHETIC_OUTCOME: ${{ steps.run1_synthetic_preflight.outcome }}
+          SYNTHETIC_DB_OUTCOME: ${{ steps.run1_synthetic_preflight_verify.outcome }}
         run: |
           set -euo pipefail
-          if [[ "$HTTP_OUTCOME" != "success" || "$DB_OUTCOME" != "success" || "$RESTORE_OUTCOME" != "success" || "$SYNTHETIC_OUTCOME" != "success" ]]; then
-            echo "::error::Run 1 preflight failed (http=${HTTP_OUTCOME}, db=${DB_OUTCOME}, restore=${RESTORE_OUTCOME}, synthetic=${SYNTHETIC_OUTCOME}); long k6 cycle will not start"
+          if [[ "$HTTP_OUTCOME" != "success" || "$REAL_DB_OUTCOME" != "success" || "$RESTORE_OUTCOME" != "success" || "$SYNTHETIC_OUTCOME" != "success" || "$SYNTHETIC_DB_OUTCOME" != "success" ]]; then
+            echo "::error::Run 1 preflight failed (http=${HTTP_OUTCOME}, real_db=${REAL_DB_OUTCOME}, restore=${RESTORE_OUTCOME}, synthetic=${SYNTHETIC_OUTCOME}, synthetic_db=${SYNTHETIC_DB_OUTCOME}); long k6 cycle will not start"
             exit 1
           fi
           echo "Run 1 preflight passed: real-auth writes verified in DB, then the exact synthetic k6 client passed after the final deployment."
@@ -506,7 +478,7 @@ jobs:
         if: steps.run1_final.outputs.passed == 'true'
         run: |
           set -euo pipefail
-          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"env CAPACITY_DRILL_CYCLE=2 CAPACITY_DRILL_RESET_SCHEMA=false node dist/scripts/capacity-setup.js","restartPolicyType":"NEVER"}}'
+          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"env CAPACITY_DRILL_CYCLE=2 CAPACITY_DRILL_RESET_SCHEMA=false CAPACITY_DRILL_DB_MONITOR_ENABLED=true CAPACITY_DRILL_SERVE_AFTER_SETUP=true node dist/scripts/capacity-setup.js","restartPolicyType":"NEVER"}}'
           UPDATE_RESPONSE=$(railway api \
             'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
             --variables "$UPDATE_INPUT" \
@@ -534,6 +506,7 @@ jobs:
             console.log(id);
           ")
           echo "Setup deployment ${DEPLOYMENT_ID} triggered"
+          echo "deployment_id=${DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
 
           TERMINAL=""
           STATUS=""
@@ -605,69 +578,27 @@ jobs:
             exit 1
           fi
 
-      - name: Run 2 -- serve (boot the real API server)
+      - name: Run 2 -- serve (reuse the setup deployment)
         id: run2_serve
         if: steps.run1_final.outputs.passed == 'true'
+        env:
+          SERVER_DEPLOYMENT_ID: ${{ steps.run2_setup.outputs.deployment_id }}
         run: |
           set -euo pipefail
-          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/server.js","restartPolicyType":"ON_FAILURE"}}'
-          UPDATE_RESPONSE=$(railway api \
-            'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
-            --variables "$UPDATE_INPUT" \
+          test -n "$SERVER_DEPLOYMENT_ID"
+          STATUS_RESPONSE=$(railway api \
+            'query($id: String!) { deployment(id: $id) { status } }' \
+            --variables "{\"id\":\"${SERVER_DEPLOYMENT_ID}\"}" \
             --allow-errors \
             --compact)
-          echo "$UPDATE_RESPONSE"
-          echo "$UPDATE_RESPONSE" | node -e "
+          STATUS=$(echo "$STATUS_RESPONSE" | node -e "
             const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('serviceInstanceUpdate GraphQL errors: ' + JSON.stringify(d.errors));
-            if (d.data?.serviceInstanceUpdate !== true) throw new Error('unexpected serviceInstanceUpdate response shape: ' + JSON.stringify(d));
-          "
-
-          DEPLOY_INPUT='{"environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","serviceId":"'"${API_SERVICE_ID}"'"}'
-          DEPLOY_RESPONSE=$(railway api \
-            'mutation($environmentId: String!, $serviceId: String!) { serviceInstanceDeployV2(environmentId: $environmentId, serviceId: $serviceId) }' \
-            --variables "$DEPLOY_INPUT" \
-            --allow-errors \
-            --compact)
-          echo "$DEPLOY_RESPONSE"
-          DEPLOYMENT_ID=$(echo "$DEPLOY_RESPONSE" | node -e "
-            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('serviceInstanceDeployV2 GraphQL errors: ' + JSON.stringify(d.errors));
-            const id = d.data?.serviceInstanceDeployV2;
-            if (!id) throw new Error('unexpected serviceInstanceDeployV2 response shape: ' + JSON.stringify(d));
-            console.log(id);
+            if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
+            console.log(d.data?.deployment?.status ?? 'UNKNOWN');
           ")
-          echo "Serve deployment ${DEPLOYMENT_ID} triggered"
-
-          TERMINAL=""
-          STATUS=""
-          for tick in $(seq 1 120); do
-            STATUS_RESPONSE=$(railway api \
-              'query($id: String!) { deployment(id: $id) { status } }' \
-              --variables "{\"id\":\"${DEPLOYMENT_ID}\"}" \
-              --allow-errors \
-              --compact)
-            STATUS=$(echo "$STATUS_RESPONSE" | node -e "
-              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-              if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
-              console.log(d.data?.deployment?.status ?? 'UNKNOWN');
-            ")
-            echo "Serve deployment status: ${STATUS}"
-            case "$STATUS" in
-              SUCCESS|FAILED|CRASHED|REMOVED)
-                TERMINAL=1
-                break
-                ;;
-            esac
-            sleep 5
-          done
-          if [[ -z "$TERMINAL" || "$STATUS" != "SUCCESS" ]]; then
-            echo "::group::Deploy logs (diagnostic)"
-            railway logs --service "${API_SERVICE_NAME}" --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT" --lines 200 || true
-            echo "::endgroup::"
-            echo "::error::Run 2 serve deployment did not reach SUCCESS (last: ${STATUS})"
-            exit 1
-          fi
+          test "$STATUS" = "SUCCESS"
+          echo "deployment_id=${SERVER_DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
+          echo "Run 2 setup and API server share deployment ${SERVER_DEPLOYMENT_ID}."
 
       - name: Run 2 -- wait for /health/ready
         if: steps.run1_final.outputs.passed == 'true'
@@ -699,19 +630,25 @@ jobs:
           CAPACITY_PREFLIGHT_MODE: real
         run: k6 run --summary-export=run2-preflight-k6-summary.json loadtest/capacity-1000.js
 
-      - name: Run 2 -- verify preflight writes directly in PostgreSQL
+      - name: Run 2 -- verify real-auth preflight writes directly in PostgreSQL
         id: run2_preflight_verify
         if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_preflight.outcome == 'success'
         continue-on-error: true
-        run: bash scripts/ci/capacity-run-verifier.sh run2-preflight-verify.txt
+        run: bash scripts/ci/capacity-run-verifier.sh run2-preflight-verify.txt "${{ steps.run2_setup.outputs.deployment_id }}" 2 real
 
-      - name: Run 2 -- restore API after preflight verification
+      - name: Run 2 -- preserve the final API deployment
         id: run2_preflight_restore
         if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_preflight.outcome != 'skipped'
         continue-on-error: true
         env:
-          CAPACITY_DB_MONITOR: 'true'
-        run: bash scripts/ci/capacity-restore-server.sh
+          SERVER_DEPLOYMENT_ID: ${{ steps.run2_setup.outputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          test -n "$SERVER_DEPLOYMENT_ID"
+          BODY=$(curl -fsS "${BASE_URL}/health/ready")
+          [[ "$BODY" == *'"status":"ready"'* ]]
+          echo "deployment_id=${SERVER_DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
+          echo "Final API deployment preserved without redeploy."
 
       - name: Run 2 -- exact synthetic-session k6 preflight
         id: run2_synthetic_preflight
@@ -724,17 +661,24 @@ jobs:
           CAPACITY_PREFLIGHT_MODE: synthetic
         run: k6 run --summary-export=run2-synthetic-preflight-k6-summary.json loadtest/capacity-1000.js
 
+      - name: Run 2 -- verify synthetic preflight writes directly in PostgreSQL
+        id: run2_synthetic_preflight_verify
+        if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_synthetic_preflight.outcome == 'success'
+        continue-on-error: true
+        run: bash scripts/ci/capacity-run-verifier.sh run2-synthetic-preflight-verify.txt "${{ steps.run2_setup.outputs.deployment_id }}" 2 synthetic
+
       - name: Run 2 -- preflight gate
         if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_preflight.outcome != 'skipped'
         env:
           HTTP_OUTCOME: ${{ steps.run2_preflight.outcome }}
-          DB_OUTCOME: ${{ steps.run2_preflight_verify.outcome }}
+          REAL_DB_OUTCOME: ${{ steps.run2_preflight_verify.outcome }}
           RESTORE_OUTCOME: ${{ steps.run2_preflight_restore.outcome }}
           SYNTHETIC_OUTCOME: ${{ steps.run2_synthetic_preflight.outcome }}
+          SYNTHETIC_DB_OUTCOME: ${{ steps.run2_synthetic_preflight_verify.outcome }}
         run: |
           set -euo pipefail
-          if [[ "$HTTP_OUTCOME" != "success" || "$DB_OUTCOME" != "success" || "$RESTORE_OUTCOME" != "success" || "$SYNTHETIC_OUTCOME" != "success" ]]; then
-            echo "::error::Run 2 preflight failed (http=${HTTP_OUTCOME}, db=${DB_OUTCOME}, restore=${RESTORE_OUTCOME}, synthetic=${SYNTHETIC_OUTCOME}); long k6 cycle will not start"
+          if [[ "$HTTP_OUTCOME" != "success" || "$REAL_DB_OUTCOME" != "success" || "$RESTORE_OUTCOME" != "success" || "$SYNTHETIC_OUTCOME" != "success" || "$SYNTHETIC_DB_OUTCOME" != "success" ]]; then
+            echo "::error::Run 2 preflight failed (http=${HTTP_OUTCOME}, real_db=${REAL_DB_OUTCOME}, restore=${RESTORE_OUTCOME}, synthetic=${SYNTHETIC_OUTCOME}, synthetic_db=${SYNTHETIC_DB_OUTCOME}); long k6 cycle will not start"
             exit 1
           fi
           echo "Run 2 preflight passed: real-auth writes verified in DB, then the exact synthetic k6 client passed after the final deployment."
@@ -960,6 +904,7 @@ jobs:
             run1-preflight-k6-summary.json
             run1-synthetic-preflight-k6-summary.json
             run1-preflight-verify.txt
+            run1-synthetic-preflight-verify.txt
             run1-k6-summary.json
             run1-api-metrics.json
             run1-postgres-metrics.json
@@ -970,6 +915,7 @@ jobs:
             run2-preflight-k6-summary.json
             run2-synthetic-preflight-k6-summary.json
             run2-preflight-verify.txt
+            run2-synthetic-preflight-verify.txt
             run2-k6-summary.json
             run2-api-metrics.json
             run2-postgres-metrics.json
