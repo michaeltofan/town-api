@@ -96,12 +96,8 @@ jobs:
 
       - name: Emit exact Prettier patch for PR 145
         run: |
-          npx prettier --write \\
-            src/platform/capacity-drill/session-tokens.ts \\
-            test/capacity-drill-session-tokens.test.ts
-          git diff --no-ext-diff -- \\
-            src/platform/capacity-drill/session-tokens.ts \\
-            test/capacity-drill-session-tokens.test.ts
+          npx prettier --write src/platform/capacity-drill/session-tokens.ts test/capacity-drill-session-tokens.test.ts
+          git diff --no-ext-diff -- src/platform/capacity-drill/session-tokens.ts test/capacity-drill-session-tokens.test.ts
           exit 1
 
       - name: Lint
