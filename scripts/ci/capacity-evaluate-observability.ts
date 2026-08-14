@@ -58,9 +58,7 @@ function resourceSummary(document: unknown, service: 'api' | 'postgres') {
   const cpuUsage = metricSeries(document, 'CPU_USAGE');
   const cpuLimits = metricSeries(document, 'CPU_LIMIT').filter((sample) => sample.value > 0);
   const memoryUsage = metricSeries(document, 'MEMORY_USAGE');
-  const memoryLimits = metricSeries(document, 'MEMORY_LIMIT').filter(
-    (sample) => sample.value > 0,
-  );
+  const memoryLimits = metricSeries(document, 'MEMORY_LIMIT').filter((sample) => sample.value > 0);
   if (!cpuUsage.length || !cpuLimits.length || !memoryUsage.length || !memoryLimits.length) {
     throw new Error(`${service}: missing CPU or memory usage/limit samples`);
   }
