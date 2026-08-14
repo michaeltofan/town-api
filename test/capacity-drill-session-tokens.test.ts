@@ -8,14 +8,14 @@ const SECRET = 'capacity-drill-test-secret-32-characters-minimum';
 
 describe('capacity drill session boundary', () => {
   it('accepts the dedicated secret only in the capacity environment', () => {
-    expect(
-      requireCapacityDrillAuthSecret({ environmentName: 'capacity', secret: SECRET }),
-    ).toBe(SECRET);
+    expect(requireCapacityDrillAuthSecret({ environmentName: 'capacity', secret: SECRET })).toBe(
+      SECRET,
+    );
 
     for (const environmentName of ['production', 'staging', 'prod', undefined]) {
-      expect(() =>
-        requireCapacityDrillAuthSecret({ environmentName, secret: SECRET }),
-      ).toThrow("Capacity drill sessions are forbidden outside 'capacity'");
+      expect(() => requireCapacityDrillAuthSecret({ environmentName, secret: SECRET })).toThrow(
+        "Capacity drill sessions are forbidden outside 'capacity'",
+      );
     }
   });
 
