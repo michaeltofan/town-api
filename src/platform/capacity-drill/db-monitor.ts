@@ -132,10 +132,7 @@ function capacityDatabaseMonitorPlugin(
           summary.maxConnectionPercent,
           (currentConnections / maxConnections) * 100,
         );
-        summary.maxIdleInTransaction = Math.max(
-          summary.maxIdleInTransaction,
-          idleInTransaction,
-        );
+        summary.maxIdleInTransaction = Math.max(summary.maxIdleInTransaction, idleInTransaction);
         summary.maxLockWaiters = Math.max(summary.maxLockWaiters, waitingNow.size);
 
         if (sampledAtMs - lastHeartbeatAtMs >= HEARTBEAT_INTERVAL_MS) {
