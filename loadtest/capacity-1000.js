@@ -179,8 +179,7 @@ const preflightOptions = {
   thresholds,
 };
 
-export const options =
-  __ENV.CAPACITY_PREFLIGHT === 'true' ? preflightOptions : capacityOptions;
+export const options = __ENV.CAPACITY_PREFLIGHT === 'true' ? preflightOptions : capacityOptions;
 
 function randomItem(list) {
   return list[Math.floor(Math.random() * list.length)];

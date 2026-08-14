@@ -13,9 +13,9 @@ describe('capacity drill session boundary', () => {
     ).toBe(SECRET);
 
     for (const environmentName of ['production', 'staging', 'prod', undefined]) {
-      expect(() => requireCapacityDrillAuthSecret({ environmentName, secret: SECRET })).toThrow(
-        "Capacity drill sessions are forbidden outside 'capacity'",
-      );
+      expect(() =>
+        requireCapacityDrillAuthSecret({ environmentName, secret: SECRET }),
+      ).toThrow("Capacity drill sessions are forbidden outside 'capacity'");
     }
   });
 

@@ -261,8 +261,7 @@ async function runCapacityVerify(): Promise<void> {
       counts.confirmations = Number(confirmations.rows[0]?.count ?? 0);
       counts.proposals = Number(proposals.rows[0]?.count ?? 0);
       counts.votes = Number(votes.rows[0]?.count ?? 0);
-      const writesPresent =
-        counts.confirmations > 0 && counts.proposals > 0 && counts.votes > 0;
+      const writesPresent = counts.confirmations > 0 && counts.proposals > 0 && counts.votes > 0;
       return {
         name: 'summary_counts',
         status: writesPresent ? 'ok' : 'fail',

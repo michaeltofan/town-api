@@ -12,7 +12,10 @@ export function requireCapacityDrillAuthSecret(input: {
       `Capacity drill sessions are forbidden outside '${CAPACITY_ENVIRONMENT_NAME}'`,
     );
   }
-  if (!input.secret || input.secret.length < CAPACITY_DRILL_AUTH_SECRET_MIN_LENGTH) {
+  if (
+    !input.secret ||
+    input.secret.length < CAPACITY_DRILL_AUTH_SECRET_MIN_LENGTH
+  ) {
     throw new Error(
       `CAPACITY_DRILL_AUTH_SECRET must contain at least ${String(CAPACITY_DRILL_AUTH_SECRET_MIN_LENGTH)} characters`,
     );

@@ -271,8 +271,7 @@ async function runCapacitySetup(): Promise<void> {
 
         counts.arena_signals = signalIds.length;
         counts.arena_accounts = arenaAccountList.length;
-        counts.synthetic_sessions =
-          Number(counts.main_accounts ?? 0) + arenaAccountList.length;
+        counts.synthetic_sessions = Number(counts.main_accounts ?? 0) + arenaAccountList.length;
         return `arena=${arena.id} signals=${String(signalIds.length)} accounts=${String(arenaAccountList.length)}, all advanced to voting`;
       });
     } finally {
