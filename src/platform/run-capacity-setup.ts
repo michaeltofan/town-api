@@ -1,0 +1,211 @@
+import { runMigrations } from '../db/run-migrations.js';
+import { runStagingSeed } from '../db/run-staging-seed.js';
+import { createDatabase } from '../db/client.js';
+import {
+  ADVANCER_COUNT,
+  ARENA_COMMUNITY,
+  CAPACITY_DRILL_PASSWORD,
+  COMMUNITY_A,
+  COMMUNITY_B,
+  arenaAccounts,
+  arenaSignalIds,
+  mainAccountsA,
+  mainAccountsB,
+  mainSignalIdsA,
+  mainSignalIdsB,
+} from './capacity-drill/fixtures.js';
+import {
+  advanceSignalToVoting,
+  createLoginAccount,
+  createSignal,
+  ensureCommunity,
+} from './capacity-drill/provisioning.js';
+
+/**
+ * One-shot setup for the Etapa 4 capacity drill's isolated, temporary
+ * database: migrate -> seed the deterministic foundation content -> create
+ * the ephemeral-shaped capacity-drill fixtures (fixed IDs, see
+ * capacity-drill/fixtures.ts). Runs inside a throwaway Railway service
+ * whose DATABASE_URL points only at a brand-new, empty Postgres created
+ * for this one drill -- never staging, never production.
+ *
+ * Prints a single JSON summary line (outcome/checks/counts), read by the
+ * orchestrating workflow the same way restore-drill.yml already reads its
+ * validator's summary from deploy logs.
+ */
+
+type CheckResult = { name: string; status: 'ok' | 'fail'; detail: string };
+
+async function runCapacitySetup(): Promise<void> {
+  const results: CheckResult[] = [];
+  const counts: Record<string, number> = {};
+
+  const check = async (name: string, fn: () => Promise<string>): Promise<void> => {
+    try {
+      const detail = await fn();
+      results.push({ name, status: 'ok', detail });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'unknown error';
+      results.push({ name, status: 'fail', detail: message });
+      throw error;
+    }
+  };
+
+  try {
+    await check('migrate', async () => {
+      await runMigrations();
+      return 'migrations applied';
+    });
+
+    await check('seed_foundation', async () => {
+      const result = await runStagingSeed();
+      return `outcome=${result.outcome}`;
+    });
+
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      throw new Error('DATABASE_URL is required');
+    }
+    const database = createDatabase({
+      connectionString: databaseUrl,
+      poolMax: 5,
+      connectionTimeoutMs: 10_000,
+      idleTimeoutMs: 2_000,
+    });
+
+    try {
+      const now = new Date();
+      const at = now.toISOString();
+
+      await check('provision_main_pool', async () => {
+        const communityA = await ensureCommunity(database.db, {
+          id: COMMUNITY_A.id,
+          slug: COMMUNITY_A.slug,
+          position: 9001,
+          at,
+        });
+        const communityB = await ensureCommunity(database.db, {
+          id: COMMUNITY_B.id,
+          slug: COMMUNITY_B.slug,
+          position: 9002,
+          at,
+        });
+
+        const signalsA = mainSignalIdsA();
+        for (const [i, id] of signalsA.entries()) {
+          await createSignal(database.db, {
+            id,
+            communityId: communityA.id,
+            slug: `${COMMUNITY_A.slug}-signal-${String(i + 1)}`,
+            position: i + 1,
+            at,
+            index: i,
+          });
+        }
+        const signalsB = mainSignalIdsB();
+        for (const [i, id] of signalsB.entries()) {
+          await createSignal(database.db, {
+            id,
+            communityId: communityB.id,
+            slug: `${COMMUNITY_B.slug}-signal-${String(i + 1)}`,
+            position: i + 1,
+            at,
+            index: i,
+          });
+        }
+
+        let created = 0;
+        for (const account of mainAccountsA()) {
+          await createLoginAccount(database.db, {
+            accountId: account.accountId,
+            actorId: account.actorId,
+            email: account.email,
+            password: CAPACITY_DRILL_PASSWORD,
+            communityId: communityA.id,
+            community: communityA,
+            at,
+          });
+          created += 1;
+        }
+        for (const account of mainAccountsB()) {
+          await createLoginAccount(database.db, {
+            accountId: account.accountId,
+            actorId: account.actorId,
+            email: account.email,
+            password: CAPACITY_DRILL_PASSWORD,
+            communityId: communityB.id,
+            community: communityB,
+            at,
+          });
+          created += 1;
+        }
+
+        counts.main_signals = signalsA.length + signalsB.length;
+        counts.main_accounts = created;
+        return `communityA=${communityA.id} communityB=${communityB.id} signals=${String(counts.main_signals)} accounts=${String(created)}`;
+      });
+
+      await check('provision_voting_arena', async () => {
+        const arena = await ensureCommunity(database.db, {
+          id: ARENA_COMMUNITY.id,
+          slug: ARENA_COMMUNITY.slug,
+          position: 9999,
+          at,
+        });
+
+        const signalIds = arenaSignalIds();
+        for (const [i, id] of signalIds.entries()) {
+          await createSignal(database.db, {
+            id,
+            communityId: arena.id,
+            slug: `${ARENA_COMMUNITY.slug}-signal-${String(i + 1)}`,
+            position: i + 1,
+            at,
+            index: i,
+          });
+        }
+
+        const arenaAccountList = arenaAccounts();
+        for (const account of arenaAccountList) {
+          await createLoginAccount(database.db, {
+            accountId: account.accountId,
+            actorId: account.actorId,
+            email: account.email,
+            password: CAPACITY_DRILL_PASSWORD,
+            communityId: arena.id,
+            community: arena,
+            at,
+          });
+        }
+
+        const advancerActorIds = arenaAccountList.slice(0, ADVANCER_COUNT).map((a) => a.actorId);
+        for (const signalId of signalIds) {
+          await advanceSignalToVoting(database.db, { signalId, advancerActorIds, now });
+        }
+
+        counts.arena_signals = signalIds.length;
+        counts.arena_accounts = arenaAccountList.length;
+        return `arena=${arena.id} signals=${String(signalIds.length)} accounts=${String(arenaAccountList.length)}, all advanced to voting`;
+      });
+    } finally {
+      await database.close();
+    }
+
+    const summary = { outcome: 'passed', checks: results, counts };
+    process.stdout.write(`${JSON.stringify(summary)}\n`);
+  } catch (error) {
+    const failed = results.filter((r) => r.status === 'fail');
+    const summary = { outcome: 'failed', checks: results, counts };
+    process.stdout.write(`${JSON.stringify(summary)}\n`);
+    process.stderr.write(`Capacity drill setup FAILED: ${failed.map((f) => f.name).join(', ')}\n`);
+    throw error;
+  }
+}
+
+export function runCapacitySetupCli(): void {
+  runCapacitySetup().catch((error: unknown) => {
+    const message = error instanceof Error ? (error.stack ?? error.message) : 'Setup failed';
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
+  });
+}
