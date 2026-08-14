@@ -224,10 +224,10 @@ export function requireWebAuthnRegistrationConfig(env: Env): WebAuthnRegistratio
     nodeEnv: env.NODE_ENV,
     appEnv: env.APP_ENV,
   });
-  if (env.NODE_ENV === 'production') {
+  if (env.APP_ENV === 'production') {
     assertProductionWebAuthnPolicy(rpId, allowedOrigins);
   }
-  if (env.NODE_ENV === 'production' && rpId === 'localhost') {
+  if (env.APP_ENV === 'production' && rpId === 'localhost') {
     throw new Error('Invalid environment configuration: production cannot use localhost RP ID');
   }
 
