@@ -47,6 +47,7 @@ jobs:
       RAILWAY_ENVIRONMENT_ID: b1cd4997-02b8-4103-bd64-bfc970e0e7cc
       API_SERVICE_ID: 992fd678-aa3c-4fe2-8295-921ec6c2f2a5
       API_SERVICE_NAME: town-api-capacity
+      DB_SERVICE_NAME: Postgres-ykVK
       BASE_URL: https://town-api-capacity-capacity.up.railway.app
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
     steps:
@@ -67,6 +68,9 @@ jobs:
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli
+
+      - name: Link Railway CLI to the isolated capacity environment
+        run: railway link --project "${RAILWAY_PROJECT_ID}" --environment "${RAILWAY_ENVIRONMENT_ID}"
 
       - name: Load capacity-only session secret
         id: capacity_secret
@@ -95,7 +99,7 @@ jobs:
         id: run1_setup
         run: |
           set -euo pipefail
-          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/scripts/capacity-setup.js","restartPolicyType":"NEVER"}}'
+          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"env CAPACITY_DRILL_CYCLE=1 CAPACITY_DRILL_RESET_SCHEMA=true node dist/scripts/capacity-setup.js","restartPolicyType":"NEVER"}}'
           UPDATE_RESPONSE=$(railway api \
             'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
             --variables "$UPDATE_INPUT" \
@@ -276,11 +280,18 @@ jobs:
           fi
           echo "town-api-capacity is ready."
 
-      - name: Run 1 -- one-user HTTP preflight
+      - name: Run 1 -- password-auth HTTP preflight
         id: run1_preflight
         env:
           CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+          CAPACITY_DRILL_CYCLE: '2'
+          CAPACITY_DRILL_CYCLE: '2'
+          CAPACITY_DRILL_CYCLE: '2'
+          CAPACITY_DRILL_CYCLE: '1'
+          CAPACITY_DRILL_CYCLE: '1'
+          CAPACITY_DRILL_CYCLE: '1'
           CAPACITY_PREFLIGHT: 'true'
+          CAPACITY_PREFLIGHT_MODE: real
         run: k6 run --summary-export=run1-preflight-k6-summary.json loadtest/capacity-1000.js
 
       - name: Run 1 -- verify preflight writes directly in PostgreSQL
@@ -293,7 +304,19 @@ jobs:
         id: run1_preflight_restore
         if: always() && steps.run1_preflight.outcome != 'skipped'
         continue-on-error: true
+        env:
+          CAPACITY_DB_MONITOR: 'true'
         run: bash scripts/ci/capacity-restore-server.sh
+
+      - name: Run 1 -- exact synthetic-session k6 preflight
+        id: run1_synthetic_preflight
+        if: always() && steps.run1_preflight_restore.outcome == 'success'
+        continue-on-error: true
+        env:
+          CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+          CAPACITY_PREFLIGHT: 'true'
+          CAPACITY_PREFLIGHT_MODE: synthetic
+        run: k6 run --summary-export=run1-synthetic-preflight-k6-summary.json loadtest/capacity-1000.js
 
       - name: Run 1 -- preflight gate
         if: always() && steps.run1_preflight.outcome != 'skipped'
@@ -301,13 +324,14 @@ jobs:
           HTTP_OUTCOME: ${{ steps.run1_preflight.outcome }}
           DB_OUTCOME: ${{ steps.run1_preflight_verify.outcome }}
           RESTORE_OUTCOME: ${{ steps.run1_preflight_restore.outcome }}
+          SYNTHETIC_OUTCOME: ${{ steps.run1_synthetic_preflight.outcome }}
         run: |
           set -euo pipefail
-          if [[ "$HTTP_OUTCOME" != "success" || "$DB_OUTCOME" != "success" || "$RESTORE_OUTCOME" != "success" ]]; then
-            echo "::error::Run 1 preflight failed (http=${HTTP_OUTCOME}, db=${DB_OUTCOME}, restore=${RESTORE_OUTCOME}); long k6 cycle will not start"
+          if [[ "$HTTP_OUTCOME" != "success" || "$DB_OUTCOME" != "success" || "$RESTORE_OUTCOME" != "success" || "$SYNTHETIC_OUTCOME" != "success" ]]; then
+            echo "::error::Run 1 preflight failed (http=${HTTP_OUTCOME}, db=${DB_OUTCOME}, restore=${RESTORE_OUTCOME}, synthetic=${SYNTHETIC_OUTCOME}); long k6 cycle will not start"
             exit 1
           fi
-          echo "Run 1 preflight passed: password login, confirmation, proposal, vote, and direct DB verification."
+          echo "Run 1 preflight passed: real-auth writes verified in DB, then the exact synthetic k6 client passed after the final deployment."
 
       - name: Run 1 -- k6
         id: run1_k6
@@ -315,15 +339,47 @@ jobs:
         env:
           CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          START_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "start_at=${START_AT}" >> "$GITHUB_OUTPUT"
           k6 run --summary-export=run1-k6-summary.json loadtest/capacity-1000.js
+          K6_STATUS=$?
+          END_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "end_at=${END_AT}" >> "$GITHUB_OUTPUT"
+          exit "$K6_STATUS"
+
+      - name: Run 1 -- collect and evaluate observability
+        id: run1_observability
+        if: always() && steps.run1_k6.outcome != 'skipped'
+        continue-on-error: true
+        env:
+          START_AT: ${{ steps.run1_k6.outputs.start_at }}
+          END_AT: ${{ steps.run1_k6.outputs.end_at }}
+          SERVER_DEPLOYMENT_ID: ${{ steps.run1_preflight_restore.outputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          test -n "$START_AT"
+          test -n "$END_AT"
+          test -n "$SERVER_DEPLOYMENT_ID"
+          railway metrics --service "$API_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run1-api-metrics.json
+          railway metrics --service "$DB_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run1-postgres-metrics.json
+          railway api \
+            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+            --variables "{\"deploymentId\":\"${SERVER_DEPLOYMENT_ID}\",\"limit\":500}" \
+            --allow-errors \
+            --compact > run1-db-monitor-logs.json
+          node scripts/ci/capacity-evaluate-observability.mjs \
+            run1-api-metrics.json \
+            run1-postgres-metrics.json \
+            run1-db-monitor-logs.json \
+            run1-observability.json
 
       - name: Run 1 -- verify
         id: run1_verify
         if: always() && steps.run1_k6.outcome != 'skipped'
         run: |
           set -euo pipefail
-          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/scripts/capacity-verify.js","restartPolicyType":"NEVER"}}'
+          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"env CAPACITY_DRILL_CYCLE=1 node dist/scripts/capacity-verify.js","restartPolicyType":"NEVER"}}'
           UPDATE_RESPONSE=$(railway api \
             'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
             --variables "$UPDATE_INPUT" \
@@ -429,17 +485,19 @@ jobs:
         if: always()
         env:
           K6_OUTCOME: ${{ steps.run1_k6.outcome }}
+          OBSERVABILITY_OUTCOME: ${{ steps.run1_observability.outcome }}
           VERIFY_OUTCOME: ${{ steps.run1_verify.outputs.outcome || 'failed' }}
         run: |
           set -euo pipefail
           echo "Run 1 -- k6 step outcome: ${K6_OUTCOME}"
+          echo "Run 1 -- observability outcome: ${OBSERVABILITY_OUTCOME}"
           echo "Run 1 -- verify outcome: ${VERIFY_OUTCOME}"
-          if [[ "$K6_OUTCOME" == "success" && "$VERIFY_OUTCOME" == "passed" ]]; then
+          if [[ "$K6_OUTCOME" == "success" && "$OBSERVABILITY_OUTCOME" == "success" && "$VERIFY_OUTCOME" == "passed" ]]; then
             echo "passed=true" >> "$GITHUB_OUTPUT"
             echo "Run 1 passed."
           else
             echo "passed=false" >> "$GITHUB_OUTPUT"
-            echo "::error::Run 1 did not fully pass (k6=${K6_OUTCOME}, verify=${VERIFY_OUTCOME}) -- Run 2 will not start."
+            echo "::error::Run 1 did not fully pass (k6=${K6_OUTCOME}, observability=${OBSERVABILITY_OUTCOME}, verify=${VERIFY_OUTCOME}) -- Run 2 will not start."
           fi
 
       # ---------------------------------------------------------------
@@ -451,7 +509,7 @@ jobs:
         if: steps.run1_final.outputs.passed == 'true'
         run: |
           set -euo pipefail
-          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/scripts/capacity-setup.js","restartPolicyType":"NEVER"}}'
+          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"env CAPACITY_DRILL_CYCLE=2 CAPACITY_DRILL_RESET_SCHEMA=false node dist/scripts/capacity-setup.js","restartPolicyType":"NEVER"}}'
           UPDATE_RESPONSE=$(railway api \
             'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
             --variables "$UPDATE_INPUT" \
@@ -634,12 +692,13 @@ jobs:
           fi
           echo "town-api-capacity is ready."
 
-      - name: Run 2 -- one-user HTTP preflight
+      - name: Run 2 -- password-auth HTTP preflight
         id: run2_preflight
         if: steps.run1_final.outputs.passed == 'true'
         env:
           CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
           CAPACITY_PREFLIGHT: 'true'
+          CAPACITY_PREFLIGHT_MODE: real
         run: k6 run --summary-export=run2-preflight-k6-summary.json loadtest/capacity-1000.js
 
       - name: Run 2 -- verify preflight writes directly in PostgreSQL
@@ -652,7 +711,19 @@ jobs:
         id: run2_preflight_restore
         if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_preflight.outcome != 'skipped'
         continue-on-error: true
+        env:
+          CAPACITY_DB_MONITOR: 'true'
         run: bash scripts/ci/capacity-restore-server.sh
+
+      - name: Run 2 -- exact synthetic-session k6 preflight
+        id: run2_synthetic_preflight
+        if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_preflight_restore.outcome == 'success'
+        continue-on-error: true
+        env:
+          CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+          CAPACITY_PREFLIGHT: 'true'
+          CAPACITY_PREFLIGHT_MODE: synthetic
+        run: k6 run --summary-export=run2-synthetic-preflight-k6-summary.json loadtest/capacity-1000.js
 
       - name: Run 2 -- preflight gate
         if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_preflight.outcome != 'skipped'
@@ -660,13 +731,14 @@ jobs:
           HTTP_OUTCOME: ${{ steps.run2_preflight.outcome }}
           DB_OUTCOME: ${{ steps.run2_preflight_verify.outcome }}
           RESTORE_OUTCOME: ${{ steps.run2_preflight_restore.outcome }}
+          SYNTHETIC_OUTCOME: ${{ steps.run2_synthetic_preflight.outcome }}
         run: |
           set -euo pipefail
-          if [[ "$HTTP_OUTCOME" != "success" || "$DB_OUTCOME" != "success" || "$RESTORE_OUTCOME" != "success" ]]; then
-            echo "::error::Run 2 preflight failed (http=${HTTP_OUTCOME}, db=${DB_OUTCOME}, restore=${RESTORE_OUTCOME}); long k6 cycle will not start"
+          if [[ "$HTTP_OUTCOME" != "success" || "$DB_OUTCOME" != "success" || "$RESTORE_OUTCOME" != "success" || "$SYNTHETIC_OUTCOME" != "success" ]]; then
+            echo "::error::Run 2 preflight failed (http=${HTTP_OUTCOME}, db=${DB_OUTCOME}, restore=${RESTORE_OUTCOME}, synthetic=${SYNTHETIC_OUTCOME}); long k6 cycle will not start"
             exit 1
           fi
-          echo "Run 2 preflight passed: password login, confirmation, proposal, vote, and direct DB verification."
+          echo "Run 2 preflight passed: real-auth writes verified in DB, then the exact synthetic k6 client passed after the final deployment."
 
       - name: Run 2 -- k6
         id: run2_k6
@@ -675,15 +747,47 @@ jobs:
         env:
           CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          START_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "start_at=${START_AT}" >> "$GITHUB_OUTPUT"
           k6 run --summary-export=run2-k6-summary.json loadtest/capacity-1000.js
+          K6_STATUS=$?
+          END_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "end_at=${END_AT}" >> "$GITHUB_OUTPUT"
+          exit "$K6_STATUS"
+
+      - name: Run 2 -- collect and evaluate observability
+        id: run2_observability
+        if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_k6.outcome != 'skipped'
+        continue-on-error: true
+        env:
+          START_AT: ${{ steps.run2_k6.outputs.start_at }}
+          END_AT: ${{ steps.run2_k6.outputs.end_at }}
+          SERVER_DEPLOYMENT_ID: ${{ steps.run2_preflight_restore.outputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          test -n "$START_AT"
+          test -n "$END_AT"
+          test -n "$SERVER_DEPLOYMENT_ID"
+          railway metrics --service "$API_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run2-api-metrics.json
+          railway metrics --service "$DB_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run2-postgres-metrics.json
+          railway api \
+            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+            --variables "{\"deploymentId\":\"${SERVER_DEPLOYMENT_ID}\",\"limit\":500}" \
+            --allow-errors \
+            --compact > run2-db-monitor-logs.json
+          node scripts/ci/capacity-evaluate-observability.mjs \
+            run2-api-metrics.json \
+            run2-postgres-metrics.json \
+            run2-db-monitor-logs.json \
+            run2-observability.json
 
       - name: Run 2 -- verify
         id: run2_verify
         if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_k6.outcome != 'skipped'
         run: |
           set -euo pipefail
-          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/scripts/capacity-verify.js","restartPolicyType":"NEVER"}}'
+          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"env CAPACITY_DRILL_CYCLE=2 node dist/scripts/capacity-verify.js","restartPolicyType":"NEVER"}}'
           UPDATE_RESPONSE=$(railway api \
             'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
             --variables "$UPDATE_INPUT" \
@@ -789,17 +893,19 @@ jobs:
         if: always() && steps.run1_final.outputs.passed == 'true'
         env:
           K6_OUTCOME: ${{ steps.run2_k6.outcome }}
+          OBSERVABILITY_OUTCOME: ${{ steps.run2_observability.outcome }}
           VERIFY_OUTCOME: ${{ steps.run2_verify.outputs.outcome || 'failed' }}
         run: |
           set -euo pipefail
           echo "Run 2 -- k6 step outcome: ${K6_OUTCOME}"
+          echo "Run 2 -- observability outcome: ${OBSERVABILITY_OUTCOME}"
           echo "Run 2 -- verify outcome: ${VERIFY_OUTCOME}"
-          if [[ "$K6_OUTCOME" == "success" && "$VERIFY_OUTCOME" == "passed" ]]; then
+          if [[ "$K6_OUTCOME" == "success" && "$OBSERVABILITY_OUTCOME" == "success" && "$VERIFY_OUTCOME" == "passed" ]]; then
             echo "passed=true" >> "$GITHUB_OUTPUT"
             echo "Run 2 passed."
           else
             echo "passed=false" >> "$GITHUB_OUTPUT"
-            echo "::error::Run 2 did not fully pass (k6=${K6_OUTCOME}, verify=${VERIFY_OUTCOME})"
+            echo "::error::Run 2 did not fully pass (k6=${K6_OUTCOME}, observability=${OBSERVABILITY_OUTCOME}, verify=${VERIFY_OUTCOME})"
           fi
 
       # ---------------------------------------------------------------
@@ -852,13 +958,23 @@ jobs:
           path: |
             run1-setup-result.txt
             run1-preflight-k6-summary.json
+            run1-synthetic-preflight-k6-summary.json
             run1-preflight-verify.txt
             run1-k6-summary.json
+            run1-api-metrics.json
+            run1-postgres-metrics.json
+            run1-db-monitor-logs.json
+            run1-observability.json
             run1-verify.txt
             run2-setup-result.txt
             run2-preflight-k6-summary.json
+            run2-synthetic-preflight-k6-summary.json
             run2-preflight-verify.txt
             run2-k6-summary.json
+            run2-api-metrics.json
+            run2-postgres-metrics.json
+            run2-db-monitor-logs.json
+            run2-observability.json
             run2-verify.txt
           if-no-files-found: warn
 
