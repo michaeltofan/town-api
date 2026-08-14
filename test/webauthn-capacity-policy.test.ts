@@ -1,9 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { requireAccountRecoveryConfig } from '../src/ceremony/account-recovery/config.js';
-import {
-  requirePasskeyAuthenticationConfig,
-} from '../src/ceremony/passkey-authentication/config.js';
+import { requirePasskeyAuthenticationConfig } from '../src/ceremony/passkey-authentication/config.js';
 import { requirePasskeyManagementConfig } from '../src/ceremony/passkey-management/config.js';
 import { requireWebAuthnRegistrationConfig } from '../src/ceremony/passkey-registration/config.js';
 import { loadEnv } from '../src/config/env.js';
@@ -46,8 +44,7 @@ function capacityProcessEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): NodeJS.
     CEREMONY_RATE_LIMIT_HASH_KEY: 'capacity-rate-limit-hash-key-32-bytes',
     SESSION_TOKEN_HASH_KEY: 'capacity-session-token-hash-key-32-bytes',
     WEBAUTHN_CHALLENGE_HASH_KEY: 'capacity-webauthn-challenge-key-32-bytes',
-    PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY:
-      'capacity-passkey-authentication-key-32-bytes',
+    PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY: 'capacity-passkey-authentication-key-32-bytes',
     WEBAUTHN_RP_ID: CAPACITY_HOST,
     WEBAUTHN_ALLOWED_ORIGINS: CAPACITY_ORIGIN,
     ...overrides,
@@ -172,8 +169,7 @@ describe('capacity password login and authorized confirmation', () => {
         WEBAUTHN_RP_ID: CAPACITY_HOST,
         WEBAUTHN_ALLOWED_ORIGINS: CAPACITY_ORIGIN,
         WEBAUTHN_CHALLENGE_HASH_KEY: 'capacity-webauthn-challenge-key-32-bytes',
-        PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY:
-          'capacity-passkey-authentication-key-32-bytes',
+        PASSKEY_AUTHENTICATION_CHALLENGE_HASH_KEY: 'capacity-passkey-authentication-key-32-bytes',
       },
     });
 
