@@ -8,12 +8,13 @@ import { runStagingSeed } from '../db/run-staging-seed.js';
 import { createDatabase } from '../db/client.js';
 import {
   ADVANCER_COUNT,
-  ARENA_COMMUNITY,
   CAPACITY_DRILL_PASSWORD,
-  COMMUNITY_A,
-  COMMUNITY_B,
+  arenaCommunity,
   arenaAccounts,
   arenaSignalIds,
+  capacityDrillCycleFromEnv,
+  communityA,
+  communityB,
   mainAccountsA,
   mainAccountsB,
   mainSignalIdsA,
@@ -32,7 +33,7 @@ import {
 
 /**
  * One-shot setup for the Etapa 4 capacity drill's dedicated, permanent
- * `capacity` Railway environment: reset the database schema -> migrate ->
+ * `capacity` Railway environment: reset once before cycle 1 -> migrate ->
  * seed the deterministic foundation content -> create the capacity-drill
  * fixtures (fixed IDs, see capacity-drill/fixtures.ts). Runs inside
  * town-api-capacity, whose DATABASE_URL points only at the dedicated
@@ -55,8 +56,8 @@ const EXPECTED_RAILWAY_ENVIRONMENT_NAME = 'capacity';
 
 /**
  * Drops and recreates the schemas migrations own (`town`, `drizzle`), so
- * every drill run starts from a genuinely empty database rather than
- * accumulating rows across runs. Refuses unconditionally unless Railway's
+ * cycle 1 starts from a genuinely empty database. Cycle 2 is forbidden from
+ * calling this function and appends its separate pool. Refuses unconditionally unless Railway's
  * own `RAILWAY_ENVIRONMENT_NAME` is exactly `capacity` -- this is the one
  * destructive operation in this script, and it must never be reachable
  * against the shared Staging or production Postgres, regardless of what
@@ -99,7 +100,20 @@ async function runCapacitySetup(): Promise<void> {
   };
 
   try {
-    await check('reset_schema', resetCapacitySchema);
+    const cycle = capacityDrillCycleFromEnv();
+    const shouldReset = process.env.CAPACITY_DRILL_RESET_SCHEMA !== 'false';
+    if (cycle === 2 && shouldReset) {
+      throw new Error('Cycle 2 must append its separate fixture pool without resetting the schema');
+    }
+    if (shouldReset) {
+      await check('reset_schema', resetCapacitySchema);
+    } else {
+      results.push({
+        name: 'reset_schema',
+        status: 'ok',
+        detail: 'skipped for cycle 2; cycle 1 rows remain append-only',
+      });
+    }
 
     await check('migrate', async () => {
       await runMigrations();
@@ -125,6 +139,9 @@ async function runCapacitySetup(): Promise<void> {
     try {
       const now = new Date();
       const at = now.toISOString();
+      const cycleCommunityA = communityA(cycle);
+      const cycleCommunityB = communityB(cycle);
+      const cycleArenaCommunity = arenaCommunity(cycle);
       const capacityAuthSecret = requireCapacityDrillAuthSecret({
         environmentName: process.env.RAILWAY_ENVIRONMENT_NAME,
         secret: process.env.CAPACITY_DRILL_AUTH_SECRET,
@@ -155,35 +172,35 @@ async function runCapacitySetup(): Promise<void> {
 
       await check('provision_main_pool', async () => {
         const communityA = await ensureCommunity(database.db, {
-          id: COMMUNITY_A.id,
-          slug: COMMUNITY_A.slug,
-          position: 9001,
+          id: cycleCommunityA.id,
+          slug: cycleCommunityA.slug,
+          position: 9000 + cycle * 10 + 1,
           at,
         });
         const communityB = await ensureCommunity(database.db, {
-          id: COMMUNITY_B.id,
-          slug: COMMUNITY_B.slug,
-          position: 9002,
+          id: cycleCommunityB.id,
+          slug: cycleCommunityB.slug,
+          position: 9000 + cycle * 10 + 2,
           at,
         });
 
-        const signalsA = mainSignalIdsA();
+        const signalsA = mainSignalIdsA(cycle);
         for (const [i, id] of signalsA.entries()) {
           await createSignal(database.db, {
             id,
             communityId: communityA.id,
-            slug: `${COMMUNITY_A.slug}-signal-${String(i + 1)}`,
+            slug: `${cycleCommunityA.slug}-signal-${String(i + 1)}`,
             position: i + 1,
             at,
             index: i,
           });
         }
-        const signalsB = mainSignalIdsB();
+        const signalsB = mainSignalIdsB(cycle);
         for (const [i, id] of signalsB.entries()) {
           await createSignal(database.db, {
             id,
             communityId: communityB.id,
-            slug: `${COMMUNITY_B.slug}-signal-${String(i + 1)}`,
+            slug: `${cycleCommunityB.slug}-signal-${String(i + 1)}`,
             position: i + 1,
             at,
             index: i,
@@ -191,7 +208,7 @@ async function runCapacitySetup(): Promise<void> {
         }
 
         let created = 0;
-        for (const account of mainAccountsA()) {
+        for (const account of mainAccountsA(cycle)) {
           await createLoginAccount(database.db, {
             accountId: account.accountId,
             actorId: account.actorId,
@@ -204,7 +221,7 @@ async function runCapacitySetup(): Promise<void> {
           await provisionSession(account.accountId);
           created += 1;
         }
-        for (const account of mainAccountsB()) {
+        for (const account of mainAccountsB(cycle)) {
           await createLoginAccount(database.db, {
             accountId: account.accountId,
             actorId: account.actorId,
@@ -218,15 +235,17 @@ async function runCapacitySetup(): Promise<void> {
           created += 1;
         }
 
-        // Leave the first signal one confirmation short of the proposals
-        // threshold. The one-user preflight supplies the fifth confirmation,
-        // then proves a real proposal can be written synchronously.
-        const preflightSignalId = signalsA[0];
-        if (!preflightSignalId) {
-          throw new Error('Capacity preflight signal fixture is missing');
+        // Leave two signals one confirmation short of the proposals threshold.
+        // The real-auth preflight uses the first; the exact synthetic-session
+        // preflight uses the second after the final server deployment.
+        const preflightSignalIds = signalsA.slice(0, 2);
+        if (preflightSignalIds.length !== 2) {
+          throw new Error('Capacity preflight signal fixtures are incomplete');
         }
-        for (const actor of mainAccountsA().slice(0, ADVANCER_COUNT - 1)) {
-          await ensureParticipantSignalConfirmation(database.db, actor.actorId, preflightSignalId);
+        for (const preflightSignalId of preflightSignalIds) {
+          for (const actor of mainAccountsA(cycle).slice(0, ADVANCER_COUNT - 1)) {
+            await ensureParticipantSignalConfirmation(database.db, actor.actorId, preflightSignalId);
+          }
         }
 
         counts.main_signals = signalsA.length + signalsB.length;
@@ -236,25 +255,25 @@ async function runCapacitySetup(): Promise<void> {
 
       await check('provision_voting_arena', async () => {
         const arena = await ensureCommunity(database.db, {
-          id: ARENA_COMMUNITY.id,
-          slug: ARENA_COMMUNITY.slug,
-          position: 9999,
+          id: cycleArenaCommunity.id,
+          slug: cycleArenaCommunity.slug,
+          position: 9900 + cycle,
           at,
         });
 
-        const signalIds = arenaSignalIds();
+        const signalIds = arenaSignalIds(cycle);
         for (const [i, id] of signalIds.entries()) {
           await createSignal(database.db, {
             id,
             communityId: arena.id,
-            slug: `${ARENA_COMMUNITY.slug}-signal-${String(i + 1)}`,
+            slug: `${cycleArenaCommunity.slug}-signal-${String(i + 1)}`,
             position: i + 1,
             at,
             index: i,
           });
         }
 
-        const arenaAccountList = arenaAccounts();
+        const arenaAccountList = arenaAccounts(cycle);
         for (const account of arenaAccountList) {
           await createLoginAccount(database.db, {
             accountId: account.accountId,
