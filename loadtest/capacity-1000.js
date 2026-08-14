@@ -180,10 +180,7 @@ const readEndpoints = [
 const writeEndpoints = ['login', 'confirm', 'propose', 'cross_community_confirm', 'vote'];
 const endpointLatencyThresholds = Object.fromEntries(
   readEndpoints
-    .map((endpoint) => [
-      `http_req_duration{endpoint:${endpoint}}`,
-      ['p(95)<500', 'p(99)<1500'],
-    ])
+    .map((endpoint) => [`http_req_duration{endpoint:${endpoint}}`, ['p(95)<500', 'p(99)<1500']])
     .concat(
       writeEndpoints.map((endpoint) => [
         `http_req_duration{endpoint:${endpoint}}`,
