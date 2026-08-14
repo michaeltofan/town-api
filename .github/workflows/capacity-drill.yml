@@ -368,7 +368,7 @@ jobs:
             --variables "{\"deploymentId\":\"${SERVER_DEPLOYMENT_ID}\",\"limit\":500}" \
             --allow-errors \
             --compact > run1-db-monitor-logs.json
-          node scripts/ci/capacity-evaluate-observability.mjs \
+          npx tsx scripts/ci/capacity-evaluate-observability.ts \
             run1-api-metrics.json \
             run1-postgres-metrics.json \
             run1-db-monitor-logs.json \
@@ -776,7 +776,7 @@ jobs:
             --variables "{\"deploymentId\":\"${SERVER_DEPLOYMENT_ID}\",\"limit\":500}" \
             --allow-errors \
             --compact > run2-db-monitor-logs.json
-          node scripts/ci/capacity-evaluate-observability.mjs \
+          npx tsx scripts/ci/capacity-evaluate-observability.ts \
             run2-api-metrics.json \
             run2-postgres-metrics.json \
             run2-db-monitor-logs.json \
