@@ -1,42 +1,33 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import type { Database } from '../../src/db/client.js';
-import { communities, signals, accounts, type CommunityRow } from '../../src/db/schema.js';
+import type { Database } from '../../db/client.js';
+import { communities, signals, accounts, type CommunityRow } from '../../db/schema.js';
 import {
   findCivicProcessBySignalId,
   openVotingIfBallotPreparationElapsed,
-} from '../../src/db/repositories/civic-processes.js';
-import { insertCivicDeliberationContribution } from '../../src/db/repositories/civic-deliberation.js';
-import { insertCivicProposal } from '../../src/db/repositories/civic-proposals.js';
-import { ensureParticipantSignalConfirmation } from '../../src/db/repositories/confirmations.js';
-import { findActiveCommunityById } from '../../src/db/repositories/communities.js';
-import { hashPassword } from '../../src/identity/password-hashing.js';
+} from '../../db/repositories/civic-processes.js';
+import { insertCivicDeliberationContribution } from '../../db/repositories/civic-deliberation.js';
+import { insertCivicProposal } from '../../db/repositories/civic-proposals.js';
+import { ensureParticipantSignalConfirmation } from '../../db/repositories/confirmations.js';
+import { findActiveCommunityById } from '../../db/repositories/communities.js';
+import { hashPassword } from '../../identity/password-hashing.js';
 import {
   createAccountShell,
   ensureWebAuthnUserHandle,
   transitionAccountState,
-} from '../../src/identity/repositories/accounts.js';
-import {
-  createCivicActor,
-  linkActorToAccount,
-} from '../../src/identity/repositories/actor-link.js';
-import { addAccountEmail, verifyEmail } from '../../src/identity/repositories/emails.js';
-import { addPasskeyCredential } from '../../src/identity/repositories/passkeys.js';
-import {
-  createAccountPasswordCredential,
-  revokeAccountPasswordCredential,
-} from '../../src/identity/repositories/password-credentials.js';
-import { recordCommunityCommitmentInTransaction } from '../../src/membership/community-commitment-service.js';
+} from '../../identity/repositories/accounts.js';
+import { createCivicActor, linkActorToAccount } from '../../identity/repositories/actor-link.js';
+import { addAccountEmail, verifyEmail } from '../../identity/repositories/emails.js';
+import { createAccountPasswordCredential } from '../../identity/repositories/password-credentials.js';
+import { addPasskeyCredential } from '../../identity/repositories/passkeys.js';
+import { recordCommunityCommitmentInTransaction } from '../../membership/community-commitment-service.js';
 
 /**
- * Shared provisioning primitives for the Etapa 4 load-test tooling, used by
- * both `loadtest/provision.ts` (the ephemeral per-run pool) and
- * `loadtest/ensure-voting-arena.ts` (the small permanent voting fixture --
- * see `src/db/seeds/loadtest-voting-arena.ts` for why it has to be
- * permanent). Every write here goes through the same repository functions
- * the real routes use, so the same triggers/constraints/invariants apply as
- * in production -- this just drives the state machine directly instead of
- * over HTTP.
+ * Shared provisioning primitives for the Etapa 4 capacity drill, run only
+ * against a brand-new, isolated, temporary Postgres (see fixtures.ts and
+ * docs/operations/CAPACITY_DRILL_RUNBOOK.md). Every write goes through the
+ * same repository functions the real routes use, so the same triggers/
+ * constraints/invariants apply as in production.
  */
 
 export const CONFIRMATION_THRESHOLD = 5;
@@ -55,8 +46,8 @@ export async function ensureCommunity(
     slug: input.slug,
     position: input.position,
     countryCode: 'XX',
-    cityName: 'Load Test City',
-    displayName: `Load Test Arena ${String(input.position)}`,
+    cityName: 'Capacity Drill City',
+    displayName: `Capacity Drill Arena ${String(input.position)}`,
     defaultLocale: 'en-US',
     timezone: 'UTC',
     status: 'active',
@@ -65,7 +56,7 @@ export async function ensureCommunity(
   });
   const row = await findActiveCommunityById(db, input.id);
   if (!row) {
-    throw new Error(`Failed to create load-test community ${input.slug}`);
+    throw new Error(`Failed to create capacity-drill community ${input.slug}`);
   }
   return row;
 }
@@ -73,7 +64,7 @@ export async function ensureCommunity(
 export async function createSignal(
   db: Database['db'],
   input: {
-    id?: string;
+    id: string;
     communityId: string;
     slug: string;
     position: number;
@@ -81,32 +72,31 @@ export async function createSignal(
     index: number;
   },
 ): Promise<string> {
-  const id = input.id ?? randomUUID();
   await db.insert(signals).values({
-    id,
+    id: input.id,
     communityId: input.communityId,
     slug: input.slug,
     position: input.position,
     locale: 'en-US',
-    category: 'LOAD TEST',
-    area: 'Load Test Area',
-    headline: `Load test signal ${String(input.index)}`,
+    category: 'CAPACITY DRILL',
+    area: 'Capacity Drill Area',
+    headline: `Capacity drill signal ${String(input.index)}`,
     summary: 'Synthetic signal created for the Etapa 4 capacity drill. Not real civic content.',
     description:
-      'This signal was created by the Etapa 4 load-test tooling and is not real civic content.',
-    whyItMatters: 'Synthetic load-test fixture.',
-    whoIsAffected: 'No one -- synthetic load-test fixture.',
-    latestUpdate: 'Synthetic load-test fixture.',
-    statusLabel: 'Load test fixture',
-    statusNote: 'Synthetic load-test fixture, not a real civic signal.',
+      'This signal was created by the Etapa 4 isolated capacity drill and is not real civic content.',
+    whyItMatters: 'Synthetic capacity-drill fixture.',
+    whoIsAffected: 'No one -- synthetic capacity-drill fixture.',
+    latestUpdate: 'Synthetic capacity-drill fixture.',
+    statusLabel: 'Capacity drill fixture',
+    statusNote: 'Synthetic capacity-drill fixture, not a real civic signal.',
     observedLabel: 'Synthetic',
     observedOn: null,
     observedPrecision: 'day',
-    authorDisplayName: 'Load Test Fixture',
+    authorDisplayName: 'Capacity Drill Fixture',
     authorActorId: null,
     authorAccountId: null,
     mediaUploadId: null,
-    imageKey: 'assets/loadtest/placeholder.jpg',
+    imageKey: 'assets/capacity-drill/placeholder.jpg',
     imageFocusX: 50,
     imageFocusY: 50,
     publicationStatus: 'published',
@@ -117,14 +107,14 @@ export async function createSignal(
     createdAt: input.at,
     updatedAt: input.at,
   });
-  return id;
+  return input.id;
 }
 
 export async function createLoginAccount(
   db: Database['db'],
   input: {
-    accountId?: string;
-    actorId?: string;
+    accountId: string;
+    actorId: string;
     email: string;
     password: string;
     communityId: string;
@@ -132,7 +122,7 @@ export async function createLoginAccount(
     at: string;
   },
 ): Promise<{ accountId: string; actorId: string }> {
-  const accountId = input.accountId ?? randomUUID();
+  const { accountId, actorId } = input;
   await createAccountShell(db, { id: accountId, createdAt: input.at, updatedAt: input.at });
 
   const emailId = randomUUID();
@@ -162,11 +152,11 @@ export async function createLoginAccount(
     handle: randomBytes(32),
     now: input.at,
   });
-  // assertActiveRequirements (accounts.ts) requires at least one active
-  // passkey credential row to reach 'active', regardless of auth method --
-  // these load-test accounts only ever authenticate with a password (see
-  // capacity-1000.js), so this credential is synthetic and never used for
-  // a real WebAuthn ceremony; it exists purely to satisfy that invariant.
+  // assertActiveRequirements (identity/repositories/accounts.ts) requires at
+  // least one active passkey credential row to reach 'active', regardless of
+  // auth method -- these accounts only ever authenticate with a password
+  // (see capacity-1000.js), so this credential is synthetic and never used
+  // for a real WebAuthn ceremony; it exists purely to satisfy that invariant.
   await addPasskeyCredential(db, {
     id: randomUUID(),
     accountId,
@@ -176,10 +166,9 @@ export async function createLoginAccount(
     createdAt: input.at,
   });
 
-  const actorId = input.actorId ?? randomUUID();
   await createCivicActor(db, {
     id: actorId,
-    displayLabel: 'Load Test Participant',
+    displayLabel: 'Capacity Drill Participant',
     communityId: input.communityId,
     createdAt: input.at,
     updatedAt: input.at,
@@ -188,7 +177,7 @@ export async function createLoginAccount(
 
   await transitionAccountState(db, { accountId, to: 'active', at: input.at });
   // isOwner bypasses the membership/payment entitlement gate in
-  // evaluateCivicAccess -- see the module doc comment for why.
+  // evaluateCivicAccess -- no Stripe checkout is ever reachable from this drill.
   await db
     .update(accounts)
     .set({ isOwner: true, updatedAt: input.at })
@@ -203,28 +192,9 @@ export async function createLoginAccount(
   return { accountId, actorId };
 }
 
-/** Revokes the active password credential and issues a fresh one, for reused fixture accounts whose plaintext password can't be recovered across runs. */
-export async function resetAccountPassword(
-  db: Database['db'],
-  input: { accountId: string; password: string; at: string },
-): Promise<void> {
-  await revokeAccountPasswordCredential(db, { accountId: input.accountId, revokedAt: input.at });
-  const hashed = await hashPassword(input.password);
-  await createAccountPasswordCredential(db, {
-    id: randomUUID(),
-    accountId: input.accountId,
-    passwordHash: hashed.hash,
-    algorithm: hashed.algorithm,
-    parameters: hashed.parameters,
-    createdAt: input.at,
-  });
-}
-
 /**
  * Drives a signal's civic process from 'confirmation' all the way to
- * 'voting'. Not idempotent past the first call for a given signal --
- * callers must check `findCivicProcessBySignalId(...).currentStage` first
- * and skip signals already at or past 'voting'.
+ * 'voting'. Not idempotent past the first call for a given signal.
  */
 export async function advanceSignalToVoting(
   db: Database['db'],
@@ -232,7 +202,6 @@ export async function advanceSignalToVoting(
 ): Promise<void> {
   const nowIso = input.now.toISOString();
 
-  // 1. Cross the confirmation threshold (>= 5 confirmations from distinct actors).
   for (const actorId of input.advancerActorIds.slice(0, CONFIRMATION_THRESHOLD)) {
     await ensureParticipantSignalConfirmation(db, actorId, input.signalId);
   }
@@ -242,7 +211,6 @@ export async function advanceSignalToVoting(
     throw new Error(`No civic process provisioned for signal ${input.signalId}`);
   }
 
-  // 2. Cross the proposal threshold (>= 5 proposals from distinct actors).
   const proposalIds: string[] = [];
   for (const [i, actorId] of input.advancerActorIds.slice(0, PROPOSAL_THRESHOLD).entries()) {
     const proposalId = randomUUID();
@@ -251,10 +219,10 @@ export async function advanceSignalToVoting(
       id: proposalId,
       processId: process.id,
       actorId,
-      title: `Load test proposal ${String(i)}`,
+      title: `Capacity drill proposal ${String(i)}`,
       body: 'Synthetic proposal created for the Etapa 4 capacity drill.',
       targetInstitution: null,
-      expectedOutcome: 'Synthetic load-test fixture.',
+      expectedOutcome: 'Synthetic capacity-drill fixture.',
       estimatedResources: null,
       indicativeDeadline: null,
       createdAt: nowIso,
@@ -265,10 +233,8 @@ export async function advanceSignalToVoting(
     throw new Error('No proposal created to anchor deliberation contributions');
   }
 
-  // 3. Cross the deliberation threshold (>= 5 DISTINCT-actor contributions),
-  //    backdated so voting_opens_at (transition_at + 10 minutes) has already
-  //    elapsed by the time step 4 runs -- otherwise voting stays gated for a
-  //    real 10 minutes, same as it would for genuine civic activity.
+  // Backdated so voting_opens_at (transition_at + 10 minutes) has already
+  // elapsed by the time step 4 runs.
   const backdated = new Date(input.now.getTime() - 20 * 60_000);
   for (const [i, actorId] of input.advancerActorIds.slice(0, DELIBERATION_THRESHOLD).entries()) {
     const at = new Date(backdated.getTime() + i * 60_000).toISOString();
@@ -284,11 +250,6 @@ export async function advanceSignalToVoting(
     });
   }
 
-  // 4. The ballot_preparation -> voting transition is normally lazy (fires
-  //    on the next request that touches the process once voting_opens_at
-  //    has passed). Call it directly so the process is already in 'voting'
-  //    -- with tokens already minted for every actor who existed in the
-  //    community at this moment -- before k6 sends a single request.
   await openVotingIfBallotPreparationElapsed(db, { processId: process.id, now: nowIso });
 
   const after = await findCivicProcessBySignalId(db, input.signalId);

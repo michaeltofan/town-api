@@ -1,20 +1,29 @@
 name: Etapa 4 capacity drill
 
 # Etapa 4 (Capacitate pentru 1.000 de utilizatori) of the TOWN deployment
-# plan. Runs the full write-capable capacity scenario against staging
-# twice consecutively: provision ephemeral load-test data -> ensure the
-# permanent voting-arena fixture -> k6 (100 VUs/30min + 200-VU/5min spike)
-# -> DB-level integrity verification -> teardown of the ephemeral data.
+# plan. A single automated run: create a brand-new, empty, temporary
+# Postgres -> create a temporary API service at this workflow's commit ->
+# apply migrations -> load the deterministic capacity-drill seed/fixtures
+# -> run the Etapa 4 k6 capacity profile against it -> verify integrity ->
+# unconditionally delete both temporary services.
 #
-# Never touches production. Never sends real email or calls real Stripe
-# (see loadtest/README.md). DB-touching scripts reach staging Postgres via
-# a short-lived `railway connect --tunnel-only` SSH tunnel per script
-# invocation (scripts/ci/with-staging-tunnel.sh) -- proven reliable
-# against staging Postgres specifically (an ordinary, already-existing
-# service; the tunnel's known unreliability is specific to freshly
-# PITR-restored siblings, see docs/operations/RESTORE_DRILL_RUNBOOK.md).
-# k6 itself talks to the public staging API over HTTPS, not through the
-# tunnel.
+# Replaces the earlier design, which reused the shared Staging Postgres for
+# ephemeral load-test rows. `civic_process_events` / `civic_process_transitions`
+# are unconditionally append-only from the moment a signal is created
+# (drizzle/0041_civic_process_confirmation.sql) with RESTRICT foreign keys
+# back to `signals` and `communities`, so individual load-test rows can
+# never be deleted once created -- only destroying the whole database
+# avoids that. This workflow never touches production, never reads or
+# writes the shared Staging Postgres, never disables the append-only
+# triggers, and never deletes individual civic-registry rows.
+#
+# Reuses only the Railway GraphQL mutations and CLI verbs already proven in
+# restore-drill.yml (serviceCreate, serviceInstanceUpdate,
+# serviceInstanceDeployV2, deployment status polling, deploymentLogs, and
+# `railway service delete`), plus the `railway domain` CLI verb (documented,
+# stable Railway CLI surface, the same category of action as the CLI verbs
+# restore-drill.yml already uses) to obtain a public HTTPS endpoint for k6.
+# No new GraphQL schema introspection was performed to build this workflow.
 
 on:
   workflow_dispatch: {}
@@ -23,23 +32,21 @@ permissions:
   contents: read
 
 concurrency:
-  group: capacity-drill-town-api-staging
+  group: capacity-drill-town-api-isolated
   cancel-in-progress: false
 
 jobs:
   capacity-drill:
-    name: Provision -> k6 -> verify -> teardown (x2)
+    name: Isolated capacity drill (temporary Postgres + API)
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 90
     environment: production
     env:
-      TARGET_SERVICE: Postgres
       RAILWAY_PROJECT_ID: 8fd67de0-2ed1-4906-bf5a-36207191c613
       RAILWAY_ENVIRONMENT: staging
+      RAILWAY_ENVIRONMENT_ID: a7e3d77f-269e-432c-b2e3-c2d777ee668a
+      API_REPO: michaeltofan/town-api
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-      BASE_URL: https://api-staging.towncivic.org
-      APP_ENV: staging
-      LOADTEST_VU_POOL_SIZE: '250'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,148 +66,500 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Register a throwaway SSH key for this run
+      - name: Generate this run's ephemeral secrets
+        id: secrets
         run: |
           set -euo pipefail
-          mkdir -p "$HOME/.ssh"
-          chmod 700 "$HOME/.ssh"
-          ssh-keygen -t ed25519 -f "$HOME/.ssh/id_ed25519" -N "" -q
-          railway ssh keys add \
-            --key "$HOME/.ssh/id_ed25519.pub" \
-            --name "capacity-drill-${{ github.run_id }}"
+          PG_PASSWORD=$(openssl rand -hex 24)
+          SESSION_TOKEN_HASH_KEY=$(openssl rand -hex 32)
+          CEREMONY_RATE_LIMIT_HASH_KEY=$(openssl rand -hex 32)
+          echo "::add-mask::${PG_PASSWORD}"
+          echo "::add-mask::${SESSION_TOKEN_HASH_KEY}"
+          echo "::add-mask::${CEREMONY_RATE_LIMIT_HASH_KEY}"
+          {
+            echo "pg_password=${PG_PASSWORD}"
+            echo "session_token_hash_key=${SESSION_TOKEN_HASH_KEY}"
+            echo "ceremony_rate_limit_hash_key=${CEREMONY_RATE_LIMIT_HASH_KEY}"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Run 1 -- provision
+      - name: Create the temporary Postgres service
+        id: pg
+        env:
+          PG_PASSWORD: ${{ steps.secrets.outputs.pg_password }}
         run: |
           set -euo pipefail
-          LOADTEST_RUN_TAG="run1-${{ github.run_id }}" \
-          LOADTEST_MANIFEST_PATH=loadtest/.manifest.json \
-            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/provision.ts
+          PG_NAME="capacity-drill-pg-${{ github.run_id }}"
+          echo "name=${PG_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Run 1 -- ensure voting arena
+          # Railway reference-variable syntax (dollar + two open braces + NAME
+          # + two close braces) is built at runtime from separate
+          # non-'dollar-brace-brace' pieces, never written literally as a
+          # contiguous sequence -- GitHub Actions' own expression scanner
+          # reads the raw YAML text before bash ever runs, so writing that
+          # sequence anywhere in this file gets parsed as a (broken) GitHub
+          # Actions expression. Same technique already proven in
+          # restore-drill.yml.
+          CREATE_INPUT=$(PG_NAME="$PG_NAME" PG_PASSWORD="$PG_PASSWORD" DOLLAR='$' BRACE='{' node -e "
+            const ref = (name) => process.env.DOLLAR + process.env.BRACE + process.env.BRACE + name + '}}';
+            console.log(JSON.stringify({
+              input: {
+                projectId: process.env.RAILWAY_PROJECT_ID,
+                environmentId: process.env.RAILWAY_ENVIRONMENT_ID,
+                name: process.env.PG_NAME,
+                source: { image: 'ghcr.io/railwayapp-templates/postgres-ssl:18' },
+                variables: {
+                  POSTGRES_USER: 'postgres',
+                  POSTGRES_PASSWORD: process.env.PG_PASSWORD,
+                  POSTGRES_DB: 'railway',
+                  PGDATA: '/var/lib/postgresql/data/pgdata',
+                  PGUSER: ref('POSTGRES_USER'),
+                  PGPASSWORD: ref('POSTGRES_PASSWORD'),
+                  PGDATABASE: ref('POSTGRES_DB'),
+                  PGHOST: ref('RAILWAY_PRIVATE_DOMAIN'),
+                  PGPORT: '5432',
+                  DATABASE_URL: 'postgresql://' + ref('PGUSER') + ':' + ref('PGPASSWORD') + '@' + ref('RAILWAY_PRIVATE_DOMAIN') + ':5432/' + ref('PGDATABASE'),
+                },
+              },
+            }));
+          ")
+          CREATE_RESPONSE=$(railway api \
+            'mutation($input: ServiceCreateInput!) { serviceCreate(input: $input) { id name } }' \
+            --variables "$CREATE_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$CREATE_RESPONSE"
+          PG_ID=$(echo "$CREATE_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceCreate GraphQL errors: ' + JSON.stringify(d.errors));
+            const id = d.data?.serviceCreate?.id;
+            if (!id) throw new Error('unexpected serviceCreate response shape: ' + JSON.stringify(d));
+            console.log(id);
+          ")
+          echo "id=${PG_ID}" >> "$GITHUB_OUTPUT"
+          echo "Created temporary Postgres service ${PG_NAME} (${PG_ID})"
+
+      - name: Deploy the temporary Postgres service
+        id: pg_deploy
         run: |
           set -euo pipefail
-          LOADTEST_VOTING_ARENA_MANIFEST_PATH=loadtest/.voting-arena-manifest.json \
-            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/ensure-voting-arena.ts
+          DEPLOY_INPUT='{"environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","serviceId":"'"${{ steps.pg.outputs.id }}"'"}'
+          DEPLOY_RESPONSE=$(railway api \
+            'mutation($environmentId: String!, $serviceId: String!) { serviceInstanceDeployV2(environmentId: $environmentId, serviceId: $serviceId) }' \
+            --variables "$DEPLOY_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$DEPLOY_RESPONSE"
+          DEPLOYMENT_ID=$(echo "$DEPLOY_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceInstanceDeployV2 GraphQL errors: ' + JSON.stringify(d.errors));
+            const id = d.data?.serviceInstanceDeployV2;
+            if (!id) throw new Error('unexpected serviceInstanceDeployV2 response shape: ' + JSON.stringify(d));
+            console.log(id);
+          ")
+          echo "deployment_id=${DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
+          echo "Deployment ${DEPLOYMENT_ID} triggered for the temporary Postgres service"
 
-      - name: Run 1 -- DB snapshot (before k6)
+      - name: Wait for the temporary Postgres to report itself ready
         run: |
           set -euo pipefail
-          # shellcheck disable=SC2016  # deliberate: $DATABASE_URL expands inside the nested bash -c, after with-staging-tunnel.sh exports it -- not in this shell.
-          ./scripts/ci/with-staging-tunnel.sh -- bash -c '
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-              -c "SELECT count(*) AS connections FROM pg_stat_activity;" \
-              -c "SELECT count(*) AS locks FROM pg_locks;"
-          ' | tee run1-db-before.txt
+          READY=""
+          DEADLINE=$(( $(date -u +%s) + 20 * 60 ))
+          attempt=0
+          while [[ "$(date -u +%s)" -lt "$DEADLINE" ]]; do
+            attempt=$((attempt + 1))
+            echo "Attempt ${attempt}: checking ${{ steps.pg.outputs.name }} deploy logs for readiness..."
+            if railway logs \
+                --service "${{ steps.pg.outputs.name }}" \
+                --project "$RAILWAY_PROJECT_ID" \
+                --environment "$RAILWAY_ENVIRONMENT" \
+                --lines 300 2>/dev/null | grep -q 'database system is ready to accept connections'; then
+              READY=1
+              break
+            fi
+            sleep 10
+          done
+          if [[ -z "$READY" ]]; then
+            echo "::group::Deploy logs (diagnostic)"
+            railway logs --service "${{ steps.pg.outputs.name }}" --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT" --lines 200 || true
+            echo "::endgroup::"
+            echo "::error::Temporary Postgres never reported readiness within the wait window"
+            exit 1
+          fi
+          echo "Temporary Postgres is ready to accept connections."
 
-      - name: Run 1 -- k6
+      - name: Create the temporary API service at this commit
+        id: api
+        env:
+          SESSION_TOKEN_HASH_KEY: ${{ steps.secrets.outputs.session_token_hash_key }}
+          CEREMONY_RATE_LIMIT_HASH_KEY: ${{ steps.secrets.outputs.ceremony_rate_limit_hash_key }}
         run: |
           set -euo pipefail
-          k6 run --summary-export=run1-k6-summary.json loadtest/capacity-1000.js
+          API_NAME="capacity-drill-api-${{ github.run_id }}"
+          PG_NAME="${{ steps.pg.outputs.name }}"
+          echo "name=${API_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Run 1 -- DB snapshot (after k6)
-        if: always()
+          # See the comment above the Postgres CREATE_INPUT step: the
+          # dollar-brace-brace Railway reference-variable syntax is built at
+          # runtime from separate pieces, never written literally.
+          CREATE_INPUT=$(API_NAME="$API_NAME" PG_NAME="$PG_NAME" \
+            SESSION_TOKEN_HASH_KEY="$SESSION_TOKEN_HASH_KEY" \
+            CEREMONY_RATE_LIMIT_HASH_KEY="$CEREMONY_RATE_LIMIT_HASH_KEY" \
+            DOLLAR='$' BRACE='{' \
+            node -e "
+            const databaseUrlRef = process.env.DOLLAR + process.env.BRACE + process.env.BRACE + process.env.PG_NAME + '.DATABASE_URL}}';
+            console.log(JSON.stringify({
+              input: {
+                projectId: process.env.RAILWAY_PROJECT_ID,
+                environmentId: process.env.RAILWAY_ENVIRONMENT_ID,
+                name: process.env.API_NAME,
+                source: { repo: process.env.API_REPO },
+                branch: 'main',
+                variables: {
+                  DATABASE_URL: databaseUrlRef,
+                  APP_ENV: 'staging',
+                  PASSWORD_SIGN_IN_ENABLED: 'true',
+                  SESSION_TOKEN_HASH_KEY: process.env.SESSION_TOKEN_HASH_KEY,
+                  CEREMONY_RATE_LIMIT_HASH_KEY: process.env.CEREMONY_RATE_LIMIT_HASH_KEY,
+                  WEBAUTHN_ALLOWED_ORIGINS: 'https://capacity-drill-placeholder.up.railway.app',
+                },
+              },
+            }));
+          ")
+          CREATE_RESPONSE=$(railway api \
+            'mutation($input: ServiceCreateInput!) { serviceCreate(input: $input) { id name } }' \
+            --variables "$CREATE_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$CREATE_RESPONSE"
+          API_ID=$(echo "$CREATE_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceCreate GraphQL errors: ' + JSON.stringify(d.errors));
+            const id = d.data?.serviceCreate?.id;
+            if (!id) throw new Error('unexpected serviceCreate response shape: ' + JSON.stringify(d));
+            console.log(id);
+          ")
+          echo "id=${API_ID}" >> "$GITHUB_OUTPUT"
+          echo "Created temporary API service ${API_NAME} (${API_ID}) at commit ${{ github.sha }} (branch main, dispatched immediately post-merge with no intervening commits)"
+
+      - name: Setup phase -- migrate, seed, provision fixtures
+        id: setup_phase
         run: |
           set -euo pipefail
-          # shellcheck disable=SC2016  # deliberate: $DATABASE_URL expands inside the nested bash -c, after with-staging-tunnel.sh exports it -- not in this shell.
-          ./scripts/ci/with-staging-tunnel.sh -- bash -c '
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-              -c "SELECT count(*) AS connections FROM pg_stat_activity;" \
-              -c "SELECT count(*) AS locks FROM pg_locks;"
-          ' | tee run1-db-after.txt
+          UPDATE_INPUT='{"serviceId":"'"${{ steps.api.outputs.id }}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/scripts/capacity-setup.js","restartPolicyType":"NEVER"}}'
+          UPDATE_RESPONSE=$(railway api \
+            'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
+            --variables "$UPDATE_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$UPDATE_RESPONSE"
+          echo "$UPDATE_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceInstanceUpdate GraphQL errors: ' + JSON.stringify(d.errors));
+            if (d.data?.serviceInstanceUpdate !== true) throw new Error('unexpected serviceInstanceUpdate response shape: ' + JSON.stringify(d));
+          "
 
-      - name: Run 1 -- verify
-        if: always()
+          DEPLOY_INPUT='{"environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","serviceId":"'"${{ steps.api.outputs.id }}"'"}'
+          DEPLOY_RESPONSE=$(railway api \
+            'mutation($environmentId: String!, $serviceId: String!) { serviceInstanceDeployV2(environmentId: $environmentId, serviceId: $serviceId) }' \
+            --variables "$DEPLOY_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$DEPLOY_RESPONSE"
+          DEPLOYMENT_ID=$(echo "$DEPLOY_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceInstanceDeployV2 GraphQL errors: ' + JSON.stringify(d.errors));
+            const id = d.data?.serviceInstanceDeployV2;
+            if (!id) throw new Error('unexpected serviceInstanceDeployV2 response shape: ' + JSON.stringify(d));
+            console.log(id);
+          ")
+          echo "Setup deployment ${DEPLOYMENT_ID} triggered"
+
+          TERMINAL=""
+          STATUS=""
+          for tick in $(seq 1 240); do
+            STATUS_RESPONSE=$(railway api \
+              'query($id: String!) { deployment(id: $id) { status } }' \
+              --variables "{\"id\":\"${DEPLOYMENT_ID}\"}" \
+              --allow-errors \
+              --compact)
+            STATUS=$(echo "$STATUS_RESPONSE" | node -e "
+              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
+              console.log(d.data?.deployment?.status ?? 'UNKNOWN');
+            ")
+            echo "Setup deployment status: ${STATUS}"
+            case "$STATUS" in
+              SUCCESS|FAILED|CRASHED|REMOVED)
+                TERMINAL=1
+                break
+                ;;
+            esac
+            sleep 5
+          done
+          if [[ -z "$TERMINAL" ]]; then
+            echo "::error::Setup deployment never reached a terminal status (last: ${STATUS})"
+            exit 1
+          fi
+
+          LOGS_RESPONSE=$(railway api \
+            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+            --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
+            --allow-errors \
+            --compact)
+          echo "$LOGS_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
+            const logs = d.data?.deploymentLogs ?? [];
+            const attrs = {};
+            for (const log of logs) {
+              for (const a of (log.attributes || [])) {
+                if (a.key === 'outcome' || a.key === 'checks' || a.key === 'counts') {
+                  attrs[a.key] = a.value;
+                }
+              }
+            }
+            if (!attrs.outcome) {
+              console.error('No setup summary found in deploy logs (raw logs): ' + JSON.stringify(logs));
+              process.exit(1);
+            }
+            console.log('outcome=' + JSON.parse(attrs.outcome));
+            console.log('checks=' + (attrs.checks ?? '[]'));
+            console.log('counts=' + (attrs.counts ?? '{}'));
+          " > setup_result.txt || { cat setup_result.txt 2>/dev/null; echo "outcome=failed" >> "$GITHUB_OUTPUT"; exit 1; }
+          cat setup_result.txt
+          OUTCOME=$(grep '^outcome=' setup_result.txt | cut -d= -f2-)
+          echo "outcome=${OUTCOME}" >> "$GITHUB_OUTPUT"
+          if [[ "$STATUS" != "SUCCESS" || "$OUTCOME" != "passed" ]]; then
+            exit 1
+          fi
+
+      - name: Serve phase -- boot the real API server
+        id: serve_phase
         run: |
           set -euo pipefail
-          ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/verify.ts | tee run1-verify.json
+          UPDATE_INPUT='{"serviceId":"'"${{ steps.api.outputs.id }}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/server.js","restartPolicyType":"ON_FAILURE"}}'
+          UPDATE_RESPONSE=$(railway api \
+            'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
+            --variables "$UPDATE_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$UPDATE_RESPONSE"
+          echo "$UPDATE_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceInstanceUpdate GraphQL errors: ' + JSON.stringify(d.errors));
+            if (d.data?.serviceInstanceUpdate !== true) throw new Error('unexpected serviceInstanceUpdate response shape: ' + JSON.stringify(d));
+          "
 
-      - name: Run 1 -- teardown
-        if: always()
+          DEPLOY_INPUT='{"environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","serviceId":"'"${{ steps.api.outputs.id }}"'"}'
+          DEPLOY_RESPONSE=$(railway api \
+            'mutation($environmentId: String!, $serviceId: String!) { serviceInstanceDeployV2(environmentId: $environmentId, serviceId: $serviceId) }' \
+            --variables "$DEPLOY_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$DEPLOY_RESPONSE"
+          DEPLOYMENT_ID=$(echo "$DEPLOY_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceInstanceDeployV2 GraphQL errors: ' + JSON.stringify(d.errors));
+            const id = d.data?.serviceInstanceDeployV2;
+            if (!id) throw new Error('unexpected serviceInstanceDeployV2 response shape: ' + JSON.stringify(d));
+            console.log(id);
+          ")
+          echo "Serve deployment ${DEPLOYMENT_ID} triggered"
+
+          TERMINAL=""
+          STATUS=""
+          for tick in $(seq 1 120); do
+            STATUS_RESPONSE=$(railway api \
+              'query($id: String!) { deployment(id: $id) { status } }' \
+              --variables "{\"id\":\"${DEPLOYMENT_ID}\"}" \
+              --allow-errors \
+              --compact)
+            STATUS=$(echo "$STATUS_RESPONSE" | node -e "
+              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
+              console.log(d.data?.deployment?.status ?? 'UNKNOWN');
+            ")
+            echo "Serve deployment status: ${STATUS}"
+            case "$STATUS" in
+              SUCCESS|FAILED|CRASHED|REMOVED)
+                TERMINAL=1
+                break
+                ;;
+            esac
+            sleep 5
+          done
+          if [[ -z "$TERMINAL" || "$STATUS" != "SUCCESS" ]]; then
+            echo "::group::Deploy logs (diagnostic)"
+            railway logs --service "${{ steps.api.outputs.name }}" --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT" --lines 200 || true
+            echo "::endgroup::"
+            echo "::error::Serve deployment did not reach SUCCESS (last: ${STATUS})"
+            exit 1
+          fi
+
+      - name: Generate a public domain for the temporary API service
+        id: domain
         run: |
           set -euo pipefail
-          LOADTEST_MANIFEST_PATH=loadtest/.manifest.json \
-            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/teardown.ts | tee run1-teardown.json
+          railway domain \
+            --service "${{ steps.api.outputs.name }}" \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT" \
+            --port 3000 | tee domain_output.txt
+          DOMAIN=$(grep -Eo '[a-z0-9-]+\.up\.railway\.app' domain_output.txt | head -n1)
+          if [[ -z "$DOMAIN" ]]; then
+            echo "::error::Could not find a *.up.railway.app domain in 'railway domain' output"
+            exit 1
+          fi
+          echo "base_url=https://${DOMAIN}" >> "$GITHUB_OUTPUT"
+          echo "Public domain: https://${DOMAIN}"
 
-      - name: Run 2 -- provision
+      - name: Wait for the temporary API to report ready
+        env:
+          BASE_URL: ${{ steps.domain.outputs.base_url }}
         run: |
           set -euo pipefail
-          LOADTEST_RUN_TAG="run2-${{ github.run_id }}" \
-          LOADTEST_MANIFEST_PATH=loadtest/.manifest.json \
-            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/provision.ts
+          READY=""
+          DEADLINE=$(( $(date -u +%s) + 10 * 60 ))
+          while [[ "$(date -u +%s)" -lt "$DEADLINE" ]]; do
+            if curl -fsS -o /dev/null "${BASE_URL}/health/ready"; then
+              READY=1
+              break
+            fi
+            sleep 5
+          done
+          if [[ -z "$READY" ]]; then
+            echo "::error::Temporary API never reported ready at ${BASE_URL}/health/ready"
+            exit 1
+          fi
+          echo "Temporary API is ready at ${BASE_URL}"
 
-      - name: Run 2 -- ensure voting arena
-        run: |
-          set -euo pipefail
-          LOADTEST_VOTING_ARENA_MANIFEST_PATH=loadtest/.voting-arena-manifest.json \
-            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/ensure-voting-arena.ts
-
-      - name: Run 2 -- DB snapshot (before k6)
-        run: |
-          set -euo pipefail
-          # shellcheck disable=SC2016  # deliberate: $DATABASE_URL expands inside the nested bash -c, after with-staging-tunnel.sh exports it -- not in this shell.
-          ./scripts/ci/with-staging-tunnel.sh -- bash -c '
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-              -c "SELECT count(*) AS connections FROM pg_stat_activity;" \
-              -c "SELECT count(*) AS locks FROM pg_locks;"
-          ' | tee run2-db-before.txt
-
-      - name: Run 2 -- k6
-        run: |
-          set -euo pipefail
-          k6 run --summary-export=run2-k6-summary.json loadtest/capacity-1000.js
-
-      - name: Run 2 -- DB snapshot (after k6)
-        if: always()
-        run: |
-          set -euo pipefail
-          # shellcheck disable=SC2016  # deliberate: $DATABASE_URL expands inside the nested bash -c, after with-staging-tunnel.sh exports it -- not in this shell.
-          ./scripts/ci/with-staging-tunnel.sh -- bash -c '
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-              -c "SELECT count(*) AS connections FROM pg_stat_activity;" \
-              -c "SELECT count(*) AS locks FROM pg_locks;"
-          ' | tee run2-db-after.txt
-
-      - name: Run 2 -- verify
-        if: always()
-        run: |
-          set -euo pipefail
-          ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/verify.ts | tee run2-verify.json
-
-      - name: Run 2 -- teardown
-        if: always()
-        run: |
-          set -euo pipefail
-          LOADTEST_MANIFEST_PATH=loadtest/.manifest.json \
-            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/teardown.ts | tee run2-teardown.json
-
-      - name: Best-effort CPU/RAM metrics (Railway)
-        if: always()
+      - name: Run the Etapa 4 capacity profile (k6)
+        id: k6
         continue-on-error: true
+        env:
+          BASE_URL: ${{ steps.domain.outputs.base_url }}
         run: |
           set -euo pipefail
-          echo "CPU/RAM are read from the Railway dashboard (Metrics tab, town-api-staging service) for the drill's time window -- not fetched automatically here. See docs/operations/CAPACITY_DRILL_RUNBOOK.md for why: the Railway metrics GraphQL schema was not introspected/validated as part of this workflow, and this project's own history (see rollback-staging.yml, restore-drill.yml) is to introspect the live schema before writing a query, never guess field names." \
-            | tee metrics-note.txt
+          k6 run --summary-export=capacity-k6-summary.json loadtest/capacity-1000.js
+
+      - name: Verify phase -- post-run integrity checks
+        id: verify_phase
+        if: always()
+        run: |
+          set -euo pipefail
+          UPDATE_INPUT='{"serviceId":"'"${{ steps.api.outputs.id }}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/scripts/capacity-verify.js","restartPolicyType":"NEVER"}}'
+          UPDATE_RESPONSE=$(railway api \
+            'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
+            --variables "$UPDATE_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$UPDATE_RESPONSE"
+          echo "$UPDATE_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceInstanceUpdate GraphQL errors: ' + JSON.stringify(d.errors));
+            if (d.data?.serviceInstanceUpdate !== true) throw new Error('unexpected serviceInstanceUpdate response shape: ' + JSON.stringify(d));
+          "
+
+          DEPLOY_INPUT='{"environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","serviceId":"'"${{ steps.api.outputs.id }}"'"}'
+          DEPLOY_RESPONSE=$(railway api \
+            'mutation($environmentId: String!, $serviceId: String!) { serviceInstanceDeployV2(environmentId: $environmentId, serviceId: $serviceId) }' \
+            --variables "$DEPLOY_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$DEPLOY_RESPONSE"
+          DEPLOYMENT_ID=$(echo "$DEPLOY_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('serviceInstanceDeployV2 GraphQL errors: ' + JSON.stringify(d.errors));
+            const id = d.data?.serviceInstanceDeployV2;
+            if (!id) throw new Error('unexpected serviceInstanceDeployV2 response shape: ' + JSON.stringify(d));
+            console.log(id);
+          ")
+          echo "Verify deployment ${DEPLOYMENT_ID} triggered"
+
+          TERMINAL=""
+          STATUS=""
+          for tick in $(seq 1 240); do
+            STATUS_RESPONSE=$(railway api \
+              'query($id: String!) { deployment(id: $id) { status } }' \
+              --variables "{\"id\":\"${DEPLOYMENT_ID}\"}" \
+              --allow-errors \
+              --compact)
+            STATUS=$(echo "$STATUS_RESPONSE" | node -e "
+              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
+              console.log(d.data?.deployment?.status ?? 'UNKNOWN');
+            ")
+            echo "Verify deployment status: ${STATUS}"
+            case "$STATUS" in
+              SUCCESS|FAILED|CRASHED|REMOVED)
+                TERMINAL=1
+                break
+                ;;
+            esac
+            sleep 5
+          done
+          if [[ -z "$TERMINAL" ]]; then
+            echo "::error::Verify deployment never reached a terminal status (last: ${STATUS})"
+            echo "outcome=failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          LOGS_RESPONSE=$(railway api \
+            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+            --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
+            --allow-errors \
+            --compact)
+          echo "$LOGS_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
+            const logs = d.data?.deploymentLogs ?? [];
+            const attrs = {};
+            for (const log of logs) {
+              for (const a of (log.attributes || [])) {
+                if (a.key === 'outcome' || a.key === 'checks' || a.key === 'counts') {
+                  attrs[a.key] = a.value;
+                }
+              }
+            }
+            if (!attrs.outcome) {
+              console.error('No verify summary found in deploy logs (raw logs): ' + JSON.stringify(logs));
+              process.exit(1);
+            }
+            console.log('outcome=' + JSON.parse(attrs.outcome));
+            console.log('checks=' + (attrs.checks ?? '[]'));
+            console.log('counts=' + (attrs.counts ?? '{}'));
+          " > verify_result.txt || { cat verify_result.txt 2>/dev/null; echo "outcome=failed" >> "$GITHUB_OUTPUT"; exit 1; }
+          cat verify_result.txt
+          OUTCOME=$(grep '^outcome=' verify_result.txt | cut -d= -f2-)
+          echo "outcome=${OUTCOME}" >> "$GITHUB_OUTPUT"
+          if [[ "$OUTCOME" != "passed" ]]; then
+            exit 1
+          fi
 
       - name: Write job summary
         if: always()
+        env:
+          K6_OUTCOME: ${{ steps.k6.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify_phase.outputs.outcome || 'failed' }}
         run: |
           set -euo pipefail
           {
             echo "# Etapa 4 capacity drill -- run ${{ github.run_id }}"
             echo
-            echo "## Run 1"
-            echo '```json'
-            cat run1-verify.json 2>/dev/null || echo '(missing)'
-            echo '```'
-            echo "DB connections/locks before/after: see run1-db-before.txt / run1-db-after.txt (job artifacts)"
+            echo "Commit: ${{ github.sha }}"
             echo
-            echo "## Run 2"
+            echo "## k6 capacity profile"
+            echo "Step outcome: ${K6_OUTCOME}"
             echo '```json'
-            cat run2-verify.json 2>/dev/null || echo '(missing)'
+            cat capacity-k6-summary.json 2>/dev/null || echo '(missing)'
             echo '```'
-            echo "DB connections/locks before/after: see run2-db-before.txt / run2-db-after.txt (job artifacts)"
             echo
-            echo "k6 threshold pass/fail is the step's own exit code -- a failed \"Run N -- k6\" step means p95/p99 or the failure-rate thresholds were not met."
+            echo "## Post-run integrity verification"
+            echo '```json'
+            cat verify_result.txt 2>/dev/null || echo '(missing)'
+            echo '```'
+            echo
+            echo "Etapa 4 criteria: k6 thresholds ${K6_OUTCOME} AND verification ${VERIFY_OUTCOME}."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifacts
@@ -210,21 +569,38 @@ jobs:
           name: capacity-drill-${{ github.run_id }}
           retention-days: 30
           path: |
-            run1-k6-summary.json
-            run1-db-before.txt
-            run1-db-after.txt
-            run1-verify.json
-            run1-teardown.json
-            run2-k6-summary.json
-            run2-db-before.txt
-            run2-db-after.txt
-            run2-verify.json
-            run2-teardown.json
+            capacity-k6-summary.json
+            setup_result.txt
+            verify_result.txt
           if-no-files-found: warn
 
-      - name: Final safety-net teardown
+      - name: Delete the temporary API and Postgres services (always runs)
         if: always()
         run: |
           set -euo pipefail
-          LOADTEST_MANIFEST_PATH=loadtest/.manifest.json \
-            ./scripts/ci/with-staging-tunnel.sh -- npx tsx loadtest/teardown.ts || true
+          for name in "${{ steps.api.outputs.name }}" "${{ steps.pg.outputs.name }}"; do
+            if [[ -z "$name" ]]; then
+              continue
+            fi
+            echo "Deleting service: ${name}"
+            railway service delete \
+              --service "$name" \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT" \
+              --yes || echo "::warning::Failed to delete ${name} -- delete it manually from the Railway dashboard"
+          done
+
+      - name: Final outcome
+        if: always()
+        env:
+          K6_OUTCOME: ${{ steps.k6.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify_phase.outputs.outcome || 'failed' }}
+        run: |
+          set -euo pipefail
+          echo "k6 step outcome: ${K6_OUTCOME}"
+          echo "verify outcome: ${VERIFY_OUTCOME}"
+          if [[ "$K6_OUTCOME" != "success" || "$VERIFY_OUTCOME" != "passed" ]]; then
+            echo "::error::Capacity drill did not fully pass (k6=${K6_OUTCOME}, verify=${VERIFY_OUTCOME})"
+            exit 1
+          fi
+          echo "Capacity drill passed."

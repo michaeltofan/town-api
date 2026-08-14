@@ -1,63 +1,27 @@
-import { readFileSync } from 'node:fs';
 import { Pool } from 'pg';
-import { requireDatabaseUrl, requireStagingEnv } from './lib/env.js';
+import { ARENA_COMMUNITY, COMMUNITY_A, COMMUNITY_B } from './capacity-drill/fixtures.js';
 
 /**
- * Etapa 4 post-run integrity verification -- STAGING ONLY, read-only.
+ * Etapa 4 capacity drill post-run integrity verification -- read-only,
+ * isolated temporary database only.
  *
- * The spec's closing bar is "zero voturi sau plăți duplicate, zero scrieri
- * pierdute și zero acces cross-community." Every one of those invariants is
+ * The spec's closing bar is "zero voturi sau plati duplicate, zero scrieri
+ * pierdute si zero acces cross-community." Every one of those invariants is
  * already enforced by a DB-level UNIQUE constraint or an application-level
- * gate (see civic_ballot_tokens_process_actor_cycle_unique,
- * civic_proposals_process_actor_unique,
- * signal_confirmations_signal_actor_unique, and evaluateCivicAccess's
- * community-match check) -- this script's job is not to discover a new
- * mechanism, it's to produce evidence that those mechanisms actually held
+ * gate -- this script's job is to produce evidence those mechanisms held
  * under the concurrent load k6 just generated, by querying the rows they
- * produced rather than trusting the constraints exist.
- *
- * Never writes. Connects only to the DATABASE_URL it's given. Scopes every
- * query to the load-test communities named in the two manifests (the
- * ephemeral pool from provision.ts and the permanent voting arena from
- * ensure-voting-arena.ts) -- never scans or reports on unrelated staging
- * activity.
+ * produced, not by trusting the constraints exist.
  */
 
-type ManifestAccount = { communityId: string };
-type Manifest = {
-  communityA: { id: string };
-  communityB: { id: string };
-  accounts: ManifestAccount[];
-};
-type ArenaManifest = {
-  community: { id: string };
-};
+type CheckResult = { name: string; status: 'ok' | 'fail'; detail: string };
 
-type CheckResult = {
-  name: string;
-  status: 'ok' | 'fail';
-  detail: string;
-};
-
-function readManifest(path: string): Manifest {
-  return JSON.parse(readFileSync(path, 'utf8')) as Manifest;
-}
-
-function readArenaManifest(path: string): ArenaManifest {
-  return JSON.parse(readFileSync(path, 'utf8')) as ArenaManifest;
-}
-
-async function runVerify(): Promise<void> {
-  requireStagingEnv(process.env);
-  const databaseUrl = requireDatabaseUrl(process.env);
-  const manifestPath = process.env.LOADTEST_MANIFEST_PATH ?? 'loadtest/.manifest.json';
-  const arenaManifestPath =
-    process.env.LOADTEST_VOTING_ARENA_MANIFEST_PATH ?? 'loadtest/.voting-arena-manifest.json';
-
-  const manifest = readManifest(manifestPath);
-  const arenaManifest = readArenaManifest(arenaManifestPath);
-  const poolCommunityIds = [manifest.communityA.id, manifest.communityB.id];
-  const arenaCommunityId = arenaManifest.community.id;
+async function runCapacityVerify(): Promise<void> {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL is required');
+  }
+  const poolCommunityIds = [COMMUNITY_A.id, COMMUNITY_B.id];
+  const arenaCommunityId = ARENA_COMMUNITY.id;
   const allCommunityIds = [...poolCommunityIds, arenaCommunityId];
 
   const pool = new Pool({ connectionString: databaseUrl, max: 1, connectionTimeoutMillis: 10_000 });
@@ -89,7 +53,6 @@ async function runVerify(): Promise<void> {
   };
 
   try {
-    // --- Scope sanity: the manifests actually name rows that exist. ---
     await check('scope_communities_present', async () => {
       const { rows } = await pool.query<{ count: string }>(
         'SELECT count(*)::text AS count FROM town.communities WHERE id = ANY($1::uuid[])',
@@ -101,13 +64,10 @@ async function runVerify(): Promise<void> {
         : {
             name: 'scope_communities_present',
             status: 'fail',
-            detail: `only ${String(found)}/3 load-test communities found`,
+            detail: `only ${String(found)}/3 capacity-drill communities found`,
           };
     });
 
-    // --- Zero duplicate confirmations (ephemeral pool). ---
-    // signal_confirmations_signal_actor_unique already enforces this at the
-    // DB level; this proves it actually held under concurrent k6 traffic.
     await countCheck(
       'no_duplicate_confirmations',
       'duplicate (signal_id, actor_id) confirmation pairs',
@@ -122,10 +82,6 @@ async function runVerify(): Promise<void> {
       [poolCommunityIds],
     );
 
-    // --- Zero cross-community confirmations (ephemeral pool + arena). ---
-    // evaluateCivicAccess denies this at request time; this proves no
-    // confirmation row exists where the confirming actor's community
-    // disagrees with the signal's community, for every load-test community.
     await countCheck(
       'no_cross_community_confirmations',
       'cross-community confirmation rows',
@@ -137,8 +93,6 @@ async function runVerify(): Promise<void> {
       [allCommunityIds],
     );
 
-    // --- Zero duplicate proposals per actor per process (ephemeral pool). ---
-    // civic_proposals_process_actor_unique already enforces this.
     await countCheck(
       'no_duplicate_proposals',
       'duplicate (process_id, author_actor_id) proposal pairs',
@@ -153,7 +107,6 @@ async function runVerify(): Promise<void> {
       [poolCommunityIds],
     );
 
-    // --- Zero cross-community proposals (ephemeral pool). ---
     await countCheck(
       'no_cross_community_proposals',
       'cross-community proposal rows',
@@ -165,8 +118,6 @@ async function runVerify(): Promise<void> {
       [poolCommunityIds],
     );
 
-    // --- Zero actors minted more than one ballot token for the same cycle
-    // (arena). civic_ballot_tokens_process_actor_cycle_unique enforces this.
     await countCheck(
       'no_duplicate_ballot_tokens',
       'duplicate (process_id, actor_id, ballot_cycle) token rows',
@@ -181,7 +132,6 @@ async function runVerify(): Promise<void> {
       [arenaCommunityId],
     );
 
-    // --- Zero cross-community ballot-token eligibility (arena). ---
     await countCheck(
       'no_cross_community_ballot_tokens',
       'cross-community ballot token rows',
@@ -192,17 +142,6 @@ async function runVerify(): Promise<void> {
       [arenaCommunityId],
     );
 
-    // --- Zero duplicate/lost votes: this is the load test's central claim.
-    // civic_votes carries no actor_id (secret ballot, §9) so "did actor X
-    // vote twice" cannot be asked of the vote rows directly -- it has to be
-    // asked of the token table that gates them. castCivicVote() consumes a
-    // token and inserts a vote in the same atomic statement, so for every
-    // arena process the number of *consumed* tokens must equal the number
-    // of vote rows exactly: more consumed tokens than votes would mean a
-    // token was consumed without a vote being recorded (a lost write);
-    // fewer would mean a vote exists without a consumed token (impossible
-    // under the FK, but checked anyway as direct evidence, not an inference
-    // from the constraint's existence).
     await check('vote_token_consistency', async () => {
       const { rows } = await pool.query<{
         process_id: string;
@@ -239,20 +178,13 @@ async function runVerify(): Promise<void> {
           };
     });
 
-    // --- Zero duplicate/real payments: N/A by construction, not skipped
-    // silently -- every load-test account is isOwner:true, which bypasses
-    // the membership/payment entitlement gate entirely (see
-    // loadtest/lib/provisioning.ts), so no Stripe checkout or membership
-    // purchase flow is ever reachable from this test. Recorded here so the
-    // report doesn't read as an omission.
     results.push({
       name: 'no_duplicate_payments',
       status: 'ok',
       detail:
-        'N/A: load-test accounts bypass the payment gate entirely (isOwner:true), no Stripe call is reachable',
+        'N/A: capacity-drill accounts bypass the payment gate entirely (isOwner:true), no Stripe call is reachable',
     });
 
-    // --- Summary counts for the report. ---
     await check('summary_counts', async () => {
       const [confirmations, proposals, votes] = await Promise.all([
         pool.query<{ count: string }>(
@@ -290,19 +222,22 @@ async function runVerify(): Promise<void> {
     process.stdout.write(`${JSON.stringify(summary)}\n`);
     if (failed.length > 0) {
       process.stderr.write(
-        `Etapa 4 integrity verification FAILED: ${failed.map((f) => f.name).join(', ')}\n`,
+        `Capacity drill verification FAILED: ${failed.map((f) => f.name).join(', ')}\n`,
       );
       process.exitCode = 1;
-      return;
+    } else {
+      process.stderr.write('Capacity drill verification PASSED\n');
     }
-    process.stderr.write('Etapa 4 integrity verification PASSED\n');
   } finally {
     await pool.end();
   }
 }
 
-runVerify().catch((error: unknown) => {
-  const message = error instanceof Error ? (error.stack ?? error.message) : 'Verification crashed';
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
-});
+export function runCapacityVerifyCli(): void {
+  runCapacityVerify().catch((error: unknown) => {
+    const message =
+      error instanceof Error ? (error.stack ?? error.message) : 'Verification crashed';
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  });
+}

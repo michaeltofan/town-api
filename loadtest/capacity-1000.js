@@ -3,16 +3,25 @@ import { check, sleep } from 'k6';
 import { Rate } from 'k6/metrics';
 
 /**
- * TOWN Etapa 4 capacity test — staging only, real writes.
+ * TOWN Etapa 4 capacity test — isolated, temporary environment only, real
+ * writes.
  *
  * Full write-capable version of `staging-capacity.js`: login, feed browse,
- * signal detail, confirm, propose, and vote, driven by the dedicated
- * load-test accounts `loadtest/provision.ts` and
- * `loadtest/ensure-voting-arena.ts` create beforehand. Never touches real
- * accounts, never sends real email (all load-test accounts are created
- * pre-verified), and never calls Stripe (all load-test accounts are
- * `isOwner: true`, which bypasses the membership/payment entitlement gate
- * -- see the doc comments in loadtest/lib/provisioning.ts).
+ * signal detail, confirm, propose, and vote, driven by the fixed-identity
+ * capacity-drill fixtures that `src/platform/run-capacity-setup.ts`
+ * provisions inside a brand-new, temporary Postgres before this script
+ * runs. Never touches real accounts, never sends real email (all
+ * load-test accounts are created pre-verified), and never calls Stripe
+ * (all load-test accounts are `isOwner: true`, which bypasses the
+ * membership/payment entitlement gate -- see the doc comments in
+ * src/platform/capacity-drill/provisioning.ts).
+ *
+ * The account/signal identity below is generated, not read from a
+ * manifest file: the setup phase (a throwaway Railway service) and this
+ * k6 phase (the GitHub Actions runner) have no shared filesystem, so both
+ * sides independently compute the same fixed IDs from
+ * src/platform/capacity-drill/fixtures.ts. Keep the two in sync by hand
+ * if either changes.
  *
  * SAFETY: same host allowlist as staging-capacity.js, duplicated
  * deliberately rather than shared -- this is the one guard in this whole
@@ -40,12 +49,57 @@ if (BASE_URL.includes('api.towncivic.org')) {
   throw new Error('Refusing to run: BASE_URL resolves to production. Aborting.');
 }
 
-// Manifests are written by provision.ts and ensure-voting-arena.ts before
-// this script runs (see the orchestrating workflow). Paths are relative to
-// this file, matching k6's open() semantics.
-const manifest = JSON.parse(open(__ENV.LOADTEST_MANIFEST_PATH || './.manifest.json'));
-const arenaManifest = JSON.parse(
-  open(__ENV.LOADTEST_VOTING_ARENA_MANIFEST_PATH || './.voting-arena-manifest.json'),
+// Mirrors src/platform/capacity-drill/fixtures.ts -- see the file header
+// comment above for why this is generated here rather than read from a
+// manifest file.
+const CAPACITY_DRILL_PASSWORD = 'CapacityDrill-2026-Isolated!';
+
+const MAIN_SIGNAL_COUNT_A = 20;
+const MAIN_SIGNAL_COUNT_B = 3;
+const ARENA_SIGNAL_COUNT = 8;
+const ACCOUNT_COUNT_A = 225;
+const ACCOUNT_COUNT_B = 25;
+const ARENA_ACCOUNT_COUNT = 40;
+
+function fixedId(group, index) {
+  return `00000000-0000-4000-${group}-${index.toString().padStart(12, '0')}`;
+}
+
+function fixedIds(group, count) {
+  return Array.from({ length: count }, (_unused, i) => fixedId(group, i + 1));
+}
+
+function fixedAccounts(accountGroup, actorGroup, emailPrefix, count) {
+  return Array.from({ length: count }, (_unused, i) => ({
+    accountId: fixedId(accountGroup, i + 1),
+    actorId: fixedId(actorGroup, i + 1),
+    email: `${emailPrefix}-${String(i + 1)}@loadtest.internal`,
+  }));
+}
+
+const communityA = { id: fixedId('c001', 1), slug: 'capacity-drill-a' };
+const communityB = { id: fixedId('c002', 1), slug: 'capacity-drill-b' };
+
+const signalsMain = fixedIds('c101', MAIN_SIGNAL_COUNT_A);
+const signalsSecondary = fixedIds('c102', MAIN_SIGNAL_COUNT_B);
+const arenaSignals = fixedIds('c103', ARENA_SIGNAL_COUNT);
+
+const mainAccounts = fixedAccounts('c201', 'c301', 'capacity-a', ACCOUNT_COUNT_A)
+  .map((a) => ({
+    ...a,
+    password: CAPACITY_DRILL_PASSWORD,
+    communityId: communityA.id,
+  }))
+  .concat(
+    fixedAccounts('c202', 'c302', 'capacity-b', ACCOUNT_COUNT_B).map((a) => ({
+      ...a,
+      password: CAPACITY_DRILL_PASSWORD,
+      communityId: communityB.id,
+    })),
+  );
+
+const arenaAccounts = fixedAccounts('c203', 'c303', 'capacity-arena', ARENA_ACCOUNT_COUNT).map(
+  (a) => ({ ...a, password: CAPACITY_DRILL_PASSWORD }),
 );
 
 const unexpectedFailureRate = new Rate('unexpected_failure_rate');
@@ -156,7 +210,7 @@ let cachedAccount = null;
 
 export function userJourney() {
   if (!cachedSession) {
-    const account = randomItem(manifest.accounts);
+    const account = randomItem(mainAccounts);
     const token = login(account.email, account.password);
     if (!token) {
       randomSleep(1, 2);
@@ -166,10 +220,10 @@ export function userJourney() {
     cachedAccount = account;
   }
 
-  const isCommunityA = cachedAccount.communityId === manifest.communityA.id;
-  const ownSlug = isCommunityA ? manifest.communityA.slug : manifest.communityB.slug;
-  const ownFallbackSignals = isCommunityA ? manifest.signalsMain : manifest.signalsSecondary;
-  const otherSignals = isCommunityA ? manifest.signalsSecondary : manifest.signalsMain;
+  const isCommunityA = cachedAccount.communityId === communityA.id;
+  const ownSlug = isCommunityA ? communityA.slug : communityB.slug;
+  const ownFallbackSignals = isCommunityA ? signalsMain : signalsSecondary;
+  const otherSignals = isCommunityA ? signalsSecondary : signalsMain;
 
   const feedRes = http.get(`${BASE_URL}/v1/communities/${ownSlug}/signals`, {
     tags: { endpoint: 'community_signals', kind: 'read' },
@@ -267,11 +321,11 @@ export function userJourney() {
 }
 
 function voteJourney() {
-  const account = randomItem(arenaManifest.accounts);
+  const account = randomItem(arenaAccounts);
   const token = login(account.email, account.password);
   if (!token) return;
 
-  const signalId = randomItem(arenaManifest.signals);
+  const signalId = randomItem(arenaSignals);
   const votingRes = authedGet(token, `/v1/signals/${signalId}/civic-process/voting`, 'voting_read');
   record(votingRes, [200], 'voting_read');
 

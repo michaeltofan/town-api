@@ -35,27 +35,49 @@ propose, and vote all mutate the database and are gated by session auth,
 civic-actor/community matching, and (for votes) a single-use ballot token.
 None of that can be exercised by a read-only script.
 
-### Data provisioning (run before every k6 invocation)
+### Why this runs in a temporary, isolated environment, not shared Staging
 
-1. `loadtest/provision.ts` — builds a fully **ephemeral** dataset: two
-   dedicated communities, ~23 signals, and a pool of ~250 real
-   login-capable accounts (`isOwner: true`, which bypasses the
-   membership/payment entitlement gate — no Stripe, no real money). Writes
-   `loadtest/.manifest.json`. Every row this creates is deleted by
-   `loadtest/teardown.ts` at the end of the run.
-2. `loadtest/ensure-voting-arena.ts` — maintains a small **permanent**
-   fixture (one community, 8 signals already at the `voting` stage, 40
-   voter accounts). Writes `loadtest/.voting-arena-manifest.json`.
-   Idempotent and never torn down: `civic_ballot_eligible_actors` is
-   append-only (`ON DELETE RESTRICT` cascades all the way up to the
-   community), so a signal that reaches `voting` can never be deleted
-   again — see the doc comment in `src/db/seeds/loadtest-voting-arena.ts`
-   for the full reasoning. `run-staging-seed.ts`'s row-count preflight
-   guard excludes this fixture's community by ID so its permanent presence
-   never blocks a future foundation-content reseed.
+Earlier iterations provisioned an ephemeral dataset directly in the shared
+Staging Postgres and deleted it afterward. That is no longer possible:
+`civic_process_events` / `civic_process_transitions` are unconditionally
+append-only from the moment a signal is created
+(`drizzle/0041_civic_process_confirmation.sql`, `BEFORE UPDATE OR DELETE`
+triggers with no exception), and `civic_process_events.process_id` /
+`civic_processes.signal_id` are both `ON DELETE RESTRICT` — so every
+signal ever created, and transitively its community, becomes permanently
+undeletable the instant it exists. Row-level teardown of load-test data in
+a shared database is therefore not viable at all, regardless of how
+carefully scoped.
 
-Both scripts require `APP_ENV=staging` and a `DATABASE_URL` pointed at
-staging's Postgres (e.g. via `railway run`); both refuse to run otherwise.
+The fix is architectural, not a smaller teardown script: run the entire
+drill against a **brand-new, empty, temporary Postgres and a temporary API
+service**, both created fresh for one run and deleted as whole Railway
+services afterward (deleting a service doesn't fire row-level DML
+triggers). See `.github/workflows/capacity-drill.yml` and
+`docs/operations/CAPACITY_DRILL_RUNBOOK.md`.
+
+### Fixed-identity fixtures, not a manifest file
+
+Because the temporary database is always brand-new and empty, every
+ID/slug/email/password the drill uses is a **fixed constant**, not
+generated per run — see `src/platform/capacity-drill/fixtures.ts`. This
+lets the setup phase (running inside the temporary Railway service) and
+`capacity-1000.js` (running on the GitHub Actions runner, with no shared
+filesystem) independently compute the same identity without passing a
+manifest file between two different machines. `capacity-1000.js` mirrors
+`fixtures.ts`'s constants in plain JS at the top of the file; keep the two
+in sync by hand if either changes.
+
+`src/platform/run-capacity-setup.ts` (compiled to
+`dist/scripts/capacity-setup.js`) runs migrations, seeds the deterministic
+foundation content, then provisions two ephemeral-shaped communities (the
+main confirm/propose pool) plus a small voting arena (signals already
+advanced to `voting`, mirroring the old permanent voting-arena fixture's
+shape) — all inside the one temporary database, so nothing needs to
+survive past this one run. `src/platform/run-capacity-verify.ts`
+(`dist/scripts/capacity-verify.js`) then checks DB-level integrity
+(duplicate/cross-community confirmations, proposals, ballot tokens, and
+that consumed ballot tokens exactly match cast votes).
 
 ### What the script does
 
@@ -104,22 +126,17 @@ Run workflow. It only runs on `workflow_dispatch` — never automatically on
 push or PR — so it never competes with real staging traffic unless someone
 deliberately starts it.
 
-`capacity-1000.js` needs the provisioning step first, and a manifest path
-pointed at each other:
-
-```bash
-export APP_ENV=staging
-export DATABASE_URL=...   # staging Postgres, e.g. via `railway run`
-npx tsx loadtest/provision.ts
-npx tsx loadtest/ensure-voting-arena.ts
-k6 run --env BASE_URL=https://api-staging.towncivic.org loadtest/capacity-1000.js
-npx tsx loadtest/teardown.ts   # deletes only what provision.ts created
-```
-
-The orchestrating GitHub Actions workflow that runs this end to end
-(provision → k6 → verify → teardown, twice, with CPU/RAM/DB metrics) is
-tracked separately — see the Etapa 4 section of the deployment plan for
-current status.
+`capacity-1000.js` is only ever meant to run against the temporary API
+service `.github/workflows/capacity-drill.yml` creates — it points
+`BASE_URL` at that service's generated `*.up.railway.app` domain, which
+the host allowlist below already permits. There is no supported way to run
+it by hand against shared Staging or production; the fixed-identity
+fixtures above are only safe in a database that is guaranteed empty. To
+run the whole drill: Actions → "Etapa 4 capacity drill" → Run workflow.
+That single dispatch creates the temporary Postgres and API service,
+migrates, seeds, provisions the fixtures, runs k6, verifies, and deletes
+both temporary services unconditionally (`if: always()`), including on
+failure.
 
 ## Reading the result
 
