@@ -132,32 +132,43 @@ jobs:
             exit 1
           fi
 
-          LOGS_RESPONSE=$(railway api \
-            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
-            --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
-            --allow-errors \
-            --compact)
-          echo "$LOGS_RESPONSE" | node -e "
-            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
-            const logs = d.data?.deploymentLogs ?? [];
-            let marker;
-            for (const log of logs) {
-              for (const a of (log.attributes || [])) {
-                if (a.key === 'capacitySetupResult') {
-                  marker = a.value;
+          RESULT_MARKER=""
+          for attempt in $(seq 1 12); do
+            LOGS_RESPONSE=$(railway api \
+              'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+              --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
+              --allow-errors \
+              --compact)
+            RESULT_MARKER=$(echo "$LOGS_RESPONSE" | node -e "
+              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
+              const logs = d.data?.deploymentLogs ?? [];
+              let marker;
+              for (const log of logs) {
+                for (const a of (log.attributes || [])) {
+                  if (a.key === 'capacitySetupResult') {
+                    marker = a.value;
+                  }
                 }
               }
-            }
-            if (!marker) {
-              console.error('No capacitySetupResult marker found in deploy logs (raw logs): ' + JSON.stringify(logs));
-              process.exit(1);
-            }
-            const result = JSON.parse(marker);
+              if (marker) process.stdout.write(marker);
+            ")
+            if [[ -n "$RESULT_MARKER" ]]; then
+              break
+            fi
+            echo "capacitySetupResult marker not available yet (attempt ${attempt}/12); waiting 5 seconds..."
+            sleep 5
+          done
+          if [[ -z "$RESULT_MARKER" ]]; then
+            echo "::error::capacitySetupResult marker was not available within 60 seconds after deployment reached a terminal status"
+            exit 1
+          fi
+          echo "$RESULT_MARKER" | node -e "
+            const result = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             console.log('outcome=' + result.outcome);
             console.log('checks=' + JSON.stringify(result.checks ?? []));
             console.log('counts=' + JSON.stringify(result.counts ?? {}));
-          " > run1-setup-result.txt || { cat run1-setup-result.txt 2>/dev/null; exit 1; }
+          " > run1-setup-result.txt
           cat run1-setup-result.txt
           OUTCOME=$(grep '^outcome=' run1-setup-result.txt | cut -d= -f2-)
           if [[ "$STATUS" != "SUCCESS" || "$OUTCOME" != "passed" ]]; then
@@ -315,32 +326,43 @@ jobs:
             exit 1
           fi
 
-          LOGS_RESPONSE=$(railway api \
-            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
-            --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
-            --allow-errors \
-            --compact)
-          echo "$LOGS_RESPONSE" | node -e "
-            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
-            const logs = d.data?.deploymentLogs ?? [];
-            let marker;
-            for (const log of logs) {
-              for (const a of (log.attributes || [])) {
-                if (a.key === 'capacityVerifyResult') {
-                  marker = a.value;
+          RESULT_MARKER=""
+          for attempt in $(seq 1 12); do
+            LOGS_RESPONSE=$(railway api \
+              'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+              --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
+              --allow-errors \
+              --compact)
+            RESULT_MARKER=$(echo "$LOGS_RESPONSE" | node -e "
+              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
+              const logs = d.data?.deploymentLogs ?? [];
+              let marker;
+              for (const log of logs) {
+                for (const a of (log.attributes || [])) {
+                  if (a.key === 'capacityVerifyResult') {
+                    marker = a.value;
+                  }
                 }
               }
-            }
-            if (!marker) {
-              console.error('No capacityVerifyResult marker found in deploy logs (raw logs): ' + JSON.stringify(logs));
-              process.exit(1);
-            }
-            const result = JSON.parse(marker);
+              if (marker) process.stdout.write(marker);
+            ")
+            if [[ -n "$RESULT_MARKER" ]]; then
+              break
+            fi
+            echo "capacityVerifyResult marker not available yet (attempt ${attempt}/12); waiting 5 seconds..."
+            sleep 5
+          done
+          if [[ -z "$RESULT_MARKER" ]]; then
+            echo "::error::capacityVerifyResult marker was not available within 60 seconds after deployment reached a terminal status"
+            exit 1
+          fi
+          echo "$RESULT_MARKER" | node -e "
+            const result = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             console.log('outcome=' + result.outcome);
             console.log('checks=' + JSON.stringify(result.checks ?? []));
             console.log('counts=' + JSON.stringify(result.counts ?? {}));
-          " > run1-verify.txt || { cat run1-verify.txt 2>/dev/null; echo "outcome=failed" >> "$GITHUB_OUTPUT"; exit 1; }
+          " > run1-verify.txt
           cat run1-verify.txt
           OUTCOME=$(grep '^outcome=' run1-verify.txt | cut -d= -f2-)
           echo "outcome=${OUTCOME}" >> "$GITHUB_OUTPUT"
@@ -431,32 +453,43 @@ jobs:
             exit 1
           fi
 
-          LOGS_RESPONSE=$(railway api \
-            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
-            --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
-            --allow-errors \
-            --compact)
-          echo "$LOGS_RESPONSE" | node -e "
-            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
-            const logs = d.data?.deploymentLogs ?? [];
-            let marker;
-            for (const log of logs) {
-              for (const a of (log.attributes || [])) {
-                if (a.key === 'capacitySetupResult') {
-                  marker = a.value;
+          RESULT_MARKER=""
+          for attempt in $(seq 1 12); do
+            LOGS_RESPONSE=$(railway api \
+              'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+              --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
+              --allow-errors \
+              --compact)
+            RESULT_MARKER=$(echo "$LOGS_RESPONSE" | node -e "
+              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
+              const logs = d.data?.deploymentLogs ?? [];
+              let marker;
+              for (const log of logs) {
+                for (const a of (log.attributes || [])) {
+                  if (a.key === 'capacitySetupResult') {
+                    marker = a.value;
+                  }
                 }
               }
-            }
-            if (!marker) {
-              console.error('No capacitySetupResult marker found in deploy logs (raw logs): ' + JSON.stringify(logs));
-              process.exit(1);
-            }
-            const result = JSON.parse(marker);
+              if (marker) process.stdout.write(marker);
+            ")
+            if [[ -n "$RESULT_MARKER" ]]; then
+              break
+            fi
+            echo "capacitySetupResult marker not available yet (attempt ${attempt}/12); waiting 5 seconds..."
+            sleep 5
+          done
+          if [[ -z "$RESULT_MARKER" ]]; then
+            echo "::error::capacitySetupResult marker was not available within 60 seconds after deployment reached a terminal status"
+            exit 1
+          fi
+          echo "$RESULT_MARKER" | node -e "
+            const result = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             console.log('outcome=' + result.outcome);
             console.log('checks=' + JSON.stringify(result.checks ?? []));
             console.log('counts=' + JSON.stringify(result.counts ?? {}));
-          " > run2-setup-result.txt || { cat run2-setup-result.txt 2>/dev/null; exit 1; }
+          " > run2-setup-result.txt
           cat run2-setup-result.txt
           OUTCOME=$(grep '^outcome=' run2-setup-result.txt | cut -d= -f2-)
           if [[ "$STATUS" != "SUCCESS" || "$OUTCOME" != "passed" ]]; then
@@ -617,32 +650,43 @@ jobs:
             exit 1
           fi
 
-          LOGS_RESPONSE=$(railway api \
-            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
-            --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
-            --allow-errors \
-            --compact)
-          echo "$LOGS_RESPONSE" | node -e "
-            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
-            const logs = d.data?.deploymentLogs ?? [];
-            let marker;
-            for (const log of logs) {
-              for (const a of (log.attributes || [])) {
-                if (a.key === 'capacityVerifyResult') {
-                  marker = a.value;
+          RESULT_MARKER=""
+          for attempt in $(seq 1 12); do
+            LOGS_RESPONSE=$(railway api \
+              'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+              --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
+              --allow-errors \
+              --compact)
+            RESULT_MARKER=$(echo "$LOGS_RESPONSE" | node -e "
+              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
+              const logs = d.data?.deploymentLogs ?? [];
+              let marker;
+              for (const log of logs) {
+                for (const a of (log.attributes || [])) {
+                  if (a.key === 'capacityVerifyResult') {
+                    marker = a.value;
+                  }
                 }
               }
-            }
-            if (!marker) {
-              console.error('No capacityVerifyResult marker found in deploy logs (raw logs): ' + JSON.stringify(logs));
-              process.exit(1);
-            }
-            const result = JSON.parse(marker);
+              if (marker) process.stdout.write(marker);
+            ")
+            if [[ -n "$RESULT_MARKER" ]]; then
+              break
+            fi
+            echo "capacityVerifyResult marker not available yet (attempt ${attempt}/12); waiting 5 seconds..."
+            sleep 5
+          done
+          if [[ -z "$RESULT_MARKER" ]]; then
+            echo "::error::capacityVerifyResult marker was not available within 60 seconds after deployment reached a terminal status"
+            exit 1
+          fi
+          echo "$RESULT_MARKER" | node -e "
+            const result = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             console.log('outcome=' + result.outcome);
             console.log('checks=' + JSON.stringify(result.checks ?? []));
             console.log('counts=' + JSON.stringify(result.counts ?? {}));
-          " > run2-verify.txt || { cat run2-verify.txt 2>/dev/null; echo "outcome=failed" >> "$GITHUB_OUTPUT"; exit 1; }
+          " > run2-verify.txt
           cat run2-verify.txt
           OUTCOME=$(grep '^outcome=' run2-verify.txt | cut -d= -f2-)
           echo "outcome=${OUTCOME}" >> "$GITHUB_OUTPUT"
