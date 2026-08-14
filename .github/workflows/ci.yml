@@ -94,6 +94,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Temporary format changed Etapa 4 files
+        run: npx prettier --write loadtest/capacity-1000.js scripts/ci/capacity-evaluate-observability.mjs src/platform/capacity-drill/db-monitor.ts src/platform/capacity-drill/fixtures.ts src/platform/run-capacity-setup.ts
+
+      - name: Temporary upload formatted Etapa 4 files
+        uses: actions/upload-artifact@v4
+        with:
+          name: etapa4-prettier
+          path: |
+            loadtest/capacity-1000.js
+            scripts/ci/capacity-evaluate-observability.mjs
+            src/platform/capacity-drill/db-monitor.ts
+            src/platform/capacity-drill/fixtures.ts
+            src/platform/run-capacity-setup.ts
+
       - name: Format check
         run: npm run format:check
 
