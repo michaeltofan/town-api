@@ -38,6 +38,7 @@ import { signalModerationRoutes } from './routes/signal-moderation.js';
 import { accountModerationRoutes } from './routes/account-moderation.js';
 import { platformRoutes } from './routes/platform.js';
 import { appendPlatformTechnicalError } from './platform/repositories/technical-errors.js';
+import { capacityDatabaseMonitor } from './platform/capacity-drill/db-monitor.js';
 import { billingRoutes } from './routes/billing.js';
 import { googlePlayRoutes } from './routes/google-play.js';
 import { googlePlayRtdnRoutes } from './routes/google-play-rtdn.js';
@@ -270,6 +271,7 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(openApiPlugin);
   await app.register(controlledAccessPlugin, { env: options.env });
   await app.register(databasePlugin, { database });
+  await app.register(capacityDatabaseMonitor);
   await app.register(healthRoutes, { env: options.env });
   await app.register(communitiesRoutes);
   await app.register(signalsRoutes);

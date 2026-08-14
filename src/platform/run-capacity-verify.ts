@@ -1,10 +1,11 @@
 import { Pool } from 'pg';
 import {
-  ARENA_COMMUNITY,
-  COMMUNITY_A,
-  COMMUNITY_B,
+  arenaCommunity,
   arenaAccounts,
   arenaSignalIds,
+  capacityDrillCycleFromEnv,
+  communityA,
+  communityB,
   mainAccountsA,
   mainSignalIdsA,
 } from './capacity-drill/fixtures.js';
@@ -34,8 +35,9 @@ async function runCapacityVerify(): Promise<void> {
   if (!databaseUrl) {
     throw new Error('DATABASE_URL is required');
   }
-  const poolCommunityIds = [COMMUNITY_A.id, COMMUNITY_B.id];
-  const arenaCommunityId = ARENA_COMMUNITY.id;
+  const cycle = capacityDrillCycleFromEnv();
+  const poolCommunityIds = [communityA(cycle).id, communityB(cycle).id];
+  const arenaCommunityId = arenaCommunity(cycle).id;
   const allCommunityIds = [...poolCommunityIds, arenaCommunityId];
 
   const pool = new Pool({ connectionString: databaseUrl, max: 1, connectionTimeoutMillis: 10_000 });
@@ -83,48 +85,76 @@ async function runCapacityVerify(): Promise<void> {
     });
 
     await check('preflight_writes_present', async () => {
-      const mainAccount = mainAccountsA()[4];
-      const mainSignalId = mainSignalIdsA()[0];
-      const arenaAccount = arenaAccounts()[5];
-      const arenaSignalId = arenaSignalIds()[0];
-      if (!mainAccount || !mainSignalId || !arenaAccount || !arenaSignalId) {
-        throw new Error('Capacity preflight fixtures are incomplete');
+      const fixtures = [
+        {
+          label: 'real',
+          mainAccount: mainAccountsA(cycle)[4],
+          mainSignalId: mainSignalIdsA(cycle)[0],
+          arenaAccount: arenaAccounts(cycle)[5],
+          arenaSignalId: arenaSignalIds(cycle)[0],
+          proposalTitle: 'Capacity drill preflight proposal',
+        },
+        {
+          label: 'synthetic',
+          mainAccount: mainAccountsA(cycle)[5],
+          mainSignalId: mainSignalIdsA(cycle)[1],
+          arenaAccount: arenaAccounts(cycle)[6],
+          arenaSignalId: arenaSignalIds(cycle)[1],
+          proposalTitle: 'Capacity drill synthetic preflight proposal',
+        },
+      ];
+
+      const observed: Record<string, { confirmation: number; proposal: number; vote: number }> = {};
+      for (const fixture of fixtures) {
+        if (
+          !fixture.mainAccount ||
+          !fixture.mainSignalId ||
+          !fixture.arenaAccount ||
+          !fixture.arenaSignalId
+        ) {
+          throw new Error(`Capacity ${fixture.label} preflight fixtures are incomplete`);
+        }
+        const [confirmation, proposal, vote] = await Promise.all([
+          pool.query<{ count: string }>(
+            `SELECT count(*)::text AS count
+             FROM town.signal_confirmations
+             WHERE signal_id = $1 AND actor_id = $2`,
+            [fixture.mainSignalId, fixture.mainAccount.actorId],
+          ),
+          pool.query<{ count: string }>(
+            `SELECT count(*)::text AS count
+             FROM town.civic_proposals p
+             JOIN town.civic_processes pr ON pr.id = p.process_id
+             WHERE pr.signal_id = $1 AND p.author_actor_id = $2 AND p.title = $3`,
+            [fixture.mainSignalId, fixture.mainAccount.actorId, fixture.proposalTitle],
+          ),
+          pool.query<{ count: string }>(
+            `SELECT count(*)::text AS count
+             FROM town.civic_ballot_tokens t
+             JOIN town.civic_processes pr ON pr.id = t.process_id
+             WHERE pr.signal_id = $1 AND t.actor_id = $2 AND t.consumed_at IS NOT NULL`,
+            [fixture.arenaSignalId, fixture.arenaAccount.actorId],
+          ),
+        ]);
+        observed[fixture.label] = {
+          confirmation: Number(confirmation.rows[0]?.count ?? 0),
+          proposal: Number(proposal.rows[0]?.count ?? 0),
+          vote: Number(vote.rows[0]?.count ?? 0),
+        };
       }
-      const mainActorId = mainAccount.actorId;
-      const arenaActorId = arenaAccount.actorId;
-      const [confirmation, proposal, vote] = await Promise.all([
-        pool.query<{ count: string }>(
-          `SELECT count(*)::text AS count
-           FROM town.signal_confirmations
-           WHERE signal_id = $1 AND actor_id = $2`,
-          [mainSignalId, mainActorId],
-        ),
-        pool.query<{ count: string }>(
-          `SELECT count(*)::text AS count
-           FROM town.civic_proposals p
-           JOIN town.civic_processes pr ON pr.id = p.process_id
-           WHERE pr.signal_id = $1 AND p.author_actor_id = $2
-             AND p.title = 'Capacity drill preflight proposal'`,
-          [mainSignalId, mainActorId],
-        ),
-        pool.query<{ count: string }>(
-          `SELECT count(*)::text AS count
-           FROM town.civic_ballot_tokens t
-           JOIN town.civic_processes pr ON pr.id = t.process_id
-           WHERE pr.signal_id = $1 AND t.actor_id = $2 AND t.consumed_at IS NOT NULL`,
-          [arenaSignalId, arenaActorId],
-        ),
-      ]);
-      const observed = {
-        confirmation: Number(confirmation.rows[0]?.count ?? 0),
-        proposal: Number(proposal.rows[0]?.count ?? 0),
-        vote: Number(vote.rows[0]?.count ?? 0),
-      };
-      const passed = Object.values(observed).every((count) => count === 1);
+
+      const passed = Object.values(observed).every((entry) =>
+        Object.values(entry).every((count) => count === 1),
+      );
       return {
         name: 'preflight_writes_present',
         status: passed ? 'ok' : 'fail',
-        detail: `confirmation=${String(observed.confirmation)} proposal=${String(observed.proposal)} vote=${String(observed.vote)}`,
+        detail: Object.entries(observed)
+          .map(
+            ([label, entry]) =>
+              `${label}:confirmation=${String(entry.confirmation)} proposal=${String(entry.proposal)} vote=${String(entry.vote)}`,
+          )
+          .join(' | '),
       };
     });
 
