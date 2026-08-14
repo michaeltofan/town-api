@@ -72,6 +72,7 @@ describe('WebAuthn deployment policy', () => {
     const runtimeMisconfiguredProduction = {
       ...loadEnv(capacityProcessEnv()),
       APP_ENV: 'production' as const,
+      WEBAUTHN_ALLOWED_ORIGINS: 'https://towncivic.org',
     };
     for (const resolve of [
       requireWebAuthnRegistrationConfig,
