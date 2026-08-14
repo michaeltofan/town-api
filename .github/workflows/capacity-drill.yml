@@ -284,11 +284,6 @@ jobs:
         id: run1_preflight
         env:
           CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
-          CAPACITY_DRILL_CYCLE: '2'
-          CAPACITY_DRILL_CYCLE: '2'
-          CAPACITY_DRILL_CYCLE: '2'
-          CAPACITY_DRILL_CYCLE: '1'
-          CAPACITY_DRILL_CYCLE: '1'
           CAPACITY_DRILL_CYCLE: '1'
           CAPACITY_PREFLIGHT: 'true'
           CAPACITY_PREFLIGHT_MODE: real
@@ -314,6 +309,7 @@ jobs:
         continue-on-error: true
         env:
           CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+          CAPACITY_DRILL_CYCLE: '1'
           CAPACITY_PREFLIGHT: 'true'
           CAPACITY_PREFLIGHT_MODE: synthetic
         run: k6 run --summary-export=run1-synthetic-preflight-k6-summary.json loadtest/capacity-1000.js
@@ -338,6 +334,7 @@ jobs:
         continue-on-error: true
         env:
           CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+          CAPACITY_DRILL_CYCLE: '1'
         run: |
           set -uo pipefail
           START_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -697,6 +694,7 @@ jobs:
         if: steps.run1_final.outputs.passed == 'true'
         env:
           CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+          CAPACITY_DRILL_CYCLE: '2'
           CAPACITY_PREFLIGHT: 'true'
           CAPACITY_PREFLIGHT_MODE: real
         run: k6 run --summary-export=run2-preflight-k6-summary.json loadtest/capacity-1000.js
@@ -721,6 +719,7 @@ jobs:
         continue-on-error: true
         env:
           CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+          CAPACITY_DRILL_CYCLE: '2'
           CAPACITY_PREFLIGHT: 'true'
           CAPACITY_PREFLIGHT_MODE: synthetic
         run: k6 run --summary-export=run2-synthetic-preflight-k6-summary.json loadtest/capacity-1000.js
@@ -746,6 +745,7 @@ jobs:
         continue-on-error: true
         env:
           CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+          CAPACITY_DRILL_CYCLE: '2'
         run: |
           set -uo pipefail
           START_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
