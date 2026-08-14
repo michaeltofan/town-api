@@ -12,7 +12,9 @@ export const ADVANCER_COUNT = 5;
 
 export type CapacityDrillCycle = 1 | 2;
 
-export function capacityDrillCycleFromEnv(raw = process.env.CAPACITY_DRILL_CYCLE): CapacityDrillCycle {
+export function capacityDrillCycleFromEnv(
+  raw = process.env.CAPACITY_DRILL_CYCLE,
+): CapacityDrillCycle {
   if (raw === undefined || raw === '' || raw === '1') return 1;
   if (raw === '2') return 2;
   throw new Error('CAPACITY_DRILL_CYCLE must be exactly 1 or 2');
@@ -23,9 +25,7 @@ function cycleGroup(cycle: CapacityDrillCycle, group: string): string {
 }
 
 function fixedId(cycle: CapacityDrillCycle, group: string, index: number): string {
-  return `00000000-0000-4000-${cycleGroup(cycle, group)}-${index
-    .toString()
-    .padStart(12, '0')}`;
+  return `00000000-0000-4000-${cycleGroup(cycle, group)}-${index.toString().padStart(12, '0')}`;
 }
 
 function cycleSuffix(cycle: CapacityDrillCycle): string {
@@ -49,21 +49,15 @@ export const COMMUNITY_B = communityB();
 export const ARENA_COMMUNITY = arenaCommunity();
 
 export function mainSignalIdsA(cycle: CapacityDrillCycle = 1): string[] {
-  return Array.from({ length: MAIN_SIGNAL_COUNT_A }, (_unused, i) =>
-    fixedId(cycle, 'c101', i + 1),
-  );
+  return Array.from({ length: MAIN_SIGNAL_COUNT_A }, (_unused, i) => fixedId(cycle, 'c101', i + 1));
 }
 
 export function mainSignalIdsB(cycle: CapacityDrillCycle = 1): string[] {
-  return Array.from({ length: MAIN_SIGNAL_COUNT_B }, (_unused, i) =>
-    fixedId(cycle, 'c102', i + 1),
-  );
+  return Array.from({ length: MAIN_SIGNAL_COUNT_B }, (_unused, i) => fixedId(cycle, 'c102', i + 1));
 }
 
 export function arenaSignalIds(cycle: CapacityDrillCycle = 1): string[] {
-  return Array.from({ length: ARENA_SIGNAL_COUNT }, (_unused, i) =>
-    fixedId(cycle, 'c103', i + 1),
-  );
+  return Array.from({ length: ARENA_SIGNAL_COUNT }, (_unused, i) => fixedId(cycle, 'c103', i + 1));
 }
 
 export type FixedAccount = { accountId: string; actorId: string; email: string };
