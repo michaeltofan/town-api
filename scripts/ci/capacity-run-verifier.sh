@@ -31,10 +31,18 @@ for attempt in $(seq 1 24); do
     const expectedMode = process.argv[2];
     let match;
     for (const log of (d.data?.deploymentLogs ?? [])) {
-      let parsed;
-      try { parsed = JSON.parse(log.message); } catch { continue; }
-      const marker = parsed?.capacityPreflightVerify;
-      if (marker?.cycle === expectedCycle && marker?.mode === expectedMode) match = marker;
+      const candidates = [];
+      for (const attribute of (log.attributes || [])) {
+        if (attribute.key !== 'capacityPreflightVerify') continue;
+        try { candidates.push(JSON.parse(attribute.value)); } catch {}
+      }
+      try {
+        const parsed = JSON.parse(log.message);
+        if (parsed?.capacityPreflightVerify) candidates.push(parsed.capacityPreflightVerify);
+      } catch {}
+      for (const marker of candidates) {
+        if (marker?.cycle === expectedCycle && marker?.mode === expectedMode) match = marker;
+      }
     }
     if (match) process.stdout.write(JSON.stringify(match));
   " "$CYCLE" "$MODE")
