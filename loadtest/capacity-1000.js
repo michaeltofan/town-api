@@ -1,7 +1,8 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import crypto from 'k6/crypto';
-import { Rate } from 'k6/metrics';
+import { Counter, Rate } from 'k6/metrics';
+import exec from 'k6/execution';
 
 /**
  * TOWN Etapa 4 capacity test — isolated, temporary environment only, real
@@ -55,9 +56,13 @@ if (BASE_URL.includes('api.towncivic.org')) {
 // manifest file.
 const CAPACITY_DRILL_PASSWORD = 'CapacityDrill-2026-Isolated!';
 const CAPACITY_DRILL_AUTH_SECRET = __ENV.CAPACITY_DRILL_AUTH_SECRET;
+const CAPACITY_DRILL_CYCLE = __ENV.CAPACITY_DRILL_CYCLE || '1';
 
 if (!CAPACITY_DRILL_AUTH_SECRET || CAPACITY_DRILL_AUTH_SECRET.length < 32) {
   throw new Error('CAPACITY_DRILL_AUTH_SECRET must contain at least 32 characters');
+}
+if (!['1', '2'].includes(CAPACITY_DRILL_CYCLE)) {
+  throw new Error('CAPACITY_DRILL_CYCLE must be exactly 1 or 2');
 }
 
 const MAIN_SIGNAL_COUNT_A = 20;
@@ -68,7 +73,8 @@ const ACCOUNT_COUNT_B = 25;
 const ARENA_ACCOUNT_COUNT = 40;
 
 function fixedId(group, index) {
-  return `00000000-0000-4000-${group}-${index.toString().padStart(12, '0')}`;
+  const cycleGroup = `${CAPACITY_DRILL_CYCLE === '1' ? 'c' : 'd'}${group.slice(1)}`;
+  return `00000000-0000-4000-${cycleGroup}-${index.toString().padStart(12, '0')}`;
 }
 
 function fixedIds(group, count) {
@@ -76,10 +82,11 @@ function fixedIds(group, count) {
 }
 
 function fixedAccounts(accountGroup, actorGroup, emailPrefix, count) {
+  const cycleSuffix = CAPACITY_DRILL_CYCLE === '1' ? '' : '-cycle-2';
   return Array.from({ length: count }, (_unused, i) => ({
     accountId: fixedId(accountGroup, i + 1),
     actorId: fixedId(actorGroup, i + 1),
-    email: `${emailPrefix}-${String(i + 1)}@loadtest.internal`,
+    email: `${emailPrefix}${cycleSuffix}-${String(i + 1)}@loadtest.internal`,
   }));
 }
 
@@ -92,8 +99,9 @@ function capacitySessionToken(accountId) {
   );
 }
 
-const communityA = { id: fixedId('c001', 1), slug: 'capacity-drill-a' };
-const communityB = { id: fixedId('c002', 1), slug: 'capacity-drill-b' };
+const cycleSuffix = CAPACITY_DRILL_CYCLE === '1' ? '' : '-cycle-2';
+const communityA = { id: fixedId('c001', 1), slug: `capacity-drill-a${cycleSuffix}` };
+const communityB = { id: fixedId('c002', 1), slug: `capacity-drill-b${cycleSuffix}` };
 
 const signalsMain = fixedIds('c101', MAIN_SIGNAL_COUNT_A);
 const signalsSecondary = fixedIds('c102', MAIN_SIGNAL_COUNT_B);
@@ -119,10 +127,70 @@ const arenaAccounts = fixedAccounts('c203', 'c303', 'capacity-arena', ARENA_ACCO
 
 const unexpectedFailureRate = new Rate('unexpected_failure_rate');
 const serverErrorRate = new Rate('server_error_rate');
+const writeOracleFailureRate = new Rate('write_oracle_failure_rate');
+const status2xx = new Counter('http_status_2xx');
+const status401 = new Counter('http_status_401');
+const status403 = new Counter('http_status_403');
+const status409 = new Counter('http_status_409');
+const status429 = new Counter('http_status_429');
+const statusOther4xx = new Counter('http_status_other_4xx');
+const status5xx = new Counter('http_status_5xx');
+const statusOther = new Counter('http_status_other');
+
+const endpointFailureRates = Object.fromEntries(
+  [
+    'login',
+    'community_signals',
+    'signal_detail',
+    'civic_process',
+    'confirm',
+    'propose',
+    'cross_community_confirm',
+    'voting_read',
+    'vote',
+    'health_ready',
+    'synthetic_readback',
+    'proposal_readback',
+    'vote_readback',
+  ].map((name) => [name, new Rate(`unexpected_failure_${name}`)]),
+);
+
+const EXPECT_200 = http.expectedStatuses(200);
+const EXPECT_201 = http.expectedStatuses(201);
+const EXPECT_201_OR_409 = http.expectedStatuses(201, 409);
+const EXPECT_403 = http.expectedStatuses(403);
+const loggedFailures = {};
+
 const thresholds = {
   unexpected_failure_rate: ['rate<0.01'],
   server_error_rate: ['rate<0.005'],
+  write_oracle_failure_rate: ['rate==0'],
 };
+
+const readEndpoints = [
+  'community_signals',
+  'signal_detail',
+  'civic_process',
+  'voting_read',
+  'health_ready',
+  'synthetic_readback',
+  'proposal_readback',
+  'vote_readback',
+];
+const writeEndpoints = ['login', 'confirm', 'propose', 'cross_community_confirm', 'vote'];
+const endpointLatencyThresholds = Object.fromEntries(
+  readEndpoints
+    .map((endpoint) => [
+      `http_req_duration{endpoint:${endpoint}}`,
+      ['p(95)<500', 'p(99)<1500'],
+    ])
+    .concat(
+      writeEndpoints.map((endpoint) => [
+        `http_req_duration{endpoint:${endpoint}}`,
+        ['p(95)<800', 'p(99)<1500'],
+      ]),
+    ),
+);
 
 const capacityOptions = {
   scenarios: {
@@ -157,25 +225,46 @@ const capacityOptions = {
       vus: 1,
       duration: '37m10s',
     },
+    // The API deliberately limits one source IP to 30 password attempts per
+    // 30 minutes. A single GitHub runner cannot model many client IPs, so this
+    // lane exercises real login at a safe cadence while the main lanes reuse
+    // the pre-provisioned mobile sessions a returning user would already hold.
+    login_lane: {
+      executor: 'constant-arrival-rate',
+      exec: 'loginJourney',
+      rate: 1,
+      timeUnit: '2m',
+      duration: '37m10s',
+      preAllocatedVUs: 1,
+      maxVUs: 2,
+    },
   },
+  summaryTrendStats: ['min', 'med', 'avg', 'p(90)', 'p(95)', 'p(99)', 'max', 'count'],
   thresholds: {
     ...thresholds,
     'http_req_duration{kind:read}': ['p(95)<500'],
     'http_req_duration{kind:write}': ['p(95)<800'],
     http_req_duration: ['p(99)<1500'],
+    ...endpointLatencyThresholds,
   },
 };
+
+const preflightMode = __ENV.CAPACITY_PREFLIGHT_MODE || 'real';
+if (!['real', 'synthetic'].includes(preflightMode)) {
+  throw new Error(`Unsupported CAPACITY_PREFLIGHT_MODE "${preflightMode}"`);
+}
 
 const preflightOptions = {
   scenarios: {
     preflight: {
       executor: 'shared-iterations',
-      exec: 'preflight',
+      exec: preflightMode === 'synthetic' ? 'syntheticPreflight' : 'realAuthPreflight',
       vus: 1,
       iterations: 1,
       maxDuration: '2m',
     },
   },
+  summaryTrendStats: ['min', 'med', 'avg', 'p(90)', 'p(95)', 'p(99)', 'max', 'count'],
   thresholds,
 };
 
@@ -198,19 +287,77 @@ function randomSleep(minSeconds, maxSeconds) {
  * expected non-2xx outcomes (duplicate votes/proposals, cross-community
  * denials) that must not count against the failure-rate budget.
  */
+function safeApplicationCode(res) {
+  try {
+    const parsed = JSON.parse(res.body);
+    const value = parsed?.error?.code ?? parsed?.code ?? parsed?.errorCode ?? null;
+    return typeof value === 'string' ? value.slice(0, 80) : null;
+  } catch {
+    return null;
+  }
+}
+
 function record(res, expectedStatuses, label) {
   const ok = expectedStatuses.includes(res.status);
   unexpectedFailureRate.add(!ok);
   serverErrorRate.add(res.status >= 500);
+  endpointFailureRates[label]?.add(!ok);
+
+  if (res.status >= 200 && res.status < 300) status2xx.add(1);
+  else if (res.status === 401) status401.add(1);
+  else if (res.status === 403) status403.add(1);
+  else if (res.status === 409) status409.add(1);
+  else if (res.status === 429) status429.add(1);
+  else if (res.status >= 400 && res.status < 500) statusOther4xx.add(1);
+  else if (res.status >= 500) status5xx.add(1);
+  else statusOther.add(1);
+
   check(res, { [`${label} status is expected`]: () => ok });
+
+  // One safe diagnostic per endpoint, only from VU 1. Never logs tokens,
+  // request bodies, response bodies, emails, or identifiers.
+  if (!ok && __VU === 1 && !loggedFailures[label]) {
+    loggedFailures[label] = true;
+    console.error(
+      JSON.stringify({
+        capacityDiagnostic: {
+          endpoint: label,
+          status: res.status,
+          applicationCode: safeApplicationCode(res),
+        },
+      }),
+    );
+  }
   return ok;
+}
+
+function recordWriteOracle(label, passed) {
+  writeOracleFailureRate.add(!passed);
+  if (!passed) {
+    unexpectedFailureRate.add(true);
+    endpointFailureRates[label]?.add(true);
+  }
+  check(passed, { [`${label} persisted effect is visible`]: (value) => value === true });
+  return passed;
+}
+
+function responseData(res) {
+  try {
+    return JSON.parse(res.body)?.data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function login(email, password) {
   const res = http.post(
     `${BASE_URL}/v1/authentication/password`,
     JSON.stringify({ email, password, clientType: 'mobile' }),
-    { headers: { 'Content-Type': 'application/json' }, tags: { endpoint: 'login', kind: 'write' } },
+    {
+      headers: { 'Content-Type': 'application/json' },
+      tags: { endpoint: 'login', kind: 'write' },
+      responseCallback: EXPECT_200,
+    },
   );
   if (!record(res, [200], 'login')) return null;
   try {
@@ -224,14 +371,16 @@ function authedGet(token, path, endpoint) {
   return http.get(`${BASE_URL}${path}`, {
     headers: { Authorization: `Session ${token}` },
     tags: { endpoint, kind: 'read' },
+    responseCallback: EXPECT_200,
   });
 }
 
-function authedWrite(method, token, path, body, endpoint) {
+function authedWrite(method, token, path, body, endpoint, responseCallback) {
   const fn = method === 'PUT' ? http.put : http.post;
   return fn(`${BASE_URL}${path}`, JSON.stringify(body), {
     headers: { Authorization: `Session ${token}`, 'Content-Type': 'application/json' },
     tags: { endpoint, kind: 'write' },
+    responseCallback,
   });
 }
 
@@ -298,8 +447,11 @@ export function userJourney() {
     `/v1/signals/${signalId}/confirmation`,
     {},
     'confirm',
+    EXPECT_200,
   );
-  record(confirmRes, [200], 'confirm');
+  if (record(confirmRes, [200], 'confirm')) {
+    recordWriteOracle('confirm', responseData(confirmRes)?.confirmed === true);
+  }
 
   // Propose: only possible once the process is in 'proposals', and only
   // once per actor per process -- expect 201 the first time an actor's
@@ -315,8 +467,24 @@ export function userJourney() {
         expectedOutcome: 'Synthetic load-test outcome, not a real civic proposal.',
       },
       'propose',
+      EXPECT_201_OR_409,
     );
-    record(proposeRes, [201, 409], 'propose');
+    if (record(proposeRes, [201, 409], 'propose') && proposeRes.status === 201) {
+      const proposalId = responseData(proposeRes)?.id;
+      const readbackRes = authedGet(
+        cachedSession,
+        `/v1/signals/${signalId}/civic-process/proposals`,
+        'proposal_readback',
+      );
+      const readbackOk = record(readbackRes, [200], 'proposal_readback');
+      const proposals = responseData(readbackRes)?.proposals ?? [];
+      recordWriteOracle(
+        'proposal_readback',
+        readbackOk &&
+          typeof proposalId === 'string' &&
+          proposals.some((proposal) => proposal?.id === proposalId && proposal?.isMine === true),
+      );
+    }
   }
 
   // Cross-community negative test: confirming a signal in the OTHER
@@ -330,6 +498,7 @@ export function userJourney() {
       `/v1/signals/${otherSignalId}/confirmation`,
       {},
       'cross_community_confirm',
+      EXPECT_403,
     );
     record(crossRes, [403], 'cross_community_confirm');
   }
@@ -346,6 +515,16 @@ export function userJourney() {
   if (Math.random() < 0.15) {
     voteJourney();
   }
+}
+
+export function loginJourney() {
+  const iteration = exec.scenario.iterationInTest;
+  const account = mainAccounts[(iteration + 20) % mainAccounts.length];
+  const token = login(account.email, account.password);
+  if (!token) return;
+  const signalId = account.communityId === communityA.id ? signalsMain[2] : signalsSecondary[0];
+  const detailRes = authedGet(token, `/v1/signals/${signalId}`, 'signal_detail');
+  record(detailRes, [200], 'signal_detail');
 }
 
 function voteJourney() {
@@ -371,10 +550,19 @@ function voteJourney() {
     `/v1/signals/${signalId}/civic-process/voting/vote`,
     { proposalId },
     'vote',
+    EXPECT_201_OR_409,
   );
   // 201 the first time this actor votes on this process; 409
   // (already-voted) every subsequent concurrent/repeat attempt.
-  record(voteRes, [201, 409], 'vote');
+  if (record(voteRes, [201, 409], 'vote') && voteRes.status === 201) {
+    const readbackRes = authedGet(
+      token,
+      `/v1/signals/${signalId}/civic-process/voting`,
+      'vote_readback',
+    );
+    const readbackOk = record(readbackRes, [200], 'vote_readback');
+    recordWriteOracle('vote_readback', readbackOk && responseData(readbackRes)?.hasVoted === true);
+  }
 }
 
 /**
@@ -382,7 +570,7 @@ function voteJourney() {
  * remains real here (two requests, safely below the public rate limit); the
  * long load uses capacity-only pre-provisioned sessions above.
  */
-export function preflight() {
+export function realAuthPreflight() {
   const mainAccount = mainAccounts[4];
   const mainToken = login(mainAccount.email, mainAccount.password);
   if (!mainToken) return;
@@ -394,6 +582,7 @@ export function preflight() {
     `/v1/signals/${signalId}/confirmation`,
     {},
     'preflight_confirm',
+    EXPECT_200,
   );
   if (!record(confirmRes, [200], 'preflight_confirm')) return;
 
@@ -407,6 +596,7 @@ export function preflight() {
       expectedOutcome: 'Preflight write is present in the isolated capacity database.',
     },
     'preflight_propose',
+    EXPECT_201,
   );
   if (!record(proposalRes, [201], 'preflight_propose')) return;
 
@@ -439,12 +629,122 @@ export function preflight() {
     `/v1/signals/${arenaSignalId}/civic-process/voting/vote`,
     { proposalId: options[0].proposalId },
     'preflight_vote',
+    EXPECT_201,
   );
   record(voteRes, [201], 'preflight_vote');
 }
 
+/**
+ * Final fail-fast gate. This uses exactly the deterministic token derivation,
+ * Authorization transport, HTTP helpers, and expected-status callbacks used
+ * by the long load. It runs after the workflow's final server deployment and
+ * no deployment is allowed between this gate and the long cycle.
+ */
+export function syntheticPreflight() {
+  const mainAccount = mainAccounts[5];
+  const mainToken = capacitySessionToken(mainAccount.accountId);
+  const signalId = signalsMain[1];
+
+  const feedRes = http.get(`${BASE_URL}/v1/communities/${communityA.slug}/signals`, {
+    tags: { endpoint: 'community_signals', kind: 'read' },
+    responseCallback: EXPECT_200,
+  });
+  if (!record(feedRes, [200], 'community_signals')) return;
+
+  const detailRes = authedGet(mainToken, `/v1/signals/${signalId}`, 'signal_detail');
+  if (!record(detailRes, [200], 'signal_detail')) return;
+
+  const confirmRes = authedWrite(
+    'PUT',
+    mainToken,
+    `/v1/signals/${signalId}/confirmation`,
+    {},
+    'confirm',
+    EXPECT_200,
+  );
+  if (!record(confirmRes, [200], 'confirm')) return;
+
+  const crossRes = authedWrite(
+    'PUT',
+    mainToken,
+    `/v1/signals/${signalsSecondary[0]}/confirmation`,
+    {},
+    'cross_community_confirm',
+    EXPECT_403,
+  );
+  if (!record(crossRes, [403], 'cross_community_confirm')) return;
+
+  const proposalRes = authedWrite(
+    'POST',
+    mainToken,
+    `/v1/signals/${signalId}/civic-process/proposals`,
+    {
+      title: 'Capacity drill synthetic preflight proposal',
+      body: 'Synthetic proposal proving the exact k6 session write path.',
+      expectedOutcome: 'The exact long-load client is accepted before scaling.',
+    },
+    'propose',
+    EXPECT_201,
+  );
+  if (!record(proposalRes, [201], 'propose')) return;
+
+  const readbackRes = authedGet(
+    mainToken,
+    `/v1/signals/${signalId}/confirmation`,
+    'synthetic_readback',
+  );
+  if (!record(readbackRes, [200], 'synthetic_readback')) return;
+  try {
+    if (JSON.parse(readbackRes.body)?.data?.confirmed !== true) {
+      unexpectedFailureRate.add(true);
+      endpointFailureRates.synthetic_readback.add(true);
+      return;
+    }
+  } catch {
+    unexpectedFailureRate.add(true);
+    endpointFailureRates.synthetic_readback.add(true);
+    return;
+  }
+
+  const arenaAccount = arenaAccounts[6];
+  const arenaToken = capacitySessionToken(arenaAccount.accountId);
+  const arenaSignalId = arenaSignals[1];
+  const votingRes = authedGet(
+    arenaToken,
+    `/v1/signals/${arenaSignalId}/civic-process/voting`,
+    'voting_read',
+  );
+  if (!record(votingRes, [200], 'voting_read')) return;
+
+  let options = [];
+  try {
+    options = JSON.parse(votingRes.body)?.data?.options ?? [];
+  } catch {
+    unexpectedFailureRate.add(true);
+    return;
+  }
+  if (options.length === 0) {
+    unexpectedFailureRate.add(true);
+    return;
+  }
+
+  const voteRes = authedWrite(
+    'POST',
+    arenaToken,
+    `/v1/signals/${arenaSignalId}/civic-process/voting/vote`,
+    { proposalId: options[0].proposalId },
+    'vote',
+    EXPECT_201,
+  );
+  record(voteRes, [201], 'vote');
+}
+
 export function probeReadiness() {
-  const res = http.get(`${BASE_URL}/health/ready`, { tags: { endpoint: 'health_ready' } });
+  const res = http.get(`${BASE_URL}/health/ready`, {
+    tags: { endpoint: 'health_ready', kind: 'read' },
+    responseCallback: EXPECT_200,
+  });
+  record(res, [200], 'health_ready');
   check(res, { 'stays ready under load': (r) => r.status === 200 });
   sleep(2);
 }
