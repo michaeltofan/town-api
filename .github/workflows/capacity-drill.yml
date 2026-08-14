@@ -138,6 +138,30 @@ jobs:
           echo "id=${PG_ID}" >> "$GITHUB_OUTPUT"
           echo "Created temporary Postgres service ${PG_NAME} (${PG_ID})"
 
+      - name: Attach a volume to the temporary Postgres service
+        run: |
+          set -euo pipefail
+          # The postgres-ssl image refuses to start without a real volume
+          # mounted at exactly this path -- confirmed the hard way in run
+          # 31788761707 ("Railway volume not mounted to the correct path,
+          # expected /var/lib/postgresql/data but got"). volumeCreate
+          # creates and attaches in one call (docs.railway.com/integrations/
+          # api/manage-volumes#create-a-volume).
+          VOLUME_INPUT='{"input":{"projectId":"'"${RAILWAY_PROJECT_ID}"'","serviceId":"'"${{ steps.pg.outputs.id }}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","mountPath":"/var/lib/postgresql/data"}}'
+          VOLUME_RESPONSE=$(railway api \
+            'mutation($input: VolumeCreateInput!) { volumeCreate(input: $input) { id } }' \
+            --variables "$VOLUME_INPUT" \
+            --allow-errors \
+            --compact)
+          echo "$VOLUME_RESPONSE"
+          echo "$VOLUME_RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('volumeCreate GraphQL errors: ' + JSON.stringify(d.errors));
+            const id = d.data?.volumeCreate?.id;
+            if (!id) throw new Error('unexpected volumeCreate response shape: ' + JSON.stringify(d));
+            console.log('Created volume ' + id + ' mounted at /var/lib/postgresql/data');
+          "
+
       - name: Deploy the temporary Postgres service
         id: pg_deploy
         run: |
@@ -159,11 +183,44 @@ jobs:
           echo "deployment_id=${DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
           echo "Deployment ${DEPLOYMENT_ID} triggered for the temporary Postgres service"
 
+      - name: Wait for the temporary Postgres deployment to reach a terminal status
+        run: |
+          set -euo pipefail
+          TERMINAL=""
+          STATUS=""
+          for tick in $(seq 1 180); do
+            STATUS_RESPONSE=$(railway api \
+              'query($id: String!) { deployment(id: $id) { status } }' \
+              --variables "{\"id\":\"${{ steps.pg_deploy.outputs.deployment_id }}\"}" \
+              --allow-errors \
+              --compact)
+            STATUS=$(echo "$STATUS_RESPONSE" | node -e "
+              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
+              console.log(d.data?.deployment?.status ?? 'UNKNOWN');
+            ")
+            echo "Postgres deployment status: ${STATUS}"
+            case "$STATUS" in
+              SUCCESS|FAILED|CRASHED|REMOVED)
+                TERMINAL=1
+                break
+                ;;
+            esac
+            sleep 5
+          done
+          if [[ -z "$TERMINAL" || "$STATUS" != "SUCCESS" ]]; then
+            echo "::group::Deploy logs (diagnostic)"
+            railway logs --service "${{ steps.pg.outputs.name }}" --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT" --lines 200 || true
+            echo "::endgroup::"
+            echo "::error::Temporary Postgres deployment did not reach SUCCESS (last: ${STATUS:-UNKNOWN})"
+            exit 1
+          fi
+
       - name: Wait for the temporary Postgres to report itself ready
         run: |
           set -euo pipefail
           READY=""
-          DEADLINE=$(( $(date -u +%s) + 20 * 60 ))
+          DEADLINE=$(( $(date -u +%s) + 5 * 60 ))
           attempt=0
           while [[ "$(date -u +%s)" -lt "$DEADLINE" ]]; do
             attempt=$((attempt + 1))
@@ -172,7 +229,7 @@ jobs:
                 --service "${{ steps.pg.outputs.name }}" \
                 --project "$RAILWAY_PROJECT_ID" \
                 --environment "$RAILWAY_ENVIRONMENT" \
-                --lines 300 2>/dev/null | grep -q 'database system is ready to accept connections'; then
+                --lines 300 | grep -q 'database system is ready to accept connections'; then
               READY=1
               break
             fi
@@ -182,7 +239,7 @@ jobs:
             echo "::group::Deploy logs (diagnostic)"
             railway logs --service "${{ steps.pg.outputs.name }}" --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT" --lines 200 || true
             echo "::endgroup::"
-            echo "::error::Temporary Postgres never reported readiness within the wait window"
+            echo "::error::Temporary Postgres never reported readiness within the wait window (deployment reached SUCCESS, so this is unexpected)"
             exit 1
           fi
           echo "Temporary Postgres is ready to accept connections."
@@ -444,7 +501,13 @@ jobs:
 
       - name: Verify phase -- post-run integrity checks
         id: verify_phase
-        if: always()
+        # Only meaningful once the temporary API service actually exists --
+        # run 31788761707 ran this step anyway with an empty serviceId
+        # (because an earlier required step failed before "Create the
+        # temporary API service at this commit" ever ran) and produced an
+        # artificial "Not Authorized" GraphQL error instead of a real
+        # verify outcome.
+        if: always() && steps.api.outputs.id != ''
         run: |
           set -euo pipefail
           UPDATE_INPUT='{"serviceId":"'"${{ steps.api.outputs.id }}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/scripts/capacity-verify.js","restartPolicyType":"NEVER"}}'
@@ -589,6 +652,40 @@ jobs:
               --environment "$RAILWAY_ENVIRONMENT" \
               --yes || echo "::warning::Failed to delete ${name} -- delete it manually from the Railway dashboard"
           done
+
+      - name: Confirm the temporary services are actually gone
+        if: always()
+        run: |
+          set -euo pipefail
+          # Cleanup returning success only means the delete call was
+          # accepted -- confirm by re-listing the project's services and
+          # checking neither temporary name is still present, rather than
+          # trusting the CLI exit code alone.
+          LIST_RESPONSE=$(railway api \
+            'query($id: String!) { project(id: $id) { services { edges { node { id name } } } } }' \
+            --variables "{\"id\":\"${RAILWAY_PROJECT_ID}\"}" \
+            --allow-errors \
+            --compact)
+          echo "$LIST_RESPONSE" | NAMES="${{ steps.api.outputs.name }} ${{ steps.pg.outputs.name }}" node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('project query GraphQL errors: ' + JSON.stringify(d.errors));
+            const remaining = new Set((d.data?.project?.services?.edges ?? []).map((e) => e.node.name));
+            const expectedGone = process.env.NAMES.split(' ').filter((n) => n.length > 0);
+            let allGone = true;
+            for (const name of expectedGone) {
+              if (remaining.has(name)) {
+                allGone = false;
+                console.log('::warning::' + name + ' is STILL PRESENT in the project after cleanup -- delete it manually from the Railway dashboard');
+              } else {
+                console.log(name + ' confirmed deleted.');
+              }
+            }
+            if (expectedGone.length === 0) {
+              console.log('No temporary services were created this run (nothing to confirm).');
+            } else if (allGone) {
+              console.log('All temporary services confirmed deleted.');
+            }
+          "
 
       - name: Final outcome
         if: always()
