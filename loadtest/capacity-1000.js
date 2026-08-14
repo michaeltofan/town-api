@@ -1,5 +1,6 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
+import crypto from 'k6/crypto';
 import { Rate } from 'k6/metrics';
 
 /**
@@ -53,6 +54,11 @@ if (BASE_URL.includes('api.towncivic.org')) {
 // comment above for why this is generated here rather than read from a
 // manifest file.
 const CAPACITY_DRILL_PASSWORD = 'CapacityDrill-2026-Isolated!';
+const CAPACITY_DRILL_AUTH_SECRET = __ENV.CAPACITY_DRILL_AUTH_SECRET;
+
+if (!CAPACITY_DRILL_AUTH_SECRET || CAPACITY_DRILL_AUTH_SECRET.length < 32) {
+  throw new Error('CAPACITY_DRILL_AUTH_SECRET must contain at least 32 characters');
+}
 
 const MAIN_SIGNAL_COUNT_A = 20;
 const MAIN_SIGNAL_COUNT_B = 3;
@@ -75,6 +81,15 @@ function fixedAccounts(accountGroup, actorGroup, emailPrefix, count) {
     actorId: fixedId(actorGroup, i + 1),
     email: `${emailPrefix}-${String(i + 1)}@loadtest.internal`,
   }));
+}
+
+function capacitySessionToken(accountId) {
+  return crypto.hmac(
+    'sha256',
+    CAPACITY_DRILL_AUTH_SECRET,
+    `town.capacity_drill_session.v1\0${accountId}`,
+    'hex',
+  );
 }
 
 const communityA = { id: fixedId('c001', 1), slug: 'capacity-drill-a' };
@@ -104,8 +119,12 @@ const arenaAccounts = fixedAccounts('c203', 'c303', 'capacity-arena', ARENA_ACCO
 
 const unexpectedFailureRate = new Rate('unexpected_failure_rate');
 const serverErrorRate = new Rate('server_error_rate');
+const thresholds = {
+  unexpected_failure_rate: ['rate<0.01'],
+  server_error_rate: ['rate<0.005'],
+};
 
-export const options = {
+const capacityOptions = {
   scenarios: {
     // ~1,000-user-scale steady load: 100 concurrent virtual users for 30
     // minutes, covering login/feed/detail/confirm/propose/vote.
@@ -140,13 +159,28 @@ export const options = {
     },
   },
   thresholds: {
-    unexpected_failure_rate: ['rate<0.01'], // < 1% of requests fail unexpectedly
-    server_error_rate: ['rate<0.005'], // < 0.5% 5xx
+    ...thresholds,
     'http_req_duration{kind:read}': ['p(95)<500'],
     'http_req_duration{kind:write}': ['p(95)<800'],
     http_req_duration: ['p(99)<1500'],
   },
 };
+
+const preflightOptions = {
+  scenarios: {
+    preflight: {
+      executor: 'shared-iterations',
+      exec: 'preflight',
+      vus: 1,
+      iterations: 1,
+      maxDuration: '2m',
+    },
+  },
+  thresholds,
+};
+
+export const options =
+  __ENV.CAPACITY_PREFLIGHT === 'true' ? preflightOptions : capacityOptions;
 
 function randomItem(list) {
   return list[Math.floor(Math.random() * list.length)];
@@ -210,13 +244,8 @@ let cachedAccount = null;
 
 export function userJourney() {
   if (!cachedSession) {
-    const account = randomItem(mainAccounts);
-    const token = login(account.email, account.password);
-    if (!token) {
-      randomSleep(1, 2);
-      return;
-    }
-    cachedSession = token;
+    const account = mainAccounts[(__VU - 1) % mainAccounts.length];
+    cachedSession = capacitySessionToken(account.accountId);
     cachedAccount = account;
   }
 
@@ -321,9 +350,8 @@ export function userJourney() {
 }
 
 function voteJourney() {
-  const account = randomItem(arenaAccounts);
-  const token = login(account.email, account.password);
-  if (!token) return;
+  const account = arenaAccounts[(__VU - 1) % arenaAccounts.length];
+  const token = capacitySessionToken(account.accountId);
 
   const signalId = randomItem(arenaSignals);
   const votingRes = authedGet(token, `/v1/signals/${signalId}/civic-process/voting`, 'voting_read');
@@ -348,6 +376,72 @@ function voteJourney() {
   // 201 the first time this actor votes on this process; 409
   // (already-voted) every subsequent concurrent/repeat attempt.
   record(voteRes, [201, 409], 'vote');
+}
+
+/**
+ * Short fail-fast gate run before either long capacity cycle. Password login
+ * remains real here (two requests, safely below the public rate limit); the
+ * long load uses capacity-only pre-provisioned sessions above.
+ */
+export function preflight() {
+  const mainAccount = mainAccounts[4];
+  const mainToken = login(mainAccount.email, mainAccount.password);
+  if (!mainToken) return;
+
+  const signalId = signalsMain[0];
+  const confirmRes = authedWrite(
+    'PUT',
+    mainToken,
+    `/v1/signals/${signalId}/confirmation`,
+    {},
+    'preflight_confirm',
+  );
+  if (!record(confirmRes, [200], 'preflight_confirm')) return;
+
+  const proposalRes = authedWrite(
+    'POST',
+    mainToken,
+    `/v1/signals/${signalId}/civic-process/proposals`,
+    {
+      title: 'Capacity drill preflight proposal',
+      body: 'Synthetic proposal proving the capacity environment write path.',
+      expectedOutcome: 'Preflight write is present in the isolated capacity database.',
+    },
+    'preflight_propose',
+  );
+  if (!record(proposalRes, [201], 'preflight_propose')) return;
+
+  const arenaAccount = arenaAccounts[5];
+  const arenaToken = login(arenaAccount.email, arenaAccount.password);
+  if (!arenaToken) return;
+  const arenaSignalId = arenaSignals[0];
+  const votingRes = authedGet(
+    arenaToken,
+    `/v1/signals/${arenaSignalId}/civic-process/voting`,
+    'preflight_voting_read',
+  );
+  if (!record(votingRes, [200], 'preflight_voting_read')) return;
+
+  let options = [];
+  try {
+    options = JSON.parse(votingRes.body)?.data?.options ?? [];
+  } catch {
+    unexpectedFailureRate.add(true);
+    return;
+  }
+  if (options.length === 0) {
+    unexpectedFailureRate.add(true);
+    return;
+  }
+
+  const voteRes = authedWrite(
+    'POST',
+    arenaToken,
+    `/v1/signals/${arenaSignalId}/civic-process/voting/vote`,
+    { proposalId: options[0].proposalId },
+    'preflight_vote',
+  );
+  record(voteRes, [201], 'preflight_vote');
 }
 
 export function probeReadiness() {

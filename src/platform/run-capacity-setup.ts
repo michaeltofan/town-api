@@ -1,4 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { hashSessionToken } from '../ceremony/passkey-authentication/crypto.js';
+import { createAccountSession } from '../ceremony/repositories/account-sessions.js';
+import { ensureParticipantSignalConfirmation } from '../db/repositories/confirmations.js';
 import { runMigrations } from '../db/run-migrations.js';
 import { runStagingSeed } from '../db/run-staging-seed.js';
 import { createDatabase } from '../db/client.js';
@@ -15,6 +19,10 @@ import {
   mainSignalIdsA,
   mainSignalIdsB,
 } from './capacity-drill/fixtures.js';
+import {
+  deriveCapacityDrillSessionToken,
+  requireCapacityDrillAuthSecret,
+} from './capacity-drill/session-tokens.js';
 import {
   advanceSignalToVoting,
   createLoginAccount,
@@ -117,6 +125,33 @@ async function runCapacitySetup(): Promise<void> {
     try {
       const now = new Date();
       const at = now.toISOString();
+      const capacityAuthSecret = requireCapacityDrillAuthSecret({
+        environmentName: process.env.RAILWAY_ENVIRONMENT_NAME,
+        secret: process.env.CAPACITY_DRILL_AUTH_SECRET,
+      });
+      const sessionTokenHashKey = process.env.SESSION_TOKEN_HASH_KEY;
+      if (!sessionTokenHashKey) {
+        throw new Error('SESSION_TOKEN_HASH_KEY is required');
+      }
+
+      const provisionSession = async (accountId: string): Promise<void> => {
+        const rawToken = deriveCapacityDrillSessionToken({
+          secret: capacityAuthSecret,
+          accountId,
+        });
+        await createAccountSession(database.db, {
+          id: randomUUID(),
+          accountId,
+          tokenHash: hashSessionToken({
+            hashKey: sessionTokenHashKey,
+            clientType: 'mobile',
+            token: rawToken,
+          }),
+          clientType: 'mobile',
+          createdAt: at,
+          authenticatedAt: at,
+        });
+      };
 
       await check('provision_main_pool', async () => {
         const communityA = await ensureCommunity(database.db, {
@@ -166,6 +201,7 @@ async function runCapacitySetup(): Promise<void> {
             community: communityA,
             at,
           });
+          await provisionSession(account.accountId);
           created += 1;
         }
         for (const account of mainAccountsB()) {
@@ -178,7 +214,15 @@ async function runCapacitySetup(): Promise<void> {
             community: communityB,
             at,
           });
+          await provisionSession(account.accountId);
           created += 1;
+        }
+
+        // Leave the first signal one confirmation short of the proposals
+        // threshold. The one-user preflight supplies the fifth confirmation,
+        // then proves a real proposal can be written synchronously.
+        for (const actor of mainAccountsA().slice(0, ADVANCER_COUNT - 1)) {
+          await ensureParticipantSignalConfirmation(database.db, actor.actorId, signalsA[0]!);
         }
 
         counts.main_signals = signalsA.length + signalsB.length;
@@ -217,6 +261,7 @@ async function runCapacitySetup(): Promise<void> {
             community: arena,
             at,
           });
+          await provisionSession(account.accountId);
         }
 
         const advancerActorIds = arenaAccountList.slice(0, ADVANCER_COUNT).map((a) => a.actorId);
@@ -226,6 +271,8 @@ async function runCapacitySetup(): Promise<void> {
 
         counts.arena_signals = signalIds.length;
         counts.arena_accounts = arenaAccountList.length;
+        counts.synthetic_sessions =
+          Number(counts.main_accounts ?? 0) + arenaAccountList.length;
         return `arena=${arena.id} signals=${String(signalIds.length)} accounts=${String(arenaAccountList.length)}, all advanced to voting`;
       });
     } finally {

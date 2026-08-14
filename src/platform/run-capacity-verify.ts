@@ -1,5 +1,13 @@
 import { Pool } from 'pg';
-import { ARENA_COMMUNITY, COMMUNITY_A, COMMUNITY_B } from './capacity-drill/fixtures.js';
+import {
+  ARENA_COMMUNITY,
+  COMMUNITY_A,
+  COMMUNITY_B,
+  arenaAccounts,
+  arenaSignalIds,
+  mainAccountsA,
+  mainSignalIdsA,
+} from './capacity-drill/fixtures.js';
 
 /**
  * Etapa 4 capacity drill post-run integrity verification -- read-only,
@@ -72,6 +80,47 @@ async function runCapacityVerify(): Promise<void> {
             status: 'fail',
             detail: `only ${String(found)}/3 capacity-drill communities found`,
           };
+    });
+
+    await check('preflight_writes_present', async () => {
+      const mainActorId = mainAccountsA()[4]!.actorId;
+      const mainSignalId = mainSignalIdsA()[0]!;
+      const arenaActorId = arenaAccounts()[5]!.actorId;
+      const arenaSignalId = arenaSignalIds()[0]!;
+      const [confirmation, proposal, vote] = await Promise.all([
+        pool.query<{ count: string }>(
+          `SELECT count(*)::text AS count
+           FROM town.signal_confirmations
+           WHERE signal_id = $1 AND actor_id = $2`,
+          [mainSignalId, mainActorId],
+        ),
+        pool.query<{ count: string }>(
+          `SELECT count(*)::text AS count
+           FROM town.civic_proposals p
+           JOIN town.civic_processes pr ON pr.id = p.process_id
+           WHERE pr.signal_id = $1 AND p.author_actor_id = $2
+             AND p.title = 'Capacity drill preflight proposal'`,
+          [mainSignalId, mainActorId],
+        ),
+        pool.query<{ count: string }>(
+          `SELECT count(*)::text AS count
+           FROM town.civic_ballot_tokens t
+           JOIN town.civic_processes pr ON pr.id = t.process_id
+           WHERE pr.signal_id = $1 AND t.actor_id = $2 AND t.consumed_at IS NOT NULL`,
+          [arenaSignalId, arenaActorId],
+        ),
+      ]);
+      const observed = {
+        confirmation: Number(confirmation.rows[0]?.count ?? 0),
+        proposal: Number(proposal.rows[0]?.count ?? 0),
+        vote: Number(vote.rows[0]?.count ?? 0),
+      };
+      const passed = Object.values(observed).every((count) => count === 1);
+      return {
+        name: 'preflight_writes_present',
+        status: passed ? 'ok' : 'fail',
+        detail: `confirmation=${String(observed.confirmation)} proposal=${String(observed.proposal)} vote=${String(observed.vote)}`,
+      };
     });
 
     await countCheck(
@@ -212,9 +261,11 @@ async function runCapacityVerify(): Promise<void> {
       counts.confirmations = Number(confirmations.rows[0]?.count ?? 0);
       counts.proposals = Number(proposals.rows[0]?.count ?? 0);
       counts.votes = Number(votes.rows[0]?.count ?? 0);
+      const writesPresent =
+        counts.confirmations > 0 && counts.proposals > 0 && counts.votes > 0;
       return {
         name: 'summary_counts',
-        status: 'ok',
+        status: writesPresent ? 'ok' : 'fail',
         detail: `confirmations=${String(counts.confirmations)} proposals=${String(counts.proposals)} votes=${String(counts.votes)}`,
       };
     });
