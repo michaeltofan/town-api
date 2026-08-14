@@ -141,21 +141,22 @@ jobs:
             const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
             const logs = d.data?.deploymentLogs ?? [];
-            const attrs = {};
+            let marker;
             for (const log of logs) {
               for (const a of (log.attributes || [])) {
-                if (a.key === 'outcome' || a.key === 'checks' || a.key === 'counts') {
-                  attrs[a.key] = a.value;
+                if (a.key === 'capacitySetupResult') {
+                  marker = a.value;
                 }
               }
             }
-            if (!attrs.outcome) {
-              console.error('No setup summary found in deploy logs (raw logs): ' + JSON.stringify(logs));
+            if (!marker) {
+              console.error('No capacitySetupResult marker found in deploy logs (raw logs): ' + JSON.stringify(logs));
               process.exit(1);
             }
-            console.log('outcome=' + JSON.parse(attrs.outcome));
-            console.log('checks=' + (attrs.checks ?? '[]'));
-            console.log('counts=' + (attrs.counts ?? '{}'));
+            const result = JSON.parse(marker);
+            console.log('outcome=' + result.outcome);
+            console.log('checks=' + JSON.stringify(result.checks ?? []));
+            console.log('counts=' + JSON.stringify(result.counts ?? {}));
           " > run1-setup-result.txt || { cat run1-setup-result.txt 2>/dev/null; exit 1; }
           cat run1-setup-result.txt
           OUTCOME=$(grep '^outcome=' run1-setup-result.txt | cut -d= -f2-)
@@ -323,21 +324,22 @@ jobs:
             const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
             const logs = d.data?.deploymentLogs ?? [];
-            const attrs = {};
+            let marker;
             for (const log of logs) {
               for (const a of (log.attributes || [])) {
-                if (a.key === 'outcome' || a.key === 'checks' || a.key === 'counts') {
-                  attrs[a.key] = a.value;
+                if (a.key === 'capacityVerifyResult') {
+                  marker = a.value;
                 }
               }
             }
-            if (!attrs.outcome) {
-              console.error('No verify summary found in deploy logs (raw logs): ' + JSON.stringify(logs));
+            if (!marker) {
+              console.error('No capacityVerifyResult marker found in deploy logs (raw logs): ' + JSON.stringify(logs));
               process.exit(1);
             }
-            console.log('outcome=' + JSON.parse(attrs.outcome));
-            console.log('checks=' + (attrs.checks ?? '[]'));
-            console.log('counts=' + (attrs.counts ?? '{}'));
+            const result = JSON.parse(marker);
+            console.log('outcome=' + result.outcome);
+            console.log('checks=' + JSON.stringify(result.checks ?? []));
+            console.log('counts=' + JSON.stringify(result.counts ?? {}));
           " > run1-verify.txt || { cat run1-verify.txt 2>/dev/null; echo "outcome=failed" >> "$GITHUB_OUTPUT"; exit 1; }
           cat run1-verify.txt
           OUTCOME=$(grep '^outcome=' run1-verify.txt | cut -d= -f2-)
@@ -438,21 +440,22 @@ jobs:
             const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
             const logs = d.data?.deploymentLogs ?? [];
-            const attrs = {};
+            let marker;
             for (const log of logs) {
               for (const a of (log.attributes || [])) {
-                if (a.key === 'outcome' || a.key === 'checks' || a.key === 'counts') {
-                  attrs[a.key] = a.value;
+                if (a.key === 'capacitySetupResult') {
+                  marker = a.value;
                 }
               }
             }
-            if (!attrs.outcome) {
-              console.error('No setup summary found in deploy logs (raw logs): ' + JSON.stringify(logs));
+            if (!marker) {
+              console.error('No capacitySetupResult marker found in deploy logs (raw logs): ' + JSON.stringify(logs));
               process.exit(1);
             }
-            console.log('outcome=' + JSON.parse(attrs.outcome));
-            console.log('checks=' + (attrs.checks ?? '[]'));
-            console.log('counts=' + (attrs.counts ?? '{}'));
+            const result = JSON.parse(marker);
+            console.log('outcome=' + result.outcome);
+            console.log('checks=' + JSON.stringify(result.checks ?? []));
+            console.log('counts=' + JSON.stringify(result.counts ?? {}));
           " > run2-setup-result.txt || { cat run2-setup-result.txt 2>/dev/null; exit 1; }
           cat run2-setup-result.txt
           OUTCOME=$(grep '^outcome=' run2-setup-result.txt | cut -d= -f2-)
@@ -623,21 +626,22 @@ jobs:
             const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
             const logs = d.data?.deploymentLogs ?? [];
-            const attrs = {};
+            let marker;
             for (const log of logs) {
               for (const a of (log.attributes || [])) {
-                if (a.key === 'outcome' || a.key === 'checks' || a.key === 'counts') {
-                  attrs[a.key] = a.value;
+                if (a.key === 'capacityVerifyResult') {
+                  marker = a.value;
                 }
               }
             }
-            if (!attrs.outcome) {
-              console.error('No verify summary found in deploy logs (raw logs): ' + JSON.stringify(logs));
+            if (!marker) {
+              console.error('No capacityVerifyResult marker found in deploy logs (raw logs): ' + JSON.stringify(logs));
               process.exit(1);
             }
-            console.log('outcome=' + JSON.parse(attrs.outcome));
-            console.log('checks=' + (attrs.checks ?? '[]'));
-            console.log('counts=' + (attrs.counts ?? '{}'));
+            const result = JSON.parse(marker);
+            console.log('outcome=' + result.outcome);
+            console.log('checks=' + JSON.stringify(result.checks ?? []));
+            console.log('counts=' + JSON.stringify(result.counts ?? {}));
           " > run2-verify.txt || { cat run2-verify.txt 2>/dev/null; echo "outcome=failed" >> "$GITHUB_OUTPUT"; exit 1; }
           cat run2-verify.txt
           OUTCOME=$(grep '^outcome=' run2-verify.txt | cut -d= -f2-)
