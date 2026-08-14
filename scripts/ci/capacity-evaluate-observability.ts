@@ -18,6 +18,10 @@ function object(value: unknown): JsonObject | null {
     : null;
 }
 
+function stringValue(value: unknown): string {
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
 function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8')) as unknown;
 }
@@ -29,7 +33,7 @@ function metricSeries(document: unknown, name: string): MetricSample[] {
   const metrics = Array.isArray(candidate) ? candidate : [];
   const metric = metrics.map(object).find((entry) => {
     const measurement = entry?.measurement ?? entry?.name ?? '';
-    return String(measurement).toUpperCase().includes(name);
+    return stringValue(measurement).toUpperCase().includes(name);
   });
   const samplesCandidate = metric?.samples ?? metric?.data;
   const samples = Array.isArray(samplesCandidate) ? samplesCandidate : [];
@@ -37,7 +41,7 @@ function metricSeries(document: unknown, name: string): MetricSample[] {
     .map(object)
     .filter((sample): sample is JsonObject => sample !== null)
     .map((sample) => ({
-      timestamp: Date.parse(String(sample.timestamp ?? sample.time ?? '')),
+      timestamp: Date.parse(stringValue(sample.timestamp ?? sample.time)),
       value: Number(sample.value),
     }))
     .filter((sample) => Number.isFinite(sample.value));
@@ -123,8 +127,8 @@ function databaseMonitorSummary(document: unknown) {
   const latest = summaries.at(-1);
   if (!latest) throw new Error('no capacityDbMonitor records found');
 
-  const startedAtMs = Date.parse(String(latest.startedAt ?? ''));
-  const lastSampleAtMs = Date.parse(String(latest.lastSampleAt ?? ''));
+  const startedAtMs = Date.parse(stringValue(latest.startedAt));
+  const lastSampleAtMs = Date.parse(stringValue(latest.lastSampleAt));
   const samples = requiredNumber(latest, 'samples');
   const failedSamples = requiredNumber(latest, 'failedSamples');
   const skippedSamples = requiredNumber(latest, 'skippedSamples');
