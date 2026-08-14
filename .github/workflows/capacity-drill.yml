@@ -68,6 +68,25 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: Load capacity-only session secret
+        id: capacity_secret
+        run: |
+          set -euo pipefail
+          VARIABLES=$(railway variable list \
+            --project "${RAILWAY_PROJECT_ID}" \
+            --environment "${RAILWAY_ENVIRONMENT_ID}" \
+            --service "${API_SERVICE_ID}" \
+            --json)
+          SECRET=$(echo "$VARIABLES" | node -e "
+            const value = JSON.parse(require('fs').readFileSync(0, 'utf8')).CAPACITY_DRILL_AUTH_SECRET;
+            if (typeof value !== 'string' || value.length < 32) {
+              throw new Error('CAPACITY_DRILL_AUTH_SECRET is missing or shorter than 32 characters');
+            }
+            process.stdout.write(value);
+          ")
+          echo "::add-mask::${SECRET}"
+          echo "secret=${SECRET}" >> "$GITHUB_OUTPUT"
+
       # ---------------------------------------------------------------
       # Run 1
       # ---------------------------------------------------------------
@@ -257,16 +276,51 @@ jobs:
           fi
           echo "town-api-capacity is ready."
 
+      - name: Run 1 -- one-user HTTP preflight
+        id: run1_preflight
+        env:
+          CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+          CAPACITY_PREFLIGHT: 'true'
+        run: k6 run --summary-export=run1-preflight-k6-summary.json loadtest/capacity-1000.js
+
+      - name: Run 1 -- verify preflight writes directly in PostgreSQL
+        id: run1_preflight_verify
+        if: always() && steps.run1_preflight.outcome == 'success'
+        continue-on-error: true
+        run: bash scripts/ci/capacity-run-verifier.sh run1-preflight-verify.txt
+
+      - name: Run 1 -- restore API after preflight verification
+        id: run1_preflight_restore
+        if: always() && steps.run1_preflight.outcome != 'skipped'
+        continue-on-error: true
+        run: bash scripts/ci/capacity-restore-server.sh
+
+      - name: Run 1 -- preflight gate
+        if: always() && steps.run1_preflight.outcome != 'skipped'
+        env:
+          HTTP_OUTCOME: ${{ steps.run1_preflight.outcome }}
+          DB_OUTCOME: ${{ steps.run1_preflight_verify.outcome }}
+          RESTORE_OUTCOME: ${{ steps.run1_preflight_restore.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "$HTTP_OUTCOME" != "success" || "$DB_OUTCOME" != "success" || "$RESTORE_OUTCOME" != "success" ]]; then
+            echo "::error::Run 1 preflight failed (http=${HTTP_OUTCOME}, db=${DB_OUTCOME}, restore=${RESTORE_OUTCOME}); long k6 cycle will not start"
+            exit 1
+          fi
+          echo "Run 1 preflight passed: password login, confirmation, proposal, vote, and direct DB verification."
+
       - name: Run 1 -- k6
         id: run1_k6
         continue-on-error: true
+        env:
+          CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
         run: |
           set -euo pipefail
           k6 run --summary-export=run1-k6-summary.json loadtest/capacity-1000.js
 
       - name: Run 1 -- verify
         id: run1_verify
-        if: always()
+        if: always() && steps.run1_k6.outcome != 'skipped'
         run: |
           set -euo pipefail
           UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/scripts/capacity-verify.js","restartPolicyType":"NEVER"}}'
@@ -580,17 +634,53 @@ jobs:
           fi
           echo "town-api-capacity is ready."
 
+      - name: Run 2 -- one-user HTTP preflight
+        id: run2_preflight
+        if: steps.run1_final.outputs.passed == 'true'
+        env:
+          CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+          CAPACITY_PREFLIGHT: 'true'
+        run: k6 run --summary-export=run2-preflight-k6-summary.json loadtest/capacity-1000.js
+
+      - name: Run 2 -- verify preflight writes directly in PostgreSQL
+        id: run2_preflight_verify
+        if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_preflight.outcome == 'success'
+        continue-on-error: true
+        run: bash scripts/ci/capacity-run-verifier.sh run2-preflight-verify.txt
+
+      - name: Run 2 -- restore API after preflight verification
+        id: run2_preflight_restore
+        if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_preflight.outcome != 'skipped'
+        continue-on-error: true
+        run: bash scripts/ci/capacity-restore-server.sh
+
+      - name: Run 2 -- preflight gate
+        if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_preflight.outcome != 'skipped'
+        env:
+          HTTP_OUTCOME: ${{ steps.run2_preflight.outcome }}
+          DB_OUTCOME: ${{ steps.run2_preflight_verify.outcome }}
+          RESTORE_OUTCOME: ${{ steps.run2_preflight_restore.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "$HTTP_OUTCOME" != "success" || "$DB_OUTCOME" != "success" || "$RESTORE_OUTCOME" != "success" ]]; then
+            echo "::error::Run 2 preflight failed (http=${HTTP_OUTCOME}, db=${DB_OUTCOME}, restore=${RESTORE_OUTCOME}); long k6 cycle will not start"
+            exit 1
+          fi
+          echo "Run 2 preflight passed: password login, confirmation, proposal, vote, and direct DB verification."
+
       - name: Run 2 -- k6
         id: run2_k6
         if: steps.run1_final.outputs.passed == 'true'
         continue-on-error: true
+        env:
+          CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
         run: |
           set -euo pipefail
           k6 run --summary-export=run2-k6-summary.json loadtest/capacity-1000.js
 
       - name: Run 2 -- verify
         id: run2_verify
-        if: always() && steps.run1_final.outputs.passed == 'true'
+        if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_k6.outcome != 'skipped'
         run: |
           set -euo pipefail
           UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"node dist/scripts/capacity-verify.js","restartPolicyType":"NEVER"}}'
@@ -749,6 +839,10 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Always restore capacity API server command
+        if: always()
+        run: bash scripts/ci/capacity-restore-server.sh
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -757,9 +851,13 @@ jobs:
           retention-days: 30
           path: |
             run1-setup-result.txt
+            run1-preflight-k6-summary.json
+            run1-preflight-verify.txt
             run1-k6-summary.json
             run1-verify.txt
             run2-setup-result.txt
+            run2-preflight-k6-summary.json
+            run2-preflight-verify.txt
             run2-k6-summary.json
             run2-verify.txt
           if-no-files-found: warn
