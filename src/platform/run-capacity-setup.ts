@@ -31,9 +31,14 @@ import {
  * `capacity` environment's Postgres -- never shared Staging, never
  * production.
  *
- * Prints a single JSON summary line (outcome/checks/counts), read by the
- * orchestrating workflow the same way restore-drill.yml already reads its
- * validator's summary from deploy logs.
+ * Prints a single JSON summary line under the unique `capacitySetupResult`
+ * key (outcome/checks/counts), read by the orchestrating workflow the same
+ * way restore-drill.yml already reads its validator's summary from deploy
+ * logs. The key must stay unique: runStagingSeed() prints its own JSON log
+ * lines with a top-level `outcome` field, and Railway's deployment log
+ * query does not guarantee chronological order, so a generic `outcome` key
+ * here previously let the workflow's parser pick up the seed's outcome
+ * instead of this script's own final result.
  */
 
 type CheckResult = { name: string; status: 'ok' | 'fail'; detail: string };
@@ -227,11 +232,11 @@ async function runCapacitySetup(): Promise<void> {
       await database.close();
     }
 
-    const summary = { outcome: 'passed', checks: results, counts };
+    const summary = { capacitySetupResult: { outcome: 'passed', checks: results, counts } };
     process.stdout.write(`${JSON.stringify(summary)}\n`);
   } catch (error) {
     const failed = results.filter((r) => r.status === 'fail');
-    const summary = { outcome: 'failed', checks: results, counts };
+    const summary = { capacitySetupResult: { outcome: 'failed', checks: results, counts } };
     process.stdout.write(`${JSON.stringify(summary)}\n`);
     process.stderr.write(`Capacity drill setup FAILED: ${failed.map((f) => f.name).join(', ')}\n`);
     throw error;

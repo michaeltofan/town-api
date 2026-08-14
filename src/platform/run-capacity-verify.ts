@@ -11,6 +11,12 @@ import { ARENA_COMMUNITY, COMMUNITY_A, COMMUNITY_B } from './capacity-drill/fixt
  * gate -- this script's job is to produce evidence those mechanisms held
  * under the concurrent load k6 just generated, by querying the rows they
  * produced, not by trusting the constraints exist.
+ *
+ * Prints a single JSON summary line under the unique `capacityVerifyResult`
+ * key (outcome/checks/counts) -- kept unique rather than a generic
+ * `outcome` field so the orchestrating workflow's log parser can never
+ * confuse it with an unrelated `outcome`-bearing log line from elsewhere in
+ * the deployment's output.
  */
 
 type CheckResult = { name: string; status: 'ok' | 'fail'; detail: string };
@@ -229,9 +235,11 @@ async function runCapacityVerify(): Promise<void> {
 
     const failed = results.filter((r) => r.status === 'fail');
     const summary = {
-      outcome: failed.length === 0 ? 'passed' : 'failed',
-      checks: results,
-      counts,
+      capacityVerifyResult: {
+        outcome: failed.length === 0 ? 'passed' : 'failed',
+        checks: results,
+        counts,
+      },
     };
     process.stdout.write(`${JSON.stringify(summary)}\n`);
     if (failed.length > 0) {
