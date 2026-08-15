@@ -26,16 +26,31 @@ function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8')) as unknown;
 }
 
-// A real sample pulled via the Railway metrics API during this same
-// investigation (run #31, workflow run 31881244243) had `timestamp` as a
-// plain Unix-epoch-seconds number (e.g. 1786633920), not an ISO 8601
-// string. The previous `Date.parse(stringValue(...))` call silently turned
-// that into NaN (verified locally: `Date.parse(String(1786633920))` ===
-// NaN) rather than throwing, so it would not have surfaced as a crash --
-// only as silently-wrong "nearest limit" lookups in nearestLimit() below.
-// Handle both an epoch-seconds number/numeric-string and an ISO string
-// rather than assuming one, since only the top-level key mismatch was
-// actually confirmed by evidence -- this field's exact format was not.
+// Verified against the exact `@railway/cli` build this workflow installs
+// (`npm install -g @railway/cli`, currently 5.41.2) by reading its source
+// (railwayapp/cli, src/commands/metrics.rs, print_raw_json()) rather than
+// guessing from a live failure. That function builds the `--raw --json`
+// payload as:
+//   let mut measurements = serde_json::Map::new();
+//   for metric in &res.metrics {
+//       measurements.insert(metric.measurement.clone(), points_to_json(...));
+//   }
+//   json.insert("measurements", Object(measurements));
+// So `measurements` is a JSON *object* keyed by measurement name (e.g.
+// "CPU_USAGE", "CPU_LIMIT", "MEMORY_USAGE_GB", "MEMORY_LIMIT_GB"), each
+// value a plain array of points -- not an array of `{measurement, samples}`
+// wrapper objects as PR #152 assumed. `serde_json::Map` is a `BTreeMap` by
+// default, which explains the alphabetical top-level key order seen in the
+// real failure (environment, measurements, service, window) and why
+// `Array.isArray(measurements)` was false: the real payload has an object
+// there, not an array.
+//
+// Each point comes from points_to_json(), which always emits
+// `{"ts": <RFC3339 string>, "value": <number>}` -- the field is `ts`, not
+// `timestamp`, and it is always a string (chrono's `to_rfc3339()`), never a
+// raw epoch number. parseTimestamp() still accepts an epoch number/numeric
+// string defensively, but the real CLI output only ever produces the RFC3339
+// string branch.
 function parseTimestamp(value: unknown): number {
   if (typeof value === 'number') return value * 1000;
   if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value) * 1000;
@@ -44,29 +59,16 @@ function parseTimestamp(value: unknown): number {
 
 function metricSeries(document: unknown, name: string): MetricSample[] {
   const root = object(document);
-  const data = object(root?.data);
-  // `railway metrics --raw --json`'s real top-level key is `measurements`,
-  // not `metrics` -- confirmed directly from a real CI failure (run #31,
-  // workflow run 31881244243) via the diagnostic in describeShape() below,
-  // which printed the actual top-level keys:
-  // ["environment","measurements","service","window"]. `metrics` never
-  // existed in the real payload, so every call here returned zero samples
-  // regardless of what data Railway actually had. Kept the old `metrics`
-  // key as a fallback only in case a different invocation ever returns it.
-  const candidate = root?.measurements ?? data?.measurements ?? root?.metrics ?? data?.metrics;
-  const metrics = Array.isArray(candidate) ? candidate : [];
-  const metric = metrics.map(object).find((entry) => {
-    const measurement = entry?.measurement ?? entry?.name ?? '';
-    return stringValue(measurement).toUpperCase().includes(name);
-  });
-  const samplesCandidate = metric?.samples ?? metric?.data;
-  const samples = Array.isArray(samplesCandidate) ? samplesCandidate : [];
-  return samples
+  const measurements = object(root?.measurements) ?? {};
+  const key = Object.keys(measurements).find((candidate) => candidate.toUpperCase().includes(name));
+  const pointsCandidate = key ? measurements[key] : undefined;
+  const points = Array.isArray(pointsCandidate) ? pointsCandidate : [];
+  return points
     .map(object)
-    .filter((sample): sample is JsonObject => sample !== null)
-    .map((sample) => ({
-      timestamp: parseTimestamp(sample.timestamp ?? sample.time),
-      value: Number(sample.value),
+    .filter((point): point is JsonObject => point !== null)
+    .map((point) => ({
+      timestamp: parseTimestamp(point.ts ?? point.timestamp),
+      value: Number(point.value),
     }))
     .filter((sample) => Number.isFinite(sample.value));
 }
@@ -84,16 +86,19 @@ function nearestLimit(usageSample: MetricSample, limits: MetricSample[]): Metric
 
 function describeShape(document: unknown): string {
   const root = object(document);
-  const data = object(root?.data);
-  const candidate = root?.measurements ?? data?.measurements ?? root?.metrics ?? data?.metrics;
-  const metrics = Array.isArray(candidate) ? candidate : null;
+  const measurements = object(root?.measurements);
   return JSON.stringify({
     topLevelKeys: root ? Object.keys(root) : typeof document,
-    metricsArrayFound: metrics !== null,
-    metricsArrayLength: metrics?.length ?? null,
-    measurementsFound: metrics
-      ?.map(object)
-      .map((entry) => entry?.measurement ?? entry?.name ?? '(unnamed)'),
+    measurementsObjectFound: measurements !== null,
+    measurementKeys: measurements ? Object.keys(measurements) : null,
+    pointCounts: measurements
+      ? Object.fromEntries(
+          Object.entries(measurements).map(([key, value]) => [
+            key,
+            Array.isArray(value) ? value.length : 'not-an-array',
+          ]),
+        )
+      : null,
   });
 }
 
