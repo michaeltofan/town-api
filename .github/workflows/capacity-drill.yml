@@ -315,6 +315,7 @@ jobs:
           K6_STATUS=$?
           END_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           echo "end_at=${END_AT}" >> "$GITHUB_OUTPUT"
+          echo "${END_AT}" > run1-end-at.txt
           exit "$K6_STATUS"
 
       - name: Run 1 -- collect and evaluate observability
@@ -323,13 +324,20 @@ jobs:
         continue-on-error: true
         env:
           START_AT: ${{ steps.run1_k6.outputs.start_at }}
-          END_AT: ${{ steps.run1_k6.outputs.end_at }}
           SERVER_DEPLOYMENT_ID: ${{ steps.run1_preflight_restore.outputs.deployment_id }}
         run: |
           set -euo pipefail
           test -n "$START_AT"
-          test -n "$END_AT"
           test -n "$SERVER_DEPLOYMENT_ID"
+          # Read from the file the k6 step writes directly to disk, not from
+          # steps.run1_k6.outputs.end_at -- that GITHUB_OUTPUT value was
+          # observed empty downstream in run #29 (workflow run 31873231010)
+          # despite the k6 step itself completing normally and writing it,
+          # with no reproducible root cause found in the step logs. The file
+          # removes the dependency on that output surviving a
+          # continue-on-error step, regardless of what caused it to go missing.
+          END_AT=$(cat run1-end-at.txt 2>/dev/null || true)
+          test -n "$END_AT"
           railway metrics --service "$API_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run1-api-metrics.json
           railway metrics --service "$DB_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run1-postgres-metrics.json
           railway api \
@@ -347,12 +355,15 @@ jobs:
         id: run1_verify
         if: always() && steps.run1_k6.outcome != 'skipped'
         env:
-          END_AT: ${{ steps.run1_k6.outputs.end_at }}
           SERVER_DEPLOYMENT_ID: ${{ steps.run1_preflight_restore.outputs.deployment_id }}
         run: |
           set -euo pipefail
-          test -n "$END_AT"
           test -n "$SERVER_DEPLOYMENT_ID"
+          # See the matching comment in the Run 1 observability step: read
+          # from the file the k6 step writes directly to disk, not from
+          # steps.run1_k6.outputs.end_at.
+          END_AT=$(cat run1-end-at.txt 2>/dev/null || true)
+          test -n "$END_AT"
           bash scripts/ci/capacity-final-verifier.sh run1-verify.txt "$SERVER_DEPLOYMENT_ID" 1 "$END_AT"
           echo "outcome=passed" >> "$GITHUB_OUTPUT"
 
@@ -605,6 +616,7 @@ jobs:
           K6_STATUS=$?
           END_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           echo "end_at=${END_AT}" >> "$GITHUB_OUTPUT"
+          echo "${END_AT}" > run2-end-at.txt
           exit "$K6_STATUS"
 
       - name: Run 2 -- collect and evaluate observability
@@ -613,13 +625,16 @@ jobs:
         continue-on-error: true
         env:
           START_AT: ${{ steps.run2_k6.outputs.start_at }}
-          END_AT: ${{ steps.run2_k6.outputs.end_at }}
           SERVER_DEPLOYMENT_ID: ${{ steps.run2_preflight_restore.outputs.deployment_id }}
         run: |
           set -euo pipefail
           test -n "$START_AT"
-          test -n "$END_AT"
           test -n "$SERVER_DEPLOYMENT_ID"
+          # See the matching comment in the Run 1 observability step: read
+          # from the file the k6 step writes directly to disk, not from
+          # steps.run2_k6.outputs.end_at.
+          END_AT=$(cat run2-end-at.txt 2>/dev/null || true)
+          test -n "$END_AT"
           railway metrics --service "$API_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run2-api-metrics.json
           railway metrics --service "$DB_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run2-postgres-metrics.json
           railway api \
@@ -637,12 +652,15 @@ jobs:
         id: run2_verify
         if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_k6.outcome != 'skipped'
         env:
-          END_AT: ${{ steps.run2_k6.outputs.end_at }}
           SERVER_DEPLOYMENT_ID: ${{ steps.run2_preflight_restore.outputs.deployment_id }}
         run: |
           set -euo pipefail
-          test -n "$END_AT"
           test -n "$SERVER_DEPLOYMENT_ID"
+          # See the matching comment in the Run 1 observability step: read
+          # from the file the k6 step writes directly to disk, not from
+          # steps.run2_k6.outputs.end_at.
+          END_AT=$(cat run2-end-at.txt 2>/dev/null || true)
+          test -n "$END_AT"
           bash scripts/ci/capacity-final-verifier.sh run2-verify.txt "$SERVER_DEPLOYMENT_ID" 2 "$END_AT"
           echo "outcome=passed" >> "$GITHUB_OUTPUT"
 
@@ -720,6 +738,7 @@ jobs:
             run1-preflight-verify.txt
             run1-synthetic-preflight-verify.txt
             run1-k6-summary.json
+            run1-end-at.txt
             run1-api-metrics.json
             run1-postgres-metrics.json
             run1-db-monitor-logs.json
@@ -731,6 +750,7 @@ jobs:
             run2-preflight-verify.txt
             run2-synthetic-preflight-verify.txt
             run2-k6-summary.json
+            run2-end-at.txt
             run2-api-metrics.json
             run2-postgres-metrics.json
             run2-db-monitor-logs.json
