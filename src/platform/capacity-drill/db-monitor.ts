@@ -256,10 +256,7 @@ const capacityDatabaseMonitorPlugin: FastifyPluginCallback = (app, _options, don
         }
         if (sampledAtMs - lastIntegrityAtMs >= HEARTBEAT_INTERVAL_MS) {
           lastIntegrityAtMs = sampledAtMs;
-          const capacityVerifyResult = await collectCapacityVerifyResult(
-            app.database.pool,
-            cycle,
-          );
+          const capacityVerifyResult = await collectCapacityVerifyResult(app.database.pool, cycle);
           process.stdout.write(
             `${JSON.stringify({
               event: 'capacity_verify',
