@@ -352,11 +352,38 @@ jobs:
           METRICS_UNTIL=$(date -u -d "${END_AT} + 5 minutes" +%Y-%m-%dT%H:%M:%SZ)
           railway metrics --service "$API_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$METRICS_SINCE" --until "$METRICS_UNTIL" --cpu --memory --raw --json > run1-api-metrics.json
           railway metrics --service "$DB_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$METRICS_SINCE" --until "$METRICS_UNTIL" --cpu --memory --raw --json > run1-postgres-metrics.json
-          railway api \
-            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
-            --variables "{\"deploymentId\":\"${SERVER_DEPLOYMENT_ID}\",\"limit\":500}" \
-            --allow-errors \
-            --compact > run1-db-monitor-logs.json
+          # Retry the deploymentLogs fetch until it actually contains a
+          # capacityDbMonitor record, the same pattern already used for the
+          # capacitySetupResult marker above. A single shot here raced with
+          # log indexing in run #35 (workflow run 31902109498): this query
+          # fires immediately after k6 finishes, while the deployment is
+          # still live, and returns only the most recent 500 log lines. The
+          # DB monitor heartbeats only every 30s, so under load (275k+
+          # requests logged twice each in that run) a 500-line window taken
+          # at the wrong instant can be entirely HTTP request/response logs
+          # with zero monitor lines -- not a threshold miss, an outright
+          # "no capacityDbMonitor records found" exception. Retrying lets
+          # k6's trailing traffic drain between attempts, which is when the
+          # window actually has room to catch a monitor line.
+          DB_MONITOR_LOGS=""
+          for attempt in $(seq 1 12); do
+            CANDIDATE=$(railway api \
+              'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+              --variables "{\"deploymentId\":\"${SERVER_DEPLOYMENT_ID}\",\"limit\":500}" \
+              --allow-errors \
+              --compact)
+            if echo "$CANDIDATE" | grep -q 'capacityDbMonitor'; then
+              DB_MONITOR_LOGS="$CANDIDATE"
+              break
+            fi
+            echo "capacityDbMonitor log record not available yet (attempt ${attempt}/12); waiting 5 seconds..."
+            sleep 5
+          done
+          if [[ -z "$DB_MONITOR_LOGS" ]]; then
+            echo "::error::No capacityDbMonitor log record found within 60 seconds after Run 1 k6 finished"
+            exit 1
+          fi
+          echo "$DB_MONITOR_LOGS" > run1-db-monitor-logs.json
           npx tsx scripts/ci/capacity-evaluate-observability.ts \
             run1-api-metrics.json \
             run1-postgres-metrics.json \
@@ -653,11 +680,28 @@ jobs:
           METRICS_UNTIL=$(date -u -d "${END_AT} + 5 minutes" +%Y-%m-%dT%H:%M:%SZ)
           railway metrics --service "$API_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$METRICS_SINCE" --until "$METRICS_UNTIL" --cpu --memory --raw --json > run2-api-metrics.json
           railway metrics --service "$DB_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$METRICS_SINCE" --until "$METRICS_UNTIL" --cpu --memory --raw --json > run2-postgres-metrics.json
-          railway api \
-            'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
-            --variables "{\"deploymentId\":\"${SERVER_DEPLOYMENT_ID}\",\"limit\":500}" \
-            --allow-errors \
-            --compact > run2-db-monitor-logs.json
+          # See the matching comment in the Run 1 observability step: retry
+          # until the response actually contains a capacityDbMonitor record,
+          # rather than racing log indexing with a single-shot query.
+          DB_MONITOR_LOGS=""
+          for attempt in $(seq 1 12); do
+            CANDIDATE=$(railway api \
+              'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+              --variables "{\"deploymentId\":\"${SERVER_DEPLOYMENT_ID}\",\"limit\":500}" \
+              --allow-errors \
+              --compact)
+            if echo "$CANDIDATE" | grep -q 'capacityDbMonitor'; then
+              DB_MONITOR_LOGS="$CANDIDATE"
+              break
+            fi
+            echo "capacityDbMonitor log record not available yet (attempt ${attempt}/12); waiting 5 seconds..."
+            sleep 5
+          done
+          if [[ -z "$DB_MONITOR_LOGS" ]]; then
+            echo "::error::No capacityDbMonitor log record found within 60 seconds after Run 2 k6 finished"
+            exit 1
+          fi
+          echo "$DB_MONITOR_LOGS" > run2-db-monitor-logs.json
           npx tsx scripts/ci/capacity-evaluate-observability.ts \
             run2-api-metrics.json \
             run2-postgres-metrics.json \
