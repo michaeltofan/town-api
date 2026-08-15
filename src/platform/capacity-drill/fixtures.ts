@@ -2,7 +2,10 @@
 
 export const CAPACITY_DRILL_PASSWORD = 'CapacityDrill-2026-Isolated!';
 
-export const MAIN_SIGNAL_COUNT_A = 20;
+// Two signals are advanced by the preflights. The remaining 50 keep the
+// long-run confirmation workload below the five-actor stage-transition
+// threshold even during the 200-VU spike.
+export const MAIN_SIGNAL_COUNT_A = 52;
 export const MAIN_SIGNAL_COUNT_B = 3;
 export const ARENA_SIGNAL_COUNT = 8;
 export const ACCOUNT_COUNT_A = 225;
