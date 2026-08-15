@@ -120,10 +120,31 @@ async function runCapacitySetup(): Promise<void> {
       return 'migrations applied';
     });
 
-    await check('seed_foundation', async () => {
-      const result = await runStagingSeed();
-      return `outcome=${result.outcome}`;
-    });
+    if (shouldReset) {
+      await check('seed_foundation', async () => {
+        const result = await runStagingSeed();
+        return `outcome=${result.outcome}`;
+      });
+    } else {
+      // Cycle 2 never resets the schema, so cycle 1's foundation content
+      // (communities, signals, controlled actor) and its live load-test data
+      // (confirmations, proposals, votes) are both still present.
+      // runStagingSeed()'s baseline check expects a pristine state
+      // (exactly 1 actor, 0 confirmations) and refuses with
+      // PREFLIGHT_UNEXPECTED_ROWS/unexpected_rows_prevent_exact_invariants
+      // otherwise -- observed directly in run #37 (workflow run
+      // 31907358826), where cycle 2's seed_foundation check failed against
+      // the thousands of actors and 233 confirmations cycle 1 had already
+      // created. Foundation content only ever needs seeding once, before
+      // cycle 1; re-running it against cycle 2's already-populated database
+      // is both unnecessary and incompatible with how runStagingSeed()
+      // validates its baseline.
+      results.push({
+        name: 'seed_foundation',
+        status: 'ok',
+        detail: 'skipped for cycle 2; foundation content already seeded in cycle 1',
+      });
+    }
 
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) {
