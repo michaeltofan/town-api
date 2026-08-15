@@ -21,7 +21,11 @@ fi
 
 RESULT_MARKER=""
 for attempt in $(seq 1 24); do
-  LOGS_RESPONSE=$(railway api +    'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' +    --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" --allow-errors --compact)
+  LOGS_RESPONSE=$(railway api \
+    'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+    --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
+    --allow-errors \
+    --compact)
   RESULT_MARKER=$(echo "$LOGS_RESPONSE" | node -e "
     const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
     if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));

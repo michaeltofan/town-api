@@ -338,8 +338,20 @@ jobs:
           # continue-on-error step, regardless of what caused it to go missing.
           END_AT=$(cat run1-end-at.txt 2>/dev/null || true)
           test -n "$END_AT"
-          railway metrics --service "$API_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run1-api-metrics.json
-          railway metrics --service "$DB_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run1-postgres-metrics.json
+          # Pad the metrics query window by 5 minutes on each side. Railway's
+          # metrics API buckets samples at a granularity that does not
+          # necessarily align with the exact k6 start/end second, so a window
+          # scoped tightly to the run's real duration risks landing between
+          # bucket boundaries and returning zero points -- observed as
+          # "missing CPU or memory usage/limit samples" in run #30 (workflow
+          # run 31878532551) despite metrics genuinely existing for that
+          # period (confirmed independently via the Railway metrics API).
+          # This does not change what's being measured, only widens the
+          # query so real buckets are reliably captured.
+          METRICS_SINCE=$(date -u -d "${START_AT} - 5 minutes" +%Y-%m-%dT%H:%M:%SZ)
+          METRICS_UNTIL=$(date -u -d "${END_AT} + 5 minutes" +%Y-%m-%dT%H:%M:%SZ)
+          railway metrics --service "$API_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$METRICS_SINCE" --until "$METRICS_UNTIL" --cpu --memory --raw --json > run1-api-metrics.json
+          railway metrics --service "$DB_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$METRICS_SINCE" --until "$METRICS_UNTIL" --cpu --memory --raw --json > run1-postgres-metrics.json
           railway api \
             'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
             --variables "{\"deploymentId\":\"${SERVER_DEPLOYMENT_ID}\",\"limit\":500}" \
@@ -635,8 +647,12 @@ jobs:
           # steps.run2_k6.outputs.end_at.
           END_AT=$(cat run2-end-at.txt 2>/dev/null || true)
           test -n "$END_AT"
-          railway metrics --service "$API_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run2-api-metrics.json
-          railway metrics --service "$DB_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$START_AT" --until "$END_AT" --cpu --memory --raw --json > run2-postgres-metrics.json
+          # See the matching comment in the Run 1 observability step: pad the
+          # metrics query window so it doesn't land between bucket boundaries.
+          METRICS_SINCE=$(date -u -d "${START_AT} - 5 minutes" +%Y-%m-%dT%H:%M:%SZ)
+          METRICS_UNTIL=$(date -u -d "${END_AT} + 5 minutes" +%Y-%m-%dT%H:%M:%SZ)
+          railway metrics --service "$API_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$METRICS_SINCE" --until "$METRICS_UNTIL" --cpu --memory --raw --json > run2-api-metrics.json
+          railway metrics --service "$DB_SERVICE_NAME" --environment "$RAILWAY_ENVIRONMENT" --since "$METRICS_SINCE" --until "$METRICS_UNTIL" --cpu --memory --raw --json > run2-postgres-metrics.json
           railway api \
             'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
             --variables "{\"deploymentId\":\"${SERVER_DEPLOYMENT_ID}\",\"limit\":500}" \
