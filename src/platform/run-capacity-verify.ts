@@ -32,7 +32,7 @@ export type CapacityVerifyResult = {
   outcome: 'passed' | 'failed';
   cycle: 1 | 2;
   observedAt: string;
-  checks: Array<{ name: string; status: 'ok' | 'fail'; detail: string }>;
+  checks: { name: string; status: 'ok' | 'fail'; detail: string }[];
   counts: Record<string, number>;
 };
 
