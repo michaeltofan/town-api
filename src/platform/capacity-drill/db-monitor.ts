@@ -7,6 +7,7 @@ import {
   mainAccountsA,
   mainSignalIdsA,
 } from './fixtures.js';
+import { collectCapacityVerifyResult } from '../run-capacity-verify.js';
 
 const SAMPLE_INTERVAL_MS = 2_000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -61,6 +62,7 @@ const capacityDatabaseMonitorPlugin: FastifyPluginCallback = (app, _options, don
   let inFlight: Promise<void> | undefined;
   let lastSampleAtMs: number | undefined;
   let lastHeartbeatAtMs = 0;
+  let lastIntegrityAtMs = 0;
   const lockFirstObservedAt = new Map<number, number>();
   const summary: CapacityDatabaseMonitorSummary = {
     enabled: true,
@@ -251,6 +253,19 @@ const capacityDatabaseMonitorPlugin: FastifyPluginCallback = (app, _options, don
         if (sampledAtMs - lastHeartbeatAtMs >= HEARTBEAT_INTERVAL_MS) {
           lastHeartbeatAtMs = sampledAtMs;
           logSummary('capacity_db_monitor_heartbeat');
+        }
+        if (sampledAtMs - lastIntegrityAtMs >= HEARTBEAT_INTERVAL_MS) {
+          lastIntegrityAtMs = sampledAtMs;
+          const capacityVerifyResult = await collectCapacityVerifyResult(
+            app.database.pool,
+            cycle,
+          );
+          process.stdout.write(
+            `${JSON.stringify({
+              event: 'capacity_verify',
+              capacityVerifyResult,
+            })}\n`,
+          );
         }
       } catch (error: unknown) {
         summary.failedSamples += 1;
