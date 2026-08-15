@@ -346,108 +346,15 @@ jobs:
       - name: Run 1 -- verify
         id: run1_verify
         if: always() && steps.run1_k6.outcome != 'skipped'
+        env:
+          END_AT: ${{ steps.run1_k6.outputs.end_at }}
+          SERVER_DEPLOYMENT_ID: ${{ steps.run1_preflight_restore.outputs.deployment_id }}
         run: |
           set -euo pipefail
-          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"env CAPACITY_DRILL_CYCLE=1 node dist/scripts/capacity-verify.js","restartPolicyType":"NEVER"}}'
-          UPDATE_RESPONSE=$(railway api \
-            'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
-            --variables "$UPDATE_INPUT" \
-            --allow-errors \
-            --compact)
-          echo "$UPDATE_RESPONSE"
-          echo "$UPDATE_RESPONSE" | node -e "
-            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('serviceInstanceUpdate GraphQL errors: ' + JSON.stringify(d.errors));
-            if (d.data?.serviceInstanceUpdate !== true) throw new Error('unexpected serviceInstanceUpdate response shape: ' + JSON.stringify(d));
-          "
-
-          DEPLOY_INPUT='{"environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","serviceId":"'"${API_SERVICE_ID}"'"}'
-          DEPLOY_RESPONSE=$(railway api \
-            'mutation($environmentId: String!, $serviceId: String!) { serviceInstanceDeployV2(environmentId: $environmentId, serviceId: $serviceId) }' \
-            --variables "$DEPLOY_INPUT" \
-            --allow-errors \
-            --compact)
-          echo "$DEPLOY_RESPONSE"
-          DEPLOYMENT_ID=$(echo "$DEPLOY_RESPONSE" | node -e "
-            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('serviceInstanceDeployV2 GraphQL errors: ' + JSON.stringify(d.errors));
-            const id = d.data?.serviceInstanceDeployV2;
-            if (!id) throw new Error('unexpected serviceInstanceDeployV2 response shape: ' + JSON.stringify(d));
-            console.log(id);
-          ")
-          echo "Verify deployment ${DEPLOYMENT_ID} triggered"
-
-          TERMINAL=""
-          STATUS=""
-          for tick in $(seq 1 240); do
-            STATUS_RESPONSE=$(railway api \
-              'query($id: String!) { deployment(id: $id) { status } }' \
-              --variables "{\"id\":\"${DEPLOYMENT_ID}\"}" \
-              --allow-errors \
-              --compact)
-            STATUS=$(echo "$STATUS_RESPONSE" | node -e "
-              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-              if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
-              console.log(d.data?.deployment?.status ?? 'UNKNOWN');
-            ")
-            echo "Verify deployment status: ${STATUS}"
-            case "$STATUS" in
-              SUCCESS|FAILED|CRASHED|REMOVED)
-                TERMINAL=1
-                break
-                ;;
-            esac
-            sleep 5
-          done
-          if [[ -z "$TERMINAL" ]]; then
-            echo "::error::Run 1 verify deployment never reached a terminal status (last: ${STATUS})"
-            echo "outcome=failed" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
-
-          RESULT_MARKER=""
-          for attempt in $(seq 1 12); do
-            LOGS_RESPONSE=$(railway api \
-              'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
-              --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
-              --allow-errors \
-              --compact)
-            RESULT_MARKER=$(echo "$LOGS_RESPONSE" | node -e "
-              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-              if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
-              const logs = d.data?.deploymentLogs ?? [];
-              let marker;
-              for (const log of logs) {
-                for (const a of (log.attributes || [])) {
-                  if (a.key === 'capacityVerifyResult') {
-                    marker = a.value;
-                  }
-                }
-              }
-              if (marker) process.stdout.write(marker);
-            ")
-            if [[ -n "$RESULT_MARKER" ]]; then
-              break
-            fi
-            echo "capacityVerifyResult marker not available yet (attempt ${attempt}/12); waiting 5 seconds..."
-            sleep 5
-          done
-          if [[ -z "$RESULT_MARKER" ]]; then
-            echo "::error::capacityVerifyResult marker was not available within 60 seconds after deployment reached a terminal status"
-            exit 1
-          fi
-          echo "$RESULT_MARKER" | node -e "
-            const result = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            console.log('outcome=' + result.outcome);
-            console.log('checks=' + JSON.stringify(result.checks ?? []));
-            console.log('counts=' + JSON.stringify(result.counts ?? {}));
-          " > run1-verify.txt
-          cat run1-verify.txt
-          OUTCOME=$(grep '^outcome=' run1-verify.txt | cut -d= -f2-)
-          echo "outcome=${OUTCOME}" >> "$GITHUB_OUTPUT"
-          if [[ "$OUTCOME" != "passed" ]]; then
-            exit 1
-          fi
+          test -n "$END_AT"
+          test -n "$SERVER_DEPLOYMENT_ID"
+          bash scripts/ci/capacity-final-verifier.sh run1-verify.txt "$SERVER_DEPLOYMENT_ID" 1 "$END_AT"
+          echo "outcome=passed" >> "$GITHUB_OUTPUT"
 
       - name: Run 1 -- final outcome
         id: run1_final
@@ -729,108 +636,15 @@ jobs:
       - name: Run 2 -- verify
         id: run2_verify
         if: always() && steps.run1_final.outputs.passed == 'true' && steps.run2_k6.outcome != 'skipped'
+        env:
+          END_AT: ${{ steps.run2_k6.outputs.end_at }}
+          SERVER_DEPLOYMENT_ID: ${{ steps.run2_preflight_restore.outputs.deployment_id }}
         run: |
           set -euo pipefail
-          UPDATE_INPUT='{"serviceId":"'"${API_SERVICE_ID}"'","environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","input":{"startCommand":"env CAPACITY_DRILL_CYCLE=2 node dist/scripts/capacity-verify.js","restartPolicyType":"NEVER"}}'
-          UPDATE_RESPONSE=$(railway api \
-            'mutation($serviceId: String!, $environmentId: String, $input: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input) }' \
-            --variables "$UPDATE_INPUT" \
-            --allow-errors \
-            --compact)
-          echo "$UPDATE_RESPONSE"
-          echo "$UPDATE_RESPONSE" | node -e "
-            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('serviceInstanceUpdate GraphQL errors: ' + JSON.stringify(d.errors));
-            if (d.data?.serviceInstanceUpdate !== true) throw new Error('unexpected serviceInstanceUpdate response shape: ' + JSON.stringify(d));
-          "
-
-          DEPLOY_INPUT='{"environmentId":"'"${RAILWAY_ENVIRONMENT_ID}"'","serviceId":"'"${API_SERVICE_ID}"'"}'
-          DEPLOY_RESPONSE=$(railway api \
-            'mutation($environmentId: String!, $serviceId: String!) { serviceInstanceDeployV2(environmentId: $environmentId, serviceId: $serviceId) }' \
-            --variables "$DEPLOY_INPUT" \
-            --allow-errors \
-            --compact)
-          echo "$DEPLOY_RESPONSE"
-          DEPLOYMENT_ID=$(echo "$DEPLOY_RESPONSE" | node -e "
-            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            if (d.errors) throw new Error('serviceInstanceDeployV2 GraphQL errors: ' + JSON.stringify(d.errors));
-            const id = d.data?.serviceInstanceDeployV2;
-            if (!id) throw new Error('unexpected serviceInstanceDeployV2 response shape: ' + JSON.stringify(d));
-            console.log(id);
-          ")
-          echo "Verify deployment ${DEPLOYMENT_ID} triggered"
-
-          TERMINAL=""
-          STATUS=""
-          for tick in $(seq 1 240); do
-            STATUS_RESPONSE=$(railway api \
-              'query($id: String!) { deployment(id: $id) { status } }' \
-              --variables "{\"id\":\"${DEPLOYMENT_ID}\"}" \
-              --allow-errors \
-              --compact)
-            STATUS=$(echo "$STATUS_RESPONSE" | node -e "
-              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-              if (d.errors) throw new Error('deployment query GraphQL errors: ' + JSON.stringify(d.errors));
-              console.log(d.data?.deployment?.status ?? 'UNKNOWN');
-            ")
-            echo "Verify deployment status: ${STATUS}"
-            case "$STATUS" in
-              SUCCESS|FAILED|CRASHED|REMOVED)
-                TERMINAL=1
-                break
-                ;;
-            esac
-            sleep 5
-          done
-          if [[ -z "$TERMINAL" ]]; then
-            echo "::error::Run 2 verify deployment never reached a terminal status (last: ${STATUS})"
-            echo "outcome=failed" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
-
-          RESULT_MARKER=""
-          for attempt in $(seq 1 12); do
-            LOGS_RESPONSE=$(railway api \
-              'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
-              --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
-              --allow-errors \
-              --compact)
-            RESULT_MARKER=$(echo "$LOGS_RESPONSE" | node -e "
-              const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-              if (d.errors) throw new Error('deploymentLogs GraphQL errors: ' + JSON.stringify(d.errors));
-              const logs = d.data?.deploymentLogs ?? [];
-              let marker;
-              for (const log of logs) {
-                for (const a of (log.attributes || [])) {
-                  if (a.key === 'capacityVerifyResult') {
-                    marker = a.value;
-                  }
-                }
-              }
-              if (marker) process.stdout.write(marker);
-            ")
-            if [[ -n "$RESULT_MARKER" ]]; then
-              break
-            fi
-            echo "capacityVerifyResult marker not available yet (attempt ${attempt}/12); waiting 5 seconds..."
-            sleep 5
-          done
-          if [[ -z "$RESULT_MARKER" ]]; then
-            echo "::error::capacityVerifyResult marker was not available within 60 seconds after deployment reached a terminal status"
-            exit 1
-          fi
-          echo "$RESULT_MARKER" | node -e "
-            const result = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-            console.log('outcome=' + result.outcome);
-            console.log('checks=' + JSON.stringify(result.checks ?? []));
-            console.log('counts=' + JSON.stringify(result.counts ?? {}));
-          " > run2-verify.txt
-          cat run2-verify.txt
-          OUTCOME=$(grep '^outcome=' run2-verify.txt | cut -d= -f2-)
-          echo "outcome=${OUTCOME}" >> "$GITHUB_OUTPUT"
-          if [[ "$OUTCOME" != "passed" ]]; then
-            exit 1
-          fi
+          test -n "$END_AT"
+          test -n "$SERVER_DEPLOYMENT_ID"
+          bash scripts/ci/capacity-final-verifier.sh run2-verify.txt "$SERVER_DEPLOYMENT_ID" 2 "$END_AT"
+          echo "outcome=passed" >> "$GITHUB_OUTPUT"
 
       - name: Run 2 -- final outcome
         id: run2_final
