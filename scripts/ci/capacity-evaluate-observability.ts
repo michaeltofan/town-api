@@ -58,13 +58,33 @@ function nearestLimit(usageSample: MetricSample, limits: MetricSample[]): Metric
   return limit;
 }
 
+function describeShape(document: unknown): string {
+  const root = object(document);
+  const data = object(root?.data);
+  const candidate = root?.metrics ?? data?.metrics;
+  const metrics = Array.isArray(candidate) ? candidate : null;
+  return JSON.stringify({
+    topLevelKeys: root ? Object.keys(root) : typeof document,
+    metricsArrayFound: metrics !== null,
+    metricsArrayLength: metrics?.length ?? null,
+    measurementsFound: metrics
+      ?.map(object)
+      .map((entry) => entry?.measurement ?? entry?.name ?? '(unnamed)'),
+  });
+}
+
 function resourceSummary(document: unknown, service: 'api' | 'postgres') {
   const cpuUsage = metricSeries(document, 'CPU_USAGE');
   const cpuLimits = metricSeries(document, 'CPU_LIMIT').filter((sample) => sample.value > 0);
   const memoryUsage = metricSeries(document, 'MEMORY_USAGE');
   const memoryLimits = metricSeries(document, 'MEMORY_LIMIT').filter((sample) => sample.value > 0);
   if (!cpuUsage.length || !cpuLimits.length || !memoryUsage.length || !memoryLimits.length) {
-    throw new Error(`${service}: missing CPU or memory usage/limit samples`);
+    throw new Error(
+      `${service}: missing CPU or memory usage/limit samples ` +
+        `(cpuUsage=${String(cpuUsage.length)} cpuLimits=${String(cpuLimits.length)} ` +
+        `memoryUsage=${String(memoryUsage.length)} memoryLimits=${String(memoryLimits.length)}) -- ` +
+        `raw shape: ${describeShape(document)}`,
+    );
   }
 
   const cpuPercent = cpuUsage.map(
