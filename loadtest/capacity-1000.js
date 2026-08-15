@@ -65,7 +65,10 @@ if (!['1', '2'].includes(CAPACITY_DRILL_CYCLE)) {
   throw new Error('CAPACITY_DRILL_CYCLE must be exactly 1 or 2');
 }
 
-const MAIN_SIGNAL_COUNT_A = 20;
+// Mirrors the two preflight signals plus 50 confirmation-only signals in
+// fixtures.ts. At 200 active journey VUs this caps each signal at four
+// distinct confirming actors, so the load itself cannot close the stage.
+const MAIN_SIGNAL_COUNT_A = 52;
 const MAIN_SIGNAL_COUNT_B = 3;
 const ARENA_SIGNAL_COUNT = 8;
 const ACCOUNT_COUNT_A = 225;
@@ -437,11 +440,15 @@ export function userJourney() {
   }
   randomSleep(0.3, 1);
 
-  // Confirm: idempotent, always succeeds for an own-community participant.
+  // Keep confirmation traffic on the 50 signals reserved for this lane.
+  // Mapping by VU is deterministic: with at most 200 active journey VUs,
+  // no signal receives the fifth distinct actor that would close the stage.
+  const confirmationSignals = signalsMain.slice(2);
+  const confirmationSignalId = confirmationSignals[(__VU - 1) % confirmationSignals.length];
   const confirmRes = authedWrite(
     'PUT',
     cachedSession,
-    `/v1/signals/${signalId}/confirmation`,
+    `/v1/signals/${confirmationSignalId}/confirmation`,
     {},
     'confirm',
     EXPECT_200,
