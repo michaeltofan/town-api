@@ -28,19 +28,24 @@ import {
  * the deployment's output.
  */
 
-type CheckResult = { name: string; status: 'ok' | 'fail'; detail: string };
+export type CapacityVerifyResult = {
+  outcome: 'passed' | 'failed';
+  cycle: 1 | 2;
+  observedAt: string;
+  checks: { name: string; status: 'ok' | 'fail'; detail: string }[];
+  counts: Record<string, number>;
+};
 
-async function runCapacityVerify(): Promise<void> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL is required');
-  }
-  const cycle = capacityDrillCycleFromEnv();
+type CheckResult = CapacityVerifyResult['checks'][number];
+
+export async function collectCapacityVerifyResult(
+  pool: Pool,
+  cycle = capacityDrillCycleFromEnv(),
+): Promise<CapacityVerifyResult> {
   const poolCommunityIds = [communityA(cycle).id, communityB(cycle).id];
   const arenaCommunityId = arenaCommunity(cycle).id;
   const allCommunityIds = [...poolCommunityIds, arenaCommunityId];
 
-  const pool = new Pool({ connectionString: databaseUrl, max: 1, connectionTimeoutMillis: 10_000 });
   const results: CheckResult[] = [];
   const counts: Record<string, number> = {};
 
@@ -68,7 +73,7 @@ async function runCapacityVerify(): Promise<void> {
     });
   };
 
-  try {
+  {
     await check('scope_communities_present', async () => {
       const { rows } = await pool.query<{ count: string }>(
         'SELECT count(*)::text AS count FROM town.communities WHERE id = ANY($1::uuid[])',
@@ -319,32 +324,42 @@ async function runCapacityVerify(): Promise<void> {
     });
 
     const failed = results.filter((r) => r.status === 'fail');
-    const summary = {
-      capacityVerifyResult: {
-        outcome: failed.length === 0 ? 'passed' : 'failed',
-        checks: results,
-        counts,
-      },
+    return {
+      outcome: failed.length === 0 ? 'passed' : 'failed',
+      cycle,
+      observedAt: new Date().toISOString(),
+      checks: results,
+      counts,
     };
-    process.stdout.write(`${JSON.stringify(summary)}\n`);
-    if (failed.length > 0) {
-      process.stderr.write(
-        `Capacity drill verification FAILED: ${failed.map((f) => f.name).join(', ')}\n`,
-      );
-      process.exitCode = 1;
-    } else {
-      process.stderr.write('Capacity drill verification PASSED\n');
-    }
-  } finally {
-    await pool.end();
   }
 }
 
 export function runCapacityVerifyCli(): void {
-  runCapacityVerify().catch((error: unknown) => {
-    const message =
-      error instanceof Error ? (error.stack ?? error.message) : 'Verification crashed';
-    process.stderr.write(`${message}\n`);
-    process.exitCode = 1;
-  });
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL is required');
+  }
+  const pool = new Pool({ connectionString: databaseUrl, max: 1, connectionTimeoutMillis: 10_000 });
+  collectCapacityVerifyResult(pool)
+    .then((result) => {
+      process.stdout.write(`${JSON.stringify({ capacityVerifyResult: result })}\n`);
+      if (result.outcome === 'failed') {
+        process.stderr.write(
+          `Capacity drill verification FAILED: ${result.checks
+            .filter((check) => check.status === 'fail')
+            .map((check) => check.name)
+            .join(', ')}\n`,
+        );
+        process.exitCode = 1;
+      } else {
+        process.stderr.write('Capacity drill verification PASSED\n');
+      }
+    })
+    .catch((error: unknown) => {
+      const message =
+        error instanceof Error ? (error.stack ?? error.message) : 'Verification crashed';
+      process.stderr.write(`${message}\n`);
+      process.exitCode = 1;
+    })
+    .finally(() => pool.end());
 }
