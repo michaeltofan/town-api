@@ -26,10 +26,34 @@ function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8')) as unknown;
 }
 
+// A real sample pulled via the Railway metrics API during this same
+// investigation (run #31, workflow run 31881244243) had `timestamp` as a
+// plain Unix-epoch-seconds number (e.g. 1786633920), not an ISO 8601
+// string. The previous `Date.parse(stringValue(...))` call silently turned
+// that into NaN (verified locally: `Date.parse(String(1786633920))` ===
+// NaN) rather than throwing, so it would not have surfaced as a crash --
+// only as silently-wrong "nearest limit" lookups in nearestLimit() below.
+// Handle both an epoch-seconds number/numeric-string and an ISO string
+// rather than assuming one, since only the top-level key mismatch was
+// actually confirmed by evidence -- this field's exact format was not.
+function parseTimestamp(value: unknown): number {
+  if (typeof value === 'number') return value * 1000;
+  if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value) * 1000;
+  return Date.parse(stringValue(value));
+}
+
 function metricSeries(document: unknown, name: string): MetricSample[] {
   const root = object(document);
   const data = object(root?.data);
-  const candidate = root?.metrics ?? data?.metrics;
+  // `railway metrics --raw --json`'s real top-level key is `measurements`,
+  // not `metrics` -- confirmed directly from a real CI failure (run #31,
+  // workflow run 31881244243) via the diagnostic in describeShape() below,
+  // which printed the actual top-level keys:
+  // ["environment","measurements","service","window"]. `metrics` never
+  // existed in the real payload, so every call here returned zero samples
+  // regardless of what data Railway actually had. Kept the old `metrics`
+  // key as a fallback only in case a different invocation ever returns it.
+  const candidate = root?.measurements ?? data?.measurements ?? root?.metrics ?? data?.metrics;
   const metrics = Array.isArray(candidate) ? candidate : [];
   const metric = metrics.map(object).find((entry) => {
     const measurement = entry?.measurement ?? entry?.name ?? '';
@@ -41,7 +65,7 @@ function metricSeries(document: unknown, name: string): MetricSample[] {
     .map(object)
     .filter((sample): sample is JsonObject => sample !== null)
     .map((sample) => ({
-      timestamp: Date.parse(stringValue(sample.timestamp ?? sample.time)),
+      timestamp: parseTimestamp(sample.timestamp ?? sample.time),
       value: Number(sample.value),
     }))
     .filter((sample) => Number.isFinite(sample.value));
@@ -61,7 +85,7 @@ function nearestLimit(usageSample: MetricSample, limits: MetricSample[]): Metric
 function describeShape(document: unknown): string {
   const root = object(document);
   const data = object(root?.data);
-  const candidate = root?.metrics ?? data?.metrics;
+  const candidate = root?.measurements ?? data?.measurements ?? root?.metrics ?? data?.metrics;
   const metrics = Array.isArray(candidate) ? candidate : null;
   return JSON.stringify({
     topLevelKeys: root ? Object.keys(root) : typeof document,
