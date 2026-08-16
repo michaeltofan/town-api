@@ -164,8 +164,32 @@ Autorizat 2026-08-16.
 | Test de capacitate comparabil cu `loadtest/README.md` | **PASS, rulare proaspătă.** Declanșat din această sesiune (`workflow_dispatch`, commit `0ad0db4`): **10.817 cereri, 0% eșecuri**, toate pragurile de latență respectate (p95 sub 182ms, praguri 500-800ms), 100 utilizatori concurenți susținuți 3m30s. Consistent cu rularea anterioară din `STATUS.md` general (10.591 cereri) |
 | Suită E2E/integrare verde | **PASS, verificat pe bază de date reală, prima oară în această sesiune.** Am pornit Postgres local (nu exista până acum în această sesiune) și am rulat suita completă de integrare — 82 fișiere. 7 fișiere au eșuat inițial cu erori de conexiune/tabelă lipsă imediat după migrare; verificate izolat, toate 7 trec curat — confirmat artefact de concurență din rularea unui singur proces lung (~7 min) cu resetări repetate de schemă, nicio legătură cu Madrid (`grep pilot_cohort` → un singur rezultat, testul meu, verde). Testele mele noi de M4/M5 (`platform.api.test.ts`) trec real: 16/16 |
 | Migrarea 0059 verificată pe bază de date reală | **PASS, nou.** Aplicată cu succes pe Postgres local — tabela `pilot_cohort_members` există genuine. A scos la iveală 5 fișiere de test cu lista de tabele hardcodată, neactualizată de la M4 (nu puteam prinde asta fără bază de date) — reparate și verificate, toate 17 teste (5 fișiere) verzi izolat |
-| QA vizual mobil + desktop, aprobat personal de tine | **NEFĂCUT — nu e treaba mea.** Exact cum spune criteriul: aprobat personal de tine, nu de agent. Nu am făcut și nu pot face captură/aprobare vizuală |
+| QA vizual mobil + desktop, aprobat personal de tine | **ÎN CURS — și deja util.** Ai deschis `madrid-staging.towncivic.org` real și ai găsit un bug real (vezi mai jos) — exact rolul acestui criteriu |
 | Suită E2E Playwright completă (browser real) | **NEFĂCUT.** Configurarea locală (chei WebAuthn, email, sesiune, ~15 variabile) ar fi cerut efort disproporționat față de timpul rămas — semnalat clar, nu ascuns, nu simulat |
+
+### Bug real, găsit de QA-ul tău, reparat — dar nu încă live
+
+Ai deschis `madrid-staging.towncivic.org/#/feed` și ai văzut „No live signals
+right now" / „Couldn't reach TOWN — try again later" în loc de cele 3
+semnale.
+
+**Cauză confirmată în cod:** `api-base.js` nu recunoștea
+`madrid-staging.towncivic.org` ca hostname de Staging. Cădea pe
+presupunerea implicită de producție, deci fiecare cerere se ducea la
+`api.towncivic.org` cu `Origin: https://madrid-staging.towncivic.org` —
+respinsă de blocajul CORS de-un-singur-origin al producției (găsit încă din
+M0/M2). Browserul vedea asta ca o eroare de rețea.
+
+`madrid-pilot-host.js` (M2) bloca deja conținutul pe Madrid, dar nu era
+niciodată legat de rutarea host→API din `api-base.js` — sunt două fișiere
+diferite, iar golul a căzut exact între ele.
+
+**Reparat:** `town-public@a4ecbfa`. 6 teste noi (33/33 total în
+`test-api-base.js`), toate testele conexe re-rulate, curate.
+
+**Neterminat — cere autorizarea ta separată:** branch-ul acesta nu se
+deploy-ează automat. Fix-ul există în cod, dar `madrid-staging.towncivic.org`
+arată în continuare bug-ul până nu se face merge pe `main` și deploy.
 
 ## Blocat / necesită decizia ta
 

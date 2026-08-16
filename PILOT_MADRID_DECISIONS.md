@@ -31,6 +31,7 @@ aici.
 | 2026-08-16 | M8 autorizat | Mihail |
 | 2026-08-16 | Test de capacitate declanșat manual pe Staging din această sesiune (workflow_dispatch, safe by design) | Mihail |
 | 2026-08-16 | M8 declarat „parțial" — CORS/CSRF/WebAuthn/capacitate/migrare verificate real pe cod care rulează; QA vizual și E2E Playwright rămân blocaje deschise, nu bifate artificial | Mihail |
+| 2026-08-16 | Bug real găsit de QA vizual (madrid-staging arăta „Couldn't reach TOWN") — cauză confirmată în `api-base.js`, reparat, `town-public@a4ecbfa`, nu încă deploy-uit | Mihail |
 
 ## Mesajul de invitație WhatsApp — aprobat 2026-08-16
 
@@ -75,6 +76,10 @@ are loc din acest mediu; textul e doar aprobat, nu expediat.
   dacă merită o trecere separată de reparat, în afara pilotului Madrid.
 - Autorizarea de merge+deploy pentru `town-api`, care va aplica efectiv
   migrarea 0059 pe Staging (și apoi Production).
+- Autorizarea de merge+deploy pentru `town-public` — necesară ca fix-ul
+  real de bug (`api-base.js`, hostname Madrid rutat greșit către
+  producție) să ajungă live pe Staging. Fără ea, QA-ul tău continuă să
+  vadă bug-ul.
 - QA vizual mobil + desktop pe `madrid-staging.towncivic.org` (M8) — doar
   tu poți face asta.
 - Suita E2E Playwright completă cu browser real (M8) — necesită o

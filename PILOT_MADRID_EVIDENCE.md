@@ -335,3 +335,33 @@ impact asupra concluziilor.
   disproporționat de costisitoare față de timpul rămas — ~15 variabile
   de mediu pentru WebAuthn/email/sesiune, două servere coordonate).
 - Commit-uri: `town-api@3f7978d` (teste), documentele curente.
+
+## Bug real găsit de QA vizual (2026-08-16, M8)
+
+- Simptom raportat de Mihail: `madrid-staging.towncivic.org/#/feed` afișa
+  „No live signals right now" / „Couldn't reach TOWN — try again later"
+  în loc de cele 3 semnale Madrid.
+- Cauză confirmată în cod: `town-public/api-base.js`,
+  `isStagingPageHost()` nu recunoștea `madrid-staging.towncivic.org` —
+  niciun pattern existent (`localhost`, `town-public-staging`,
+  `.up.railway.app` + `staging`) nu se potrivea. `resolveApiBase()` cădea
+  pe presupunerea implicită de producție (`ACTIVE_API_BASE`).
+- Efect: fiecare fetch către `/v1/communities/madrid-es/signals` se ducea
+  la `api.towncivic.org` cu `Origin: https://madrid-staging.towncivic.org`
+  — respins de `assertProductionWebAuthnPolicy()` (lock de un-singur-origin
+  în producție, documentat încă din M0/M2). Browserul raporta eroare de
+  rețea.
+- `madrid-pilot-host.js` (M2) și `api-base.js` sunt module separate —
+  primul blochează conținutul pe Madrid, al doilea alege API-ul; nu erau
+  niciodată conectate, iar golul a căzut exact acolo. M2 a testat corect
+  CORS/CSRF/WebAuthn *pe API*, dar nu a verificat *rutarea din frontend*
+  către API-ul corect pentru acest hostname nou.
+- Fix: `isStagingPageHost()` recunoaște acum explicit
+  `madrid-staging.towncivic.org`; `isProductionPageHost()` recunoaște
+  `madrid.towncivic.org` (M9, inert până acel domeniu există) — previne
+  aceeași eroare la trecerea în producție.
+- 6 assert-uri noi în `scripts/test-api-base.js` (33/33 total), toate
+  celelalte teste conexe re-rulate curate.
+- Commit: `town-public@a4ecbfa`. **Nu e încă live** — branch-ul nu se
+  deploy-ează automat; necesită merge pe `main` + deploy, autorizate
+  separat.
