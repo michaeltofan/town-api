@@ -64,25 +64,6 @@ jobs:
       - name: Link Railway CLI to the isolated capacity environment
         run: railway link --project "${RAILWAY_PROJECT_ID}" --environment "${RAILWAY_ENVIRONMENT_ID}"
 
-      - name: Load capacity-only session secret
-        id: capacity_secret
-        run: |
-          set -euo pipefail
-          VARIABLES=$(railway variable list \
-            --project "${RAILWAY_PROJECT_ID}" \
-            --environment "${RAILWAY_ENVIRONMENT_ID}" \
-            --service "${API_SERVICE_ID}" \
-            --json)
-          SECRET=$(echo "$VARIABLES" | node -e "
-            const value = JSON.parse(require('fs').readFileSync(0, 'utf8')).CAPACITY_DRILL_AUTH_SECRET;
-            if (typeof value !== 'string' || value.length < 32) {
-              throw new Error('CAPACITY_DRILL_AUTH_SECRET is missing or shorter than 32 characters');
-            }
-            process.stdout.write(value);
-          ")
-          echo "::add-mask::${SECRET}"
-          echo "secret=${SECRET}" >> "$GITHUB_OUTPUT"
-
       - name: Wait for /health/ready
         run: |
           set -euo pipefail
@@ -126,8 +107,6 @@ jobs:
 
       - name: Run media upload probe (k6)
         id: probe
-        env:
-          CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
         run: k6 run --summary-export=media-probe-k6-summary.json loadtest/media-upload-probe.js
 
       - name: Collect media_upload structured logs
