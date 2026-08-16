@@ -194,8 +194,24 @@ curat peste `main`, fără conflicte), merge-uit
 pe Railway are auto-deploy pe push la `main` (`branch: "main"` în
 configurația serviciului) — build declanșat automat, `SUCCESS`, finalizat
 2026-08-16T08:11:44Z, servește cereri fără erori confirmat din log-urile
-de deploy live. Rămâne de confirmat prin QA vizual repetat de tine dacă
-feed-ul chiar apare acum pe `madrid-staging.towncivic.org`.
+de deploy live.
+
+**A doua verificare — CI real a picat, reparat.** Imediat după merge, E2E-ul
+real de pe `main` a picat (`town-public` runs
+[#146](https://github.com/michaeltofan/town-public/actions/runs/31972585680)/[#147](https://github.com/michaeltofan/town-public/actions/runs/31972589521)).
+Cauză confirmată: schimbarea M2 la `PRODUCT_ONLY_CITY_ORDER` (gate de
+hostname Madrid) a rescris exact linia pe care un test vechi
+(`scripts/test-etapa3-member-journey.js`) o verifica ca string literal —
+invariantul verificat de test tot ținea, doar forma sursei se schimbase.
+Reprodus local, reparat, toate cele 19 scripturi din pasul „Static smoke"
+al CI-ului rulate local în aceeași ordine, toate curate. PR
+[#137](https://github.com/michaeltofan/town-public/pull/137) merge-uit,
+`town-public@8f9bd4fdfa3a414585c7819432aec329915404e6`. CI real re-rulat pe
+`main` (run #149) — verificat direct, nu presupus: **SUCCESS**. Railway a
+redeploy-uit automat peste noul commit — deployment nou `SUCCESS`,
+finalizat 2026-08-16T21:16:40Z, a înlocuit deployment-ul anterior. Rămâne
+de confirmat prin QA vizual repetat de tine dacă feed-ul chiar apare acum
+pe `madrid-staging.towncivic.org`.
 
 ## Blocat / necesită decizia ta
 

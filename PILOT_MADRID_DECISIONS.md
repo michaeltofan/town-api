@@ -33,6 +33,7 @@ aici.
 | 2026-08-16 | M8 declarat „parțial" — CORS/CSRF/WebAuthn/capacitate/migrare verificate real pe cod care rulează; QA vizual și E2E Playwright rămân blocaje deschise, nu bifate artificial | Mihail |
 | 2026-08-16 | Bug real găsit de QA vizual (madrid-staging arăta „Couldn't reach TOWN") — cauză confirmată în `api-base.js`, reparat, `town-public@a4ecbfa`, nu încă deploy-uit | Mihail |
 | 2026-08-16 | Merge + deploy pentru `town-public` autorizat — PR #136 merge-uit (`9ec7bab`), Railway a deploy-uit automat pe `town-public-staging` din `main`, `SUCCESS`, fix-ul e live | Mihail |
+| 2026-08-16 | CI real pe `main` a picat imediat după merge (regresie de test, nu de produs) — reparat, PR #137 merge-uit (`8f9bd4f`), CI real re-verificat SUCCESS, Railway redeploy-uit automat | Agent (sub mandatul „drive to green" al PR-urilor proprii, fără autorizare separată — vezi EVIDENCE.md) |
 
 ## Mesajul de invitație WhatsApp — aprobat 2026-08-16
 

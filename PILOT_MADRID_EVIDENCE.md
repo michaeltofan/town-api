@@ -389,3 +389,56 @@ impact asupra concluziilor.
   acestui mediu blochează acel domeniu (aceeași limitare de la M2/M8).
   Confirmarea finală că feed-ul chiar arată cele 3 semnale rămâne la QA-ul
   vizual al lui Mihail.
+
+## Regresie reală de CI, descoperită abia la merge real (2026-08-16)
+
+- Contextul contează: acesta e exact motivul pentru care regula „nu accepta
+  CI verde ca dovadă suficientă" există și în sens invers — CI-ul real, care
+  nu a putut rula niciodată în acest mediu sandbox-at, a găsit o regresie pe
+  care nicio verificare locală de-a mea nu ar fi putut-o găsi (nu am acces
+  la workflow-ul GitHub Actions ca execuție reală, doar la codul lui).
+- Simptom: `town-public` E2E, runs
+  [#146](https://github.com/michaeltofan/town-public/actions/runs/31972585680)
+  (branch-ul PR-ului) și
+  [#147](https://github.com/michaeltofan/town-public/actions/runs/31972589521)
+  (push pe `main`), ambele `failure`, pasul „Static smoke", la câteva
+  secunde după pornire — deci nu Playwright, ci un test static Node.
+- Log exact: `FAIL: feed and city picker derive from the canonical catalog`
+  în `scripts/test-etapa3-member-journey.js`, urmat de
+  `FAILED: 1 assertion(s); passed 162`.
+- Cauză confirmată în cod: asertarea verifica string-ul literal
+  `"const PRODUCT_ONLY_CITY_ORDER = communityCatalogApi.cityIds()"` în
+  sursa `script.js`. Schimbarea M2 (deja aprobată și livrată, `8476e01`) a
+  transformat exact acea linie într-un ternary condiționat de hostname-ul
+  Madrid:
+  ```js
+  const PRODUCT_ONLY_CITY_ORDER = madridPilotCityId
+    ? [madridPilotCityId]
+    : communityCatalogApi.cityIds();
+  ```
+  String-ul literal nu mai exista identic — testul pica, dar invariantul pe
+  care îl verifica (ordinea orașelor derivă din catalogul canonic, nu dintr-o
+  listă separată hardcodată) tot era adevărat pe orice branch, inclusiv pe
+  cel implicit (non-Madrid).
+- De ce n-a fost prins în M2: verificarea manuală din acea etapă a rulat
+  „4 teste node relevante" (vezi tabelul M2), nu acest fișier — 163 de
+  asertări dintr-un test de etapă anterioară (Etapa 3), fără legătură
+  vizibilă cu Madrid la prima vedere.
+- Reparat: asertarea actualizată să caute printr-un regex mărginit
+  (`communityCatalogApi\.cityIds\(\)` undeva în atribuirea către
+  `PRODUCT_ONLY_CITY_ORDER`), păstrând invariantul real, tolerând forma nouă.
+  Reprodus local înainte de reparare (`FAILED: 1 assertion(s); passed 162`,
+  identic cu log-ul din CI); verificat după reparare
+  (`PASSED: 163 Etapa 3 member journey assertions`); toate cele 19 scripturi
+  din pasul „Static smoke" (`.github/workflows/e2e.yml`) rulate local, în
+  aceeași ordine, toate curate.
+- Merge: PR
+  [town-public#137](https://github.com/michaeltofan/town-public/pull/137)
+  → `town-public@8f9bd4fdfa3a414585c7819432aec329915404e6`.
+- Branch-ul `claude/madrid-pilot-analysis-rm82b9` conținea deja doar istorie
+  merge-uită (PR #136) — repornit de la `origin/main` conform regulii de
+  branch merge-uit, nu stivuit peste el.
+- Verificare finală, directă, nu presupusă: run CI #149 pe `main`,
+  urmărit până la finalizare — `status: completed`, `conclusion: success`.
+  Railway a redeploy-uit automat peste noul commit — deployment nou
+  `SUCCESS`, finalizat 2026-08-16T21:16:40Z, a înlocuit build-ul anterior.
