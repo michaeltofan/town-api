@@ -1,0 +1,158 @@
+{
+  "clientSideCompression": {
+    "neverAppliesTo": "discussion testimony video (already bounded server-side at 32MB)",
+    "owner": "town-public (web only; mobile is out of scope for this stage)",
+    "scope": [
+      "member-signal photo publish",
+      "discussion testimony image attachment"
+    ],
+    "trustBoundary": "a client-side convenience only; server-side magic-byte, content-type, and size validation remains the sole authority and is unchanged by compression"
+  },
+  "contractVersion": "1.0.0",
+  "costDecision": {
+    "assumedWave": "1,000 users (Etapa 4 capacity assumption)",
+    "condition": "this decision is conditional on the measured numbers, not an architectural default -- revisit if real traffic or cost materially exceeds the Etapa 4 assumption",
+    "decision": "signed URLs / private CDN are NOT implemented; the existing server-side proxy is sufficient at this cost and scale",
+    "measuredAt": "2026-08-16",
+    "measuredMonthlyCostUsd": 0.07,
+    "method": "real k6 requests against the capacity environment at the byte sizes the browser compression step (PR #135) actually produces, real byteSize read back from server-side structured deployment logs, not assumed",
+    "neverImplemented": [
+      "signed GET URLs",
+      "private CDN",
+      "public bucket serving"
+    ],
+    "step": "Etapa 5 Step 2/3"
+  },
+  "description": "Contract for member-signal and discussion-contribution media: upload validation, private object storage, TTL-bound pending uploads, and the public/private read distinction. Fixes byte-size caps, allowed content types, TTLs, and route shapes as a deliberate contract so future changes are intentional, mirroring the identity/auth-ceremony/membership/billing foundation contracts.",
+  "discussionContributionMedia": {
+    "allowedContentTypes": [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "video/mp4"
+    ],
+    "magicByteChecks": {
+      "image/jpeg": "first 3 bytes are 0xff 0xd8 0xff",
+      "image/png": "8-byte PNG signature 0x89 0x50 0x4e 0x47 0x0d 0x0a 0x1a 0x0a",
+      "image/webp": "'RIFF' at offset 0 and 'WEBP' at offset 8",
+      "video/mp4": "ftyp box marker ('ftyp' ASCII) present near the start of the file"
+    },
+    "maxBytesByKind": {
+      "image": 5242880,
+      "video": 33554432
+    },
+    "objectKeyPattern": "discussion-contributions/{signalId}/{uploadId}.{ext}",
+    "readAuth": "active session with participant civic access for the signal community",
+    "readCacheControl": "private, max-age=300",
+    "readResponseHeaders": [
+      "Content-Type",
+      "Content-Length",
+      "Cache-Control",
+      "X-Content-Type-Options"
+    ],
+    "readRoute": "GET /v1/signals/:signalId/discussion-session/contributions/:contributionId/media",
+    "routeBodyLimit": {
+      "rationale": "set to the video cap for the whole route since content-type/kind is not known until after the body is parsed; an oversized image (over the 5MB image cap but under the 32MB route limit) is rejected by in-handler validation (400 VALIDATION_ERROR), while an oversized video (over 32MB) is rejected by the framework body limit before the handler runs (413 PAYLOAD_TOO_LARGE)",
+      "value": 33554432
+    },
+    "uploadRoute": "POST /v1/signals/:signalId/discussion-session/media",
+    "uploadTtlMs": 3600000,
+    "visibility": "private -- civic discussion evidence, not published content"
+  },
+  "explicitExclusions": [
+    "signed GET URLs / private CDN (conditional on cost, not implemented -- see costDecision)",
+    "mobile (Flutter) media upload -- separate stage per project documentation",
+    "video for member-signal photos (member-signal media is photo-only)",
+    "server-side re-encoding or transcoding of uploaded media",
+    "thumbnail generation",
+    "malware/virus scanning of uploaded bytes",
+    "moderation of media content",
+    "GIF or other content types beyond the fixed allowlists above"
+  ],
+  "implementedLiveRoutes": true,
+  "memberSignalMedia": {
+    "accountUploadRateLimit": {
+      "limit": 5,
+      "window": "24h"
+    },
+    "allowedContentTypes": [
+      "image/jpeg",
+      "image/png",
+      "image/webp"
+    ],
+    "magicByteChecks": {
+      "image/jpeg": "first 3 bytes are 0xff 0xd8 0xff",
+      "image/png": "8-byte PNG signature 0x89 0x50 0x4e 0x47 0x0d 0x0a 0x1a 0x0a",
+      "image/webp": "'RIFF' at offset 0 and 'WEBP' at offset 8"
+    },
+    "maxBytes": 5242880,
+    "objectKeyPattern": "member-signals/{communityId}/{uploadId}.{ext}",
+    "readAuth": "none; no session check on the read route",
+    "readCacheControl": "public, max-age=300",
+    "readRoute": "GET /v1/signals/:signalId/media",
+    "uploadAuth": "active session with participant civic access for the target community",
+    "uploadRoute": "POST /v1/communities/:communitySlug/signals/media",
+    "uploadTtlMs": 3600000,
+    "visibility": "public once the signal is published -- same visibility as the signal itself"
+  },
+  "negativePathCoverage": {
+    "crossCommunityAccess": [
+      "test/discussion-session.api.test.ts (contribution creation)",
+      "test/discussion-session.media.api.test.ts (media read route)"
+    ],
+    "expiredMembership": [
+      "test/discussion-session.media.api.test.ts"
+    ],
+    "oversizedPayload": [
+      "test/member-signal.api.test.ts (413, over MAX_MEMBER_SIGNAL_IMAGE_BYTES)",
+      "test/discussion-session.media.api.test.ts (400, image over the image cap but under the route body limit)",
+      "test/discussion-session.media.api.test.ts (413, video over the route body limit)"
+    ],
+    "spoofedContentType": [
+      "test/member-signal.api.test.ts",
+      "test/discussion-session.media.api.test.ts"
+    ]
+  },
+  "participantGate": {
+    "appliesTo": [
+      "POST .../signals/media",
+      "POST .../discussion-session/media",
+      "GET .../discussion-session/contributions/:contributionId/media"
+    ],
+    "denialCoversBoth": [
+      "expired_membership",
+      "actor_community_mismatch"
+    ],
+    "denialErrorCode": "CIVIC_PARTICIPATION_NOT_AUTHORIZED",
+    "deniedIdentifiersExposed": "none; bounded denial reason categories only, never leaked to the client",
+    "evaluatedBy": "evaluateCivicAccess (src/membership/civic-access.ts)",
+    "ordering": "object storage availability is checked before the session/participant gate; the participant gate runs before any contribution/upload lookup",
+    "sharedHelper": "requireParticipantForSignal / requireParticipantInCommunity"
+  },
+  "slice": "media_upload_storage_and_access",
+  "status": "implemented",
+  "storage": {
+    "adapter": "createObjectStorageAdapter (src/storage/object-storage-adapter.ts)",
+    "disabledBehavior": "when OBJECT_STORAGE_ENABLED is false, the adapter is null and both upload routes fail with OBJECT_STORAGE_NOT_AVAILABLE (503) before any auth or participant check",
+    "egressCost": "R2 has zero egress fees, the basis for the Etapa 5 Step 3 decision below",
+    "provider": "Cloudflare R2 (S3-compatible)",
+    "publicBucketPolicy": "never a public bucket URL and never a permanent URL; every read is proxied through an authenticated (or intentionally public, for published member-signal photos) API route that streams bytes from storage",
+    "requiredConfig": [
+      "OBJECT_STORAGE_ENABLED",
+      "OBJECT_STORAGE_ENDPOINT",
+      "OBJECT_STORAGE_BUCKET",
+      "OBJECT_STORAGE_ACCESS_KEY_ID",
+      "OBJECT_STORAGE_SECRET_ACCESS_KEY"
+    ],
+    "surface": [
+      "putObject",
+      "getObject"
+    ]
+  },
+  "testCommands": [
+    "npm test",
+    "npm run test:integration",
+    "npm run media:contract:check"
+  ],
+  "title": "TOWN Media Foundation V1"
+}

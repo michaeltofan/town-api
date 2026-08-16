@@ -197,6 +197,9 @@ jobs:
       - name: Billing contract check
         run: npm run billing:contract:check
 
+      - name: Media contract check
+        run: npm run media:contract:check
+
       - name: Build
         run: npm run build
 

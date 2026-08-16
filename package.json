@@ -52,7 +52,9 @@
     "membership:contract:check": "tsx scripts/membership-contract.ts check",
     "billing:contract:generate": "tsx scripts/billing-contract.ts generate",
     "billing:contract:check": "tsx scripts/billing-contract.ts check",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run openapi:check && npm run identity:contract:check && npm run auth:contract:check && npm run membership:contract:check && npm run billing:contract:check && npm run build"
+    "media:contract:generate": "tsx scripts/media-contract.ts generate",
+    "media:contract:check": "tsx scripts/media-contract.ts check",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run openapi:check && npm run identity:contract:check && npm run auth:contract:check && npm run membership:contract:check && npm run billing:contract:check && npm run media:contract:check && npm run build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1092.0",
