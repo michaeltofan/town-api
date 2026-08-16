@@ -166,3 +166,50 @@ drift. Toate fișierele pe care s-au bazat concluziile din raportul M0 au
 fost re-diff-uite explicit între referința veche și `main` real; singura
 schimbare găsită e cea de mai sus (`config.ts`, `NODE_ENV`→`APP_ENV`), fără
 impact asupra concluziilor.
+
+## M4 — Acces pilot, cohortă (2026-08-16)
+
+- Mecanism de grant admin (`accessUntil`, `source: 'admin'`, fără Stripe,
+  auditat) — **verificat deja existent**, complet funcțional, înainte de
+  orice schimbare a mea: `POST /v1/platform/memberships/grant`
+  (`src/routes/platform.ts:775`), `grantPlatformMembership`
+  (`src/platform/services/memberships.ts:173`), audit în
+  `platform_audit_events` via `writeMembershipAudit`.
+- Tabelă nouă, additivă, fără atingere de `membership_entitlements`:
+  `pilot_cohort_members` (`src/db/schema.ts`), `CHECK` la exact
+  `'madrid_pilot'`. Migrare `drizzle/0059_pilot_cohort_members.sql`.
+- **Incident tehnic găsit și rezolvat:** `drizzle-kit generate` a produs
+  inițial un fișier de 910 linii cu 32 `CREATE TABLE` (toată schema, nu
+  doar tabela nouă). Cauză: `drizzle/meta/0014_snapshot.json` până la
+  `0058_snapshot.json` lipsesc din tot repo-ul —
+  `git log --oneline --all -- drizzle/meta/0014_snapshot.json` și
+  `...0058_snapshot.json` nu întorc niciun commit, deci fișierele n-au
+  existat niciodată în git, nu au fost șterse acum. Fix: extrase manual
+  doar cele 4 instrucțiuni SQL reale pentru `pilot_cohort_members` din
+  output-ul generatorului (verificate ca fiind exact ce ar fi generat
+  corect), păstrat `meta/0059_snapshot.json` (verificat: 51 tabele,
+  identic cu numărul din `schema.ts`) și `_journal.json`. O a doua rulare
+  `drizzle-kit generate` confirmă „No schema changes, nothing to migrate".
+- `grantPlatformMembership` extins cu `cohort?: PilotCohort`, inserare
+  idempotentă (verificare înainte de insert) în `pilot_cohort_members`,
+  legată de `sourceEventId` al grant-ului. Grant-urile fără `cohort`
+  rămân neschimbate — testat explicit.
+- `PlatformMembershipGrantBodySchema` extinsă cu `cohort` opțional;
+  `docs/openapi.v1.json` regenerat cu `npm run openapi:generate` (diff de
+  6 linii, doar câmpul nou).
+- `EXPECTED_MIGRATION_COUNT` (derivat automat din jurnal, nu hardcodat în
+  sursă) a trecut de la 59 la 60; 5 fișiere de test aveau valoarea veche
+  hardcodată în assert-uri — actualizate.
+- Test nou în `test/platform.api.test.ts`: grant cu `cohort: 'madrid_pilot'`
+  → rând creat, `grantedByAccountId` corect; replay cu aceeași
+  `idempotencyKey` → tot un singur rând; grant fără `cohort` → zero rânduri
+  în `pilot_cohort_members`.
+- Verificări rulate: `tsc --noEmit` curat, `eslint` curat, `prettier
+  --check` curat pe toate fișierele atinse, `npx vitest run` — 569 teste
+  trecute, doar cele 3 fișiere dependente de `DATABASE_URL` (preexistente,
+  fără legătură) eșuează, din lipsă de Postgres local în acest mediu.
+- **Nimic din migrarea 0059 nu a fost rulat împotriva vreunei baze de
+  date reale** — nici Staging, nici Production. Se va aplica automat la
+  următorul deploy pe `main` (parte din `preDeployCommand`), condiționat
+  de autorizarea separată de merge+deploy.
+- Commit: `town-api@dffb426`.

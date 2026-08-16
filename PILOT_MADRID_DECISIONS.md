@@ -16,18 +16,24 @@ aici.
 | 2026-08-16 | Eticheta Vallecas → corectată la Legazpi/Arganzuela, condiționat de „100% sigur"; verificat pe 3 surse independente înainte de aplicare | Mihail |
 | 2026-08-16 | Proveniență semnale Madrid: link Google Maps (provizoriu), ca la Decide Madrid; poze/video reale rămân de adăugat separat | Mihail |
 | 2026-08-16 | M3 declarat închis | Mihail |
+| 2026-08-16 | M4 autorizat | Mihail |
+| 2026-08-16 | Model acces 90 zile: `accessUntil`, fără Stripe — confirmat, deja existent în cod | Mihail |
+| 2026-08-16 | Cohorta Madrid: tabelă nouă `pilot_cohort_members`, separată de membership-ul general | Mihail |
+| 2026-08-16 | M4 declarat închis — cod complet, testat; migrarea 0059 NU a fost rulată pe nicio bază de date, se aplică automat la următorul deploy autorizat separat | Mihail |
 
 ## Decizii deschise (nu s-au luat încă)
 
 - Poze/video reale ale celor 3 probleme civice din Madrid, de la contactele
   lui Mihail — proveniența actuală (Google Maps) confirmă doar locația, nu
   problema curentă. Necesar înainte de M8/M10.
-- Modelul exact de acordare a accesului de 90 de zile (recomandare:
-  `accessUntil`, fără Stripe) — de confirmat explicit.
 - Confirmarea personală a atestării de restore din consola `ops_admin`,
   înainte ca gate-ul de stabilizare să fie considerat complet închis.
 - Membrii cu home-city în altă comunitate decât Madrid mai văd și acea
-  comunitate pe hostname-ul Madrid (comportament neschimbat de M2,
-  identificat ca subiect pentru M4 — acces/cohortă).
+  comunitate pe hostname-ul Madrid — rămâne neschimbat de M4, nu a fost
+  cerut explicit; de revizitat dacă devine relevant pentru cohorta reală.
 - Confirmare live opțională a CORS (comanda curl din
   PILOT_MADRID_EVIDENCE.md), dacă vrei certitudinea 100% empirică.
+- Golul de snapshot-uri drizzle (0014–0058), găsit în timpul M4 — decizi
+  dacă merită o trecere separată de reparat, în afara pilotului Madrid.
+- Autorizarea de merge+deploy pentru `town-api`, care va aplica efectiv
+  migrarea 0059 pe Staging (și apoi Production).

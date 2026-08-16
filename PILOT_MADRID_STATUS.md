@@ -10,6 +10,7 @@ e în `main`, nu e real.
   Zero modificări de cod în această etapă. Detalii: `PILOT_MADRID_EVIDENCE.md`.
 - **M1 — planul, metricile, criteriile.** Cele 4 documente, aprobate.
 - **M3 — conținut verificat, proveniență.** Vezi secțiunea dedicată mai jos.
+- **M4 — cod complet, neaplicat pe nicio bază de date.** Vezi secțiunea dedicată mai jos.
 
 ## Finalizat — M2 (Staging)
 
@@ -64,19 +65,48 @@ reale ale problemelor (trotuar, felinare, containere), de la contactele
 din Madrid, rămân de adăugat înainte de M8 (QA vizual) sau M10 (testul cu
 10 persoane) — vezi `PILOT_MADRID_DECISIONS.md`.
 
+## Finalizat — M4 (acces pilot, cohortă) — cod gata, nimic rulat pe bază de date
+
+Autorizat și închis 2026-08-16, cu o precizare importantă: **tot ce urmează
+e cod scris, testat, verificat — nicio migrare, niciun grant real nu a
+atins vreo bază de date (nici Staging, nici Production).**
+
+| Criteriu M4 | Stare |
+|---|---|
+| Acces 90 zile prin `accessUntil`, fără Stripe | **PASS — deja exista.** `POST /v1/platform/memberships/grant` era deja complet funcțional, cu `source: 'admin'`, înainte de această etapă |
+| Acordarea e auditată (cine, cui, când) | **PASS — deja exista.** Fiecare grant scrie în `platform_audit_events` (`membership_granted`) — mecanism generic, nu specific Madrid |
+| Cohorta Madrid marcată separat de membership-ul general | **PASS, cod nou.** Tabelă nouă `pilot_cohort_members`, complet separată de `membership_entitlements` — restricționată prin `CHECK` la exact `'madrid_pilot'` (nimic altceva nu poate intra acolo azi). `town-api@dffb426` |
+
+**De făcut separat, autorizare distinctă:** migrarea `0059_pilot_cohort_members.sql`
+trebuie rulată efectiv pe Staging (și apoi Production) — asta se întâmplă
+automat la următorul deploy pe `main` (`preDeployCommand: npm run
+db:migrate:production`/echivalentul de Staging), deci practic e legată de
+autorizarea de merge+deploy, nu de o comandă separată.
+
+**Găsit pe parcurs, nu al meu, dar semnalat:** fișierele de „snapshot"
+drizzle pentru migrările 0014–0058 lipsesc din tot repo-ul (zero istoric
+git) — asta a rupt `drizzle-kit generate`, care a încercat să recreeze
+toată schema. Am ocolit-o extrăgând manual doar SQL-ul corect pentru
+tabela nouă, verificat printr-o rulare ulterioară care confirmă „no schema
+changes". Golul istoric (0014–0058) rămâne — următoarea persoană care
+generează o migrare nouă va lovi aceeași problemă dacă nu e reparată
+separat. Nu e în scope-ul pilotului Madrid, dar merită atenția ta.
+
 ## Blocat / necesită decizia ta
 
 - Locul unde va fi ancorat accesul de 90 de zile (`accessUntil` vs. un flux
-  nou de Stripe) — recomandare dată în master plan, decizie finală a ta.
+  nou de Stripe) — **decis: `accessUntil`, fără Stripe** (vezi tabelul de mai sus).
 - `STATUS.md` (general, nu pilot) nu reflectă încă succesul din 13 aug. al
   restore drill-ului — recomand actualizare înainte de a considera gate-ul
   de stabilizare complet închis.
 - Poze/video reale pentru cele 3 semnale Madrid, de la contactele tale —
   provizoriu acoperit doar de link Google Maps (vezi mai sus).
+- Golul de snapshot-uri drizzle (0014–0058) — decizi tu dacă merită o
+  trecere separată de reparat, în afara pilotului Madrid.
 
 ## Neatinsă
 
-M4–M11 — nicio autorizare primită încă.
+M5–M11 — nicio autorizare primită încă.
 
 ## Production
 
