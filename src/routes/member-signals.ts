@@ -357,6 +357,23 @@ export const memberSignalRoutes: FastifyPluginCallbackTypebox<MemberSignalRoutes
         expiresAt,
       });
 
+      // Etapa 5: structured, greppable-from-deployment-logs cost/traffic
+      // telemetry -- nested under a single `mediaUpload` key so it survives
+      // Railway's log-attribute flattening the same way `capacityDbMonitor`
+      // and `capacitySetupResult` already do (see db-monitor.ts /
+      // run-capacity-setup.ts), instead of relying on unverified behavior
+      // for separate scalar attributes.
+      app.log.info(
+        {
+          mediaUpload: {
+            route: 'member_signal',
+            contentType: contentTypeHeader,
+            byteSize: bytes.byteLength,
+          },
+        },
+        'member-signal media uploaded',
+      );
+
       return await reply.status(201).send({
         data: {
           mediaUploadId,
