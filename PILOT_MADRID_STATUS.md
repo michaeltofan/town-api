@@ -9,6 +9,7 @@ e în `main`, nu e real.
   `town-api@0ad0db4` / `town-public@9eac1b3` (= `main` real, fără drift).
   Zero modificări de cod în această etapă. Detalii: `PILOT_MADRID_EVIDENCE.md`.
 - **M1 — planul, metricile, criteriile.** Cele 4 documente, aprobate.
+- **M3 — conținut verificat, proveniență.** Vezi secțiunea dedicată mai jos.
 
 ## Finalizat — M2 (Staging)
 
@@ -48,20 +49,34 @@ curl -i -X GET "https://api-staging.towncivic.org/health/ready" \
 Un răspuns cu header-ul `access-control-allow-origin: https://madrid-staging.towncivic.org`
 închide complet acest punct.
 
+## Finalizat — M3 (conținut, proveniență)
+
+Autorizat și închis 2026-08-16.
+
+| Criteriu M3 | Stare |
+|---|---|
+| Eticheta Vallecas corectată sau păstrată, cu decizie explicită | **PASS** — corectată la Legazpi/Arganzuela, verificat pe 3 surse independente (Ayuntamiento de Madrid, Wikipedia, HallaMadrid) înainte de schimbare. `town-api@3c0bdbd` |
+| Fiecare semnal are sursă/dovadă atașată, aprobată explicit de Mihail | **PASS, provizoriu** — link Google Maps de locație pentru fiecare din cele 3 semnale, decizie explicită a lui Mihail (nu fotografie reală a problemei încă). `town-api@7941440` |
+
+**Notă păstrată, nu ascunsă:** Google Maps confirmă locația, nu problema
+civică curentă (imaginile Street View pot fi vechi de ani). Poze/video
+reale ale problemelor (trotuar, felinare, containere), de la contactele
+din Madrid, rămân de adăugat înainte de M8 (QA vizual) sau M10 (testul cu
+10 persoane) — vezi `PILOT_MADRID_DECISIONS.md`.
+
 ## Blocat / necesită decizia ta
 
-- Eticheta Vallecas pe semnalul „Farolas Parque Tierno Galván” — confirmată
-  eronată în cod (`foundation-content.ts:2093`), corect ar fi
-  Legazpi/Arganzuela. Nu a fost corectată — decizia îți aparține (M3).
 - Locul unde va fi ancorat accesul de 90 de zile (`accessUntil` vs. un flux
   nou de Stripe) — recomandare dată în master plan, decizie finală a ta.
 - `STATUS.md` (general, nu pilot) nu reflectă încă succesul din 13 aug. al
   restore drill-ului — recomand actualizare înainte de a considera gate-ul
   de stabilizare complet închis.
+- Poze/video reale pentru cele 3 semnale Madrid, de la contactele tale —
+  provizoriu acoperit doar de link Google Maps (vezi mai sus).
 
 ## Neatinsă
 
-M3–M11 — nicio autorizare primită încă.
+M4–M11 — nicio autorizare primită încă.
 
 ## Production
 

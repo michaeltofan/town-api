@@ -132,6 +132,31 @@ referințe locale nefetch-uite — vezi nota de corecție de la final).
   date nu a fost confirmată independent (necesită acces `ops_admin`, pe
   care sesiunea nu-l are). Marcat **parțial**, nu PASS.
 
+## M3 — Conținut, proveniență (2026-08-16)
+
+- Eticheta „Vallecas" pe `madrid-signal-2` era greșită — verificat pe 3
+  surse independente înainte de modificare: pagina oficială a
+  Ayuntamiento de Madrid (secțiunea Arganzuela), Wikipedia, HallaMadrid —
+  toate concordante: Parque Enrique Tierno Galván e în cartierul Legazpi,
+  districtul Arganzuela. Corectat `area` și `whoIsAffected` —
+  `foundation-content.ts`, commit `town-api@3c0bdbd`.
+- Verificat: niciun test nu referea valoarea veche `Vallecas`
+  (`grep -rln "Vallecas" test/ src/` → doar fișierul de seed însuși).
+- Proveniență: decizia lui Mihail — link Google Maps de locație pentru
+  fiecare semnal, ca soluție provizorie (fotografii reale de la contacte
+  din Madrid urmează separat). Linkurile primite conțineau token-uri de
+  sesiune/fotografie din browser — înlocuite cu linkuri scurte, stabile,
+  pe bază de coordonate exacte, potrivite pt. conținut public:
+  - Calle Argumosa: `https://www.google.com/maps?q=40.4079926,-3.6980726`
+  - Parque Enrique Tierno Galván: `https://www.google.com/maps?q=40.3900397,-3.6838406`
+  - Puerta de Alcalá / Retiro: `https://www.google.com/maps?q=40.4203717,-3.6936146`
+  Adăugate ca text în câmpul `description` existent — fără migrare, fără
+  schimbare de schemă. Commit `town-api@7941440`.
+- Limitare cunoscută, nu ascunsă: schema `signals` are un singur câmp de
+  imagine (`imageKey`), niciunul pentru video sau sursă/proveniență
+  structurată. Un câmp dedicat ar cere o migrare — neautorizată separat,
+  nefăcută.
+
 ## Notă de corecție (auto-raportată)
 
 Raportul M0 inițial a comparat branch-ul de sesiune cu un `origin/main`
