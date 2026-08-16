@@ -454,6 +454,20 @@ export const discussionSessionRoutes: FastifyPluginCallbackTypebox<
         expiresAt,
       });
 
+      // Etapa 5: structured, greppable-from-deployment-logs cost/traffic
+      // telemetry -- see the matching comment in member-signals.ts.
+      app.log.info(
+        {
+          mediaUpload: {
+            route: 'discussion_contribution',
+            kind,
+            contentType,
+            byteSize: bytes.byteLength,
+          },
+        },
+        'discussion-contribution media uploaded',
+      );
+
       return await reply.status(201).send({
         data: {
           mediaUploadId,

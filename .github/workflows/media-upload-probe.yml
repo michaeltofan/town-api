@@ -1,0 +1,174 @@
+name: Etapa 5 media upload cost/traffic probe
+
+# Etapa 5 (Poze, video, cost și acces) Step 2: a small, one-off measurement
+# run against the already-standing, permanent `capacity` environment (see
+# docs/operations/CAPACITY_DRILL_RUNBOOK.md and capacity-drill.yml), reusing
+# its already-seeded cycle-1 fixtures rather than provisioning anything new.
+#
+# Unlike capacity-drill.yml, this does NOT reset the schema, does NOT change
+# the API service's start command, and does NOT run two cycles -- it targets
+# the environment exactly as it is already serving, and issues a handful of
+# real media-upload requests (loadtest/media-upload-probe.js) at the byte
+# sizes Etapa 5's browser compression actually produces (PR #135). The
+# server's own `media_upload` structured log line (added alongside this
+# workflow in member-signals.ts / discussion-session.ts) is then read back
+# from deployment logs to get the real byteSize per request -- the same
+# extraction method used throughout Etapa 4 -- so the Cloudflare R2 cost
+# estimate is computed from real numbers, not assumed ones.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # Shares capacity-drill.yml's group deliberately: both act on the same
+  # standing town-api-capacity service, and capacity-drill.yml temporarily
+  # changes its start command mid-run -- this probe must never overlap that.
+  group: capacity-drill-town-api-capacity-environment
+  cancel-in-progress: false
+
+jobs:
+  media-upload-probe:
+    name: Media upload cost/traffic probe against the `capacity` environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      RAILWAY_PROJECT_ID: 8fd67de0-2ed1-4906-bf5a-36207191c613
+      RAILWAY_ENVIRONMENT: capacity
+      RAILWAY_ENVIRONMENT_ID: b1cd4997-02b8-4103-bd64-bfc970e0e7cc
+      API_SERVICE_ID: 992fd678-aa3c-4fe2-8295-921ec6c2f2a5
+      BASE_URL: https://town-api-capacity-capacity.up.railway.app
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Link Railway CLI to the isolated capacity environment
+        run: railway link --project "${RAILWAY_PROJECT_ID}" --environment "${RAILWAY_ENVIRONMENT_ID}"
+
+      - name: Load capacity-only session secret
+        id: capacity_secret
+        run: |
+          set -euo pipefail
+          VARIABLES=$(railway variable list \
+            --project "${RAILWAY_PROJECT_ID}" \
+            --environment "${RAILWAY_ENVIRONMENT_ID}" \
+            --service "${API_SERVICE_ID}" \
+            --json)
+          SECRET=$(echo "$VARIABLES" | node -e "
+            const value = JSON.parse(require('fs').readFileSync(0, 'utf8')).CAPACITY_DRILL_AUTH_SECRET;
+            if (typeof value !== 'string' || value.length < 32) {
+              throw new Error('CAPACITY_DRILL_AUTH_SECRET is missing or shorter than 32 characters');
+            }
+            process.stdout.write(value);
+          ")
+          echo "::add-mask::${SECRET}"
+          echo "secret=${SECRET}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for /health/ready
+        run: |
+          set -euo pipefail
+          READY=""
+          DEADLINE=$(( $(date -u +%s) + 5 * 60 ))
+          while [[ "$(date -u +%s)" -lt "$DEADLINE" ]]; do
+            BODY=$(curl -fsS "${BASE_URL}/health/ready" 2>/dev/null || true)
+            if [[ "$BODY" == *'"status":"ready"'* ]]; then
+              READY=1
+              break
+            fi
+            sleep 5
+          done
+          if [[ -z "$READY" ]]; then
+            echo "::error::${BASE_URL}/health/ready never reported ready"
+            exit 1
+          fi
+          echo "town-api-capacity is already serving and ready."
+
+      - name: Resolve current deployment id
+        id: current_deployment
+        run: |
+          set -euo pipefail
+          RESPONSE=$(railway api \
+            'query($input: DeploymentListInput!) { deployments(input: $input, first: 5) { edges { node { id status createdAt } } } }' \
+            --variables "{\"input\":{\"projectId\":\"${RAILWAY_PROJECT_ID}\",\"serviceId\":\"${API_SERVICE_ID}\",\"environmentId\":\"${RAILWAY_ENVIRONMENT_ID}\"}}" \
+            --allow-errors \
+            --compact)
+          echo "$RESPONSE"
+          DEPLOYMENT_ID=$(echo "$RESPONSE" | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (d.errors) throw new Error('deployments GraphQL errors: ' + JSON.stringify(d.errors));
+            const edges = d.data?.deployments?.edges ?? [];
+            const current = edges.find((e) => e.node.status === 'SUCCESS');
+            if (!current) throw new Error('no SUCCESS deployment found for town-api-capacity: ' + JSON.stringify(edges));
+            console.log(current.node.id);
+          ")
+          test -n "$DEPLOYMENT_ID"
+          echo "Current live deployment: ${DEPLOYMENT_ID}"
+          echo "deployment_id=${DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Run media upload probe (k6)
+        id: probe
+        env:
+          CAPACITY_DRILL_AUTH_SECRET: ${{ steps.capacity_secret.outputs.secret }}
+        run: k6 run --summary-export=media-probe-k6-summary.json loadtest/media-upload-probe.js
+
+      - name: Collect media_upload structured logs
+        id: collect_logs
+        env:
+          DEPLOYMENT_ID: ${{ steps.current_deployment.outputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYMENT_ID"
+          # Same retry pattern as capacity-drill.yml's observability step:
+          # deploymentLogs can race log indexing right after traffic stops.
+          MEDIA_LOGS=""
+          for attempt in $(seq 1 12); do
+            CANDIDATE=$(railway api \
+              'query($deploymentId: String!, $limit: Int) { deploymentLogs(deploymentId: $deploymentId, limit: $limit) { message severity attributes { key value } } }' \
+              --variables "{\"deploymentId\":\"${DEPLOYMENT_ID}\",\"limit\":500}" \
+              --allow-errors \
+              --compact)
+            if echo "$CANDIDATE" | grep -q 'mediaUpload'; then
+              MEDIA_LOGS="$CANDIDATE"
+              break
+            fi
+            echo "mediaUpload log record not available yet (attempt ${attempt}/12); waiting 5 seconds..."
+            sleep 5
+          done
+          if [[ -z "$MEDIA_LOGS" ]]; then
+            echo "::error::No mediaUpload log record found within 60 seconds after the probe finished"
+            exit 1
+          fi
+          echo "$MEDIA_LOGS" > media-upload-logs.json
+
+      - name: Compute real R2 cost from measured byte sizes
+        run: npx tsx scripts/ci/media-probe-cost-report.ts media-upload-logs.json media-probe-k6-summary.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-upload-probe-${{ github.run_id }}
+          retention-days: 30
+          path: |
+            media-probe-k6-summary.json
+            media-upload-logs.json
+          if-no-files-found: warn
