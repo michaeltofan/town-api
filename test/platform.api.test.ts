@@ -25,6 +25,7 @@ import type {
   PlatformDiscussionsResponse,
   PlatformMembershipActionResponse,
   PlatformMembershipsResponse,
+  PlatformPilotFunnelExportResponse,
   PlatformSessionResponse,
   PlatformInvestigationExportResponse,
   PlatformStatusResponse,
@@ -711,6 +712,51 @@ describe('platform operator area', () => {
       .from(pilotCohortMembers)
       .where(eq(pilotCohortMembers.accountId, uncohortedTarget.accountId));
     expect(uncohortedRows).toHaveLength(0);
+  });
+
+  it('exports an aggregate Pilot Madrid funnel with no account identifiers', async () => {
+    const operator = await registerMember('PilotMadridExportOpsAdmin+setup@example.com');
+    await grantOperator(operator.accountId, 'role_admin');
+    const target = await registerAccountWithoutMembership(
+      'PilotMadridExportTarget+setup@example.com',
+    );
+
+    const grant = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/platform/memberships/grant',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accountId: target.accountId,
+        accessUntil: ACCESS_UNTIL,
+        reason: 'Pilot Madrid 90-day free access',
+        idempotencyKey: randomUUID(),
+        cohort: 'madrid_pilot',
+      },
+    });
+    expect(grant.statusCode).toBe(200);
+
+    const exportResult = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/platform/pilot/funnel-export?communitySlug=madrid-es&cohort=madrid_pilot',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+    });
+    expect(exportResult.statusCode).toBe(200);
+    const pack = exportResult.json<PlatformPilotFunnelExportResponse>().data;
+
+    expect(pack.community).toEqual({ slug: 'madrid-es', displayName: 'Madrid' });
+    expect(pack.cohort.name).toBe('madrid_pilot');
+    expect(pack.cohort.activeMembers).toBeGreaterThanOrEqual(1);
+    expect(typeof pack.signalConfirmations).toBe('number');
+    expect(Array.isArray(pack.processes)).toBe(true);
+    expect(typeof pack.funnel.stageEventCounts).toBe('object');
+    expect(typeof pack.funnel.proposals).toBe('number');
+    expect(typeof pack.funnel.votes).toBe('number');
+    expect(typeof pack.funnel.mandates).toBe('number');
+    expect(typeof pack.funnel.verificationConfirmations).toBe('number');
+
+    // No account identifiers anywhere in the aggregate payload.
+    expect(JSON.stringify(pack)).not.toContain(target.accountId);
+    expect(JSON.stringify(pack)).not.toContain(operator.accountId);
   });
 
   it('refuses ordinary users and insufficient roles for membership mutations', async () => {

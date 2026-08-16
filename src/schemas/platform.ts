@@ -627,6 +627,56 @@ export const PlatformMembershipGrantBodySchema = Type.Object(
   { additionalProperties: false, $id: 'PlatformMembershipGrantBody' },
 );
 
+/** Pilot Madrid M5: aggregate-only funnel export, no account identifiers. */
+export const PlatformPilotFunnelExportQuerySchema = Type.Object(
+  {
+    communitySlug: Type.String({ minLength: 1, maxLength: 128 }),
+    cohort: PlatformPilotCohortSchema,
+  },
+  { additionalProperties: false, $id: 'PlatformPilotFunnelExportQuery' },
+);
+
+export const PlatformPilotFunnelExportResponseSchema = Type.Object(
+  {
+    data: Type.Object(
+      {
+        generatedAt: Type.String({ format: 'date-time' }),
+        community: Type.Object(
+          { slug: Type.String(), displayName: Type.String() },
+          { additionalProperties: false },
+        ),
+        cohort: Type.Object(
+          { name: PlatformPilotCohortSchema, activeMembers: Type.Integer({ minimum: 0 }) },
+          { additionalProperties: false },
+        ),
+        signalConfirmations: Type.Integer({ minimum: 0 }),
+        processes: Type.Array(
+          Type.Object(
+            {
+              signalSlug: Type.String(),
+              currentStage: Type.String(),
+              ballotCycle: Type.Integer({ minimum: 1 }),
+            },
+            { additionalProperties: false },
+          ),
+        ),
+        funnel: Type.Object(
+          {
+            stageEventCounts: Type.Record(Type.String(), Type.Integer({ minimum: 0 })),
+            proposals: Type.Integer({ minimum: 0 }),
+            votes: Type.Integer({ minimum: 0 }),
+            mandates: Type.Integer({ minimum: 0 }),
+            verificationConfirmations: Type.Integer({ minimum: 0 }),
+          },
+          { additionalProperties: false },
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, $id: 'PlatformPilotFunnelExportResponse' },
+);
+
 export const PlatformMembershipExtendBodySchema = Type.Object(
   {
     accessUntil: Type.String({ format: 'date-time' }),
@@ -1262,4 +1312,7 @@ export type PlatformSubmissionActionResponse = Static<
 export type PlatformDiscussionsResponse = Static<typeof PlatformDiscussionsResponseSchema>;
 export type PlatformDiscussionActionResponse = Static<
   typeof PlatformDiscussionActionResponseSchema
+>;
+export type PlatformPilotFunnelExportResponse = Static<
+  typeof PlatformPilotFunnelExportResponseSchema
 >;

@@ -84,6 +84,7 @@ import {
   sanitizeRestoreDrillNote,
 } from '../platform/services/restore-drill.js';
 import { buildPlatformInvestigationExport } from '../platform/services/investigation-export.js';
+import { buildPilotFunnelExport } from '../platform/services/pilot-funnel-export.js';
 import { listPlatformTechnicalErrors } from '../platform/repositories/technical-errors.js';
 import {
   acknowledgePlatformAlert,
@@ -148,6 +149,8 @@ import {
   PlatformOperatorActionResponseSchema,
   PlatformOperatorGrantBodySchema,
   PlatformOperatorsResponseSchema,
+  PlatformPilotFunnelExportQuerySchema,
+  PlatformPilotFunnelExportResponseSchema,
   PlatformSessionResponseSchema,
   PlatformSignalActionResponseSchema,
   PlatformSignalHideBodySchema,
@@ -717,6 +720,36 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
       }
       const rows = await listPlatformCommunities(app.database.db);
       return { data: { communities: rows } };
+    },
+  );
+
+  app.get(
+    '/v1/platform/pilot/funnel-export',
+    {
+      schema: {
+        tags: ['Platform'],
+        summary:
+          'Aggregate-only civic funnel export for one community + pilot cohort (Pilot Madrid M5). No account identifiers.',
+        security: [{ sessionAuth: [] }, { mobileSessionAuth: [] }],
+        querystring: PlatformPilotFunnelExportQuerySchema,
+        response: {
+          200: PlatformPilotFunnelExportResponseSchema,
+          404: DomainErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const operator = await requireOperator(request, 'read_communities');
+      if (!operator) {
+        reply.callNotFound();
+        return;
+      }
+      const pack = await buildPilotFunnelExport(app.database.db, {
+        communitySlug: request.query.communitySlug,
+        cohort: request.query.cohort,
+        now: now(),
+      });
+      return { data: pack };
     },
   );
 
