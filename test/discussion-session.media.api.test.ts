@@ -2,17 +2,27 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { signalDiscussionMediaUploads } from '../src/db/schema.js';
 import { FOUNDATION_SIGNAL_IDS } from '../src/db/seeds/foundation-content.js';
+import {
+  MAX_DISCUSSION_IMAGE_BYTES,
+  MAX_DISCUSSION_VIDEO_BYTES,
+} from '../src/membership/discussion-media-policy.js';
+import { ERROR_CODE } from '../src/schemas/error.js';
 import { createInMemoryObjectStorageAdapter } from '../src/storage/object-storage-adapter.js';
 import {
   activatePasskeyAccountAndLinkCommunity,
   activateTestMembership,
   createEligibleTestResolver,
   createMembershipTestApp,
+  FOUNDATION_COMMUNITY_IDS,
 } from './helpers/membership.js';
 import { loginMobileSession } from './helpers/passkey-management.js';
 
 /** Minimal JPEG (SOI + APP0-ish marker) that passes magic-byte check. */
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+/** Minimal MP4 (ftyp box) that passes magic-byte check. */
+const MP4_BYTES = Buffer.from([
+  0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d,
+]);
 
 describe('signal discussion-session media upload', () => {
   const storage = createInMemoryObjectStorageAdapter();
@@ -30,11 +40,12 @@ describe('signal discussion-session media upload', () => {
     await ctx.pool.end();
   });
 
-  async function participantSession(email: string) {
+  async function participantSession(email: string, communityId?: string) {
     const registration = await activatePasskeyAccountAndLinkCommunity({
       app: ctx.app,
       delivery: ctx.delivery,
       email,
+      ...(communityId !== undefined ? { communityId } : {}),
     });
     await activateTestMembership(ctx.app, {
       accountId: registration.accountId,
@@ -215,5 +226,85 @@ describe('signal discussion-session media upload', () => {
     });
     expect(badAttach.statusCode).toBe(400);
     expect(badAttach.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+  });
+
+  it('rejects an image over the discussion image cap (under the route body limit)', async () => {
+    const { login } = await participantSession('DiscussionMediaOversizedImage+setup@example.com');
+    const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal1;
+    const headers = { authorization: `Session ${login.sessionToken}` };
+
+    const oversized = Buffer.concat([
+      JPEG_BYTES,
+      Buffer.alloc(MAX_DISCUSSION_IMAGE_BYTES + 1 - JPEG_BYTES.byteLength),
+    ]);
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/signals/${signalId}/discussion-session/media`,
+      headers: { ...headers, 'content-type': 'image/jpeg' },
+      payload: oversized,
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+  });
+
+  it('rejects a video over the discussion video cap (route body limit)', async () => {
+    const { login } = await participantSession('DiscussionMediaOversizedVideo+setup@example.com');
+    const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal1;
+    const headers = { authorization: `Session ${login.sessionToken}` };
+
+    const oversized = Buffer.concat([
+      MP4_BYTES,
+      Buffer.alloc(MAX_DISCUSSION_VIDEO_BYTES + 1 - MP4_BYTES.byteLength),
+    ]);
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: `/v1/signals/${signalId}/discussion-session/media`,
+      headers: { ...headers, 'content-type': 'video/mp4' },
+      payload: oversized,
+    });
+    expect(response.statusCode).toBe(413);
+    expect(response.json()).toMatchObject({ error: { code: ERROR_CODE.PAYLOAD_TOO_LARGE } });
+  });
+
+  it('rejects a participant bound to a different community on the media read route', async () => {
+    const { login } = await participantSession(
+      'DiscussionMediaWrongCommunity+setup@example.com',
+      FOUNDATION_COMMUNITY_IDS.munichDe,
+    );
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/discussion-session/contributions/00000000-0000-4000-8000-00000000dead/media`,
+      headers: { authorization: `Session ${login.sessionToken}` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: { code: 'CIVIC_PARTICIPATION_NOT_AUTHORIZED' },
+    });
+  });
+
+  it('rejects an expired membership on the media read route', async () => {
+    const registration = await activatePasskeyAccountAndLinkCommunity({
+      app: ctx.app,
+      delivery: ctx.delivery,
+      email: 'DiscussionMediaExpired+setup@example.com',
+    });
+    await activateTestMembership(ctx.app, {
+      accountId: registration.accountId,
+      effectiveAt: '2020-01-01T00:00:00.000Z',
+      accessUntil: '2020-06-01T00:00:00.000Z',
+    });
+    const login = await loginMobileSession({
+      app: ctx.app,
+      material: registration.material,
+    });
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/discussion-session/contributions/00000000-0000-4000-8000-00000000dead/media`,
+      headers: { authorization: `Session ${login.sessionToken}` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: { code: 'CIVIC_PARTICIPATION_NOT_AUTHORIZED' },
+    });
   });
 });
