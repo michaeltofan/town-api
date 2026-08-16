@@ -22,6 +22,17 @@ import exec from 'k6/execution';
  * (post-Etapa-5-compression) so the byte assumption is verified, not
  * assumed.
  *
+ * Auth: a real password login (same as capacity-1000.js's realAuthPreflight),
+ * not the synthetic HMAC session token capacitySessionToken() produces.
+ * That synthetic token only works because capacity-drill.yml calls
+ * createAccountSession() moments before the k6 run within the same
+ * dispatch -- the resulting session row has a 60-minute idle timeout
+ * (SESSION_IDLE_TIMEOUT_MINUTES, src/ceremony/policy.ts). This probe runs
+ * as an independent, later workflow_dispatch, well outside that window, so
+ * a first attempt using the synthetic token failed 100% of requests
+ * (SESSION_IDLE_EXPIRED). A real password login against the already-seeded
+ * account credentials produces a genuinely fresh session on every run.
+ *
  * SAFETY: same host allowlist as capacity-1000.js, duplicated deliberately
  * per that file's own convention.
  */
@@ -51,25 +62,14 @@ function fixedId(group, index) {
 
 const COMMUNITY_A_SLUG = 'capacity-drill-a';
 const MAIN_SIGNAL_A_1 = fixedId('c101', 1);
-const MAIN_ACCOUNT_A_1 = fixedId('c201', 1);
-
-const CAPACITY_DRILL_AUTH_SECRET = __ENV.CAPACITY_DRILL_AUTH_SECRET;
-if (!CAPACITY_DRILL_AUTH_SECRET || CAPACITY_DRILL_AUTH_SECRET.length < 32) {
-  throw new Error('CAPACITY_DRILL_AUTH_SECRET must contain at least 32 characters');
-}
-
-import crypto from 'k6/crypto';
-
-function capacitySessionToken(accountId) {
-  return crypto.hmac(
-    'sha256',
-    CAPACITY_DRILL_AUTH_SECRET,
-    `town.capacity_drill_session.v1\0${accountId}`,
-    'hex',
-  );
-}
-
-const SESSION_TOKEN = capacitySessionToken(MAIN_ACCOUNT_A_1);
+// mainAccountsA(1)[0]'s email, per fixedAccounts() in fixtures.ts:
+// `${emailPrefix}${cycleSuffix}-${index}@loadtest.internal`, cycleSuffix=''
+// for cycle 1, emailPrefix='capacity-a'.
+const MAIN_ACCOUNT_A_1_EMAIL = 'capacity-a-1@loadtest.internal';
+// Same literal constant as CAPACITY_DRILL_PASSWORD in fixtures.ts /
+// capacity-1000.js -- not a secret, a fixed test-only password for every
+// account this drill provisions.
+const CAPACITY_DRILL_PASSWORD = 'CapacityDrill-2026-Isolated!';
 
 // Real magic bytes (JPEG SOI + APP0 marker), then filler -- server-side
 // magic-byte validation (matchesMemberSignalMediaMagic /
@@ -116,17 +116,45 @@ export const options = {
   },
 };
 
+// Runs once before either scenario starts; the resulting token is shared to
+// both exec functions via the `data` argument. One real login is enough --
+// both scenarios reuse it, mirroring how realAuthPreflight in
+// capacity-1000.js logs in once per account and reuses the token for
+// follow-up requests within that preflight.
+export function setup() {
+  const res = http.post(
+    `${BASE_URL}/v1/authentication/password`,
+    JSON.stringify({
+      email: MAIN_ACCOUNT_A_1_EMAIL,
+      password: CAPACITY_DRILL_PASSWORD,
+      clientType: 'mobile',
+    }),
+    {
+      headers: { 'Content-Type': 'application/json' },
+      tags: { endpoint: 'login', kind: 'write' },
+    },
+  );
+  if (res.status !== 200) {
+    throw new Error(`Real password login failed: status=${res.status} body=${res.body}`);
+  }
+  const token = JSON.parse(res.body)?.data?.sessionToken;
+  if (!token) {
+    throw new Error(`Real password login response had no sessionToken: body=${res.body}`);
+  }
+  return { token };
+}
+
 function sizeForIteration(iteration) {
   return SIZE_BUCKETS_BYTES[iteration % SIZE_BUCKETS_BYTES.length];
 }
 
-export function memberSignalMediaProbe() {
+export function memberSignalMediaProbe(data) {
   const bytes = sizeForIteration(exec.scenario.iterationInTest);
   const res = http.post(
     `${BASE_URL}/v1/communities/${COMMUNITY_A_SLUG}/signals/media`,
     jpegOfSize(bytes),
     {
-      headers: { Authorization: `Session ${SESSION_TOKEN}`, 'Content-Type': 'image/jpeg' },
+      headers: { Authorization: `Session ${data.token}`, 'Content-Type': 'image/jpeg' },
       tags: { endpoint: 'member_signal_media', bytes: String(bytes) },
     },
   );
@@ -135,13 +163,13 @@ export function memberSignalMediaProbe() {
   });
 }
 
-export function discussionMediaProbe() {
+export function discussionMediaProbe(data) {
   const bytes = sizeForIteration(exec.scenario.iterationInTest);
   const res = http.post(
     `${BASE_URL}/v1/signals/${MAIN_SIGNAL_A_1}/discussion-session/media`,
     jpegOfSize(bytes),
     {
-      headers: { Authorization: `Session ${SESSION_TOKEN}`, 'Content-Type': 'image/jpeg' },
+      headers: { Authorization: `Session ${data.token}`, 'Content-Type': 'image/jpeg' },
       tags: { endpoint: 'discussion_media', bytes: String(bytes) },
     },
   );
