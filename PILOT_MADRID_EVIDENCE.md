@@ -362,6 +362,30 @@ impact asupra concluziilor.
   aceeași eroare la trecerea în producție.
 - 6 assert-uri noi în `scripts/test-api-base.js` (33/33 total), toate
   celelalte teste conexe re-rulate curate.
-- Commit: `town-public@a4ecbfa`. **Nu e încă live** — branch-ul nu se
-  deploy-ează automat; necesită merge pe `main` + deploy, autorizate
-  separat.
+- Commit: `town-public@a4ecbfa`.
+
+## Merge + deploy fix `api-base.js` (2026-08-16, autorizat separat)
+
+- Autorizare explicită: „autorizez merge + deploy pentru town-public ca
+  fix-ul să ajungă live, ca să pot relua QA-ul pe pagina reparată."
+- Stare pre-merge verificată: `origin/main` era strămoș direct al
+  branch-ului (`git merge-base --is-ancestor` → adevărat) — fast-forward
+  curat, zero conflicte posibile.
+- PR [town-public#136](https://github.com/michaeltofan/town-public/pull/136)
+  creat și merge-uit (metodă `merge`, nu squash/rebase, ca istoricul
+  commit-urilor Madrid să rămână intact) →
+  `town-public@9ec7bab74b17905e44dcf01da12441cbb5683f6e`.
+- Verificare deploy, nu doar presupunere de „CI verde": `mcp__Railway__get-service-config`
+  pe serviciul `town-public-staging` (proiect `town-public`, environment
+  `staging`) confirmă `source.branch: "main"` — auto-deploy pe push e
+  configurat, nu manual. `mcp__Railway__list-deployments` arată un
+  deployment nou, `status: SUCCESS`, `reason: "deploy"`, creat imediat
+  după merge. Log-uri de build (`mcp__Railway__get-logs`) confirmă build
+  finalizat `2026-08-16T08:11:44Z`; log-urile de deploy arată cereri
+  gestionate fără erori până în cel mai recent interval capturat —
+  serviciul rulează și răspunde, nu doar „a pornit".
+- Ce NU s-a verificat direct din acest mediu: un răspuns HTTP real la
+  `https://madrid-staging.towncivic.org/#/feed` printr-un browser — proxy-ul
+  acestui mediu blochează acel domeniu (aceeași limitare de la M2/M8).
+  Confirmarea finală că feed-ul chiar arată cele 3 semnale rămâne la QA-ul
+  vizual al lui Mihail.

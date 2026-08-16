@@ -167,7 +167,7 @@ Autorizat 2026-08-16.
 | QA vizual mobil + desktop, aprobat personal de tine | **ÎN CURS — și deja util.** Ai deschis `madrid-staging.towncivic.org` real și ai găsit un bug real (vezi mai jos) — exact rolul acestui criteriu |
 | Suită E2E Playwright completă (browser real) | **NEFĂCUT.** Configurarea locală (chei WebAuthn, email, sesiune, ~15 variabile) ar fi cerut efort disproporționat față de timpul rămas — semnalat clar, nu ascuns, nu simulat |
 
-### Bug real, găsit de QA-ul tău, reparat — dar nu încă live
+### Bug real, găsit de QA-ul tău — reparat și acum live
 
 Ai deschis `madrid-staging.towncivic.org/#/feed` și ai văzut „No live signals
 right now" / „Couldn't reach TOWN — try again later" în loc de cele 3
@@ -187,9 +187,15 @@ diferite, iar golul a căzut exact între ele.
 **Reparat:** `town-public@a4ecbfa`. 6 teste noi (33/33 total în
 `test-api-base.js`), toate testele conexe re-rulate, curate.
 
-**Neterminat — cere autorizarea ta separată:** branch-ul acesta nu se
-deploy-ează automat. Fix-ul există în cod, dar `madrid-staging.towncivic.org`
-arată în continuare bug-ul până nu se face merge pe `main` și deploy.
+**Deploy-uit — autorizat explicit de tine 2026-08-16.** PR
+[#136](https://github.com/michaeltofan/town-public/pull/136) (fast-forward
+curat peste `main`, fără conflicte), merge-uit
+`town-public@9ec7bab74b17905e44dcf01da12441cbb5683f6e`. `town-public-staging`
+pe Railway are auto-deploy pe push la `main` (`branch: "main"` în
+configurația serviciului) — build declanșat automat, `SUCCESS`, finalizat
+2026-08-16T08:11:44Z, servește cereri fără erori confirmat din log-urile
+de deploy live. Rămâne de confirmat prin QA vizual repetat de tine dacă
+feed-ul chiar apare acum pe `madrid-staging.towncivic.org`.
 
 ## Blocat / necesită decizia ta
 
