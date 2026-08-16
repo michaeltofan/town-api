@@ -164,7 +164,7 @@ Autorizat 2026-08-16.
 | Test de capacitate comparabil cu `loadtest/README.md` | **PASS, rulare proaspătă.** Declanșat din această sesiune (`workflow_dispatch`, commit `0ad0db4`): **10.817 cereri, 0% eșecuri**, toate pragurile de latență respectate (p95 sub 182ms, praguri 500-800ms), 100 utilizatori concurenți susținuți 3m30s. Consistent cu rularea anterioară din `STATUS.md` general (10.591 cereri) |
 | Suită E2E/integrare verde | **PASS, verificat pe bază de date reală, prima oară în această sesiune.** Am pornit Postgres local (nu exista până acum în această sesiune) și am rulat suita completă de integrare — 82 fișiere. 7 fișiere au eșuat inițial cu erori de conexiune/tabelă lipsă imediat după migrare; verificate izolat, toate 7 trec curat — confirmat artefact de concurență din rularea unui singur proces lung (~7 min) cu resetări repetate de schemă, nicio legătură cu Madrid (`grep pilot_cohort` → un singur rezultat, testul meu, verde). Testele mele noi de M4/M5 (`platform.api.test.ts`) trec real: 16/16 |
 | Migrarea 0059 verificată pe bază de date reală | **PASS, nou.** Aplicată cu succes pe Postgres local — tabela `pilot_cohort_members` există genuine. A scos la iveală 5 fișiere de test cu lista de tabele hardcodată, neactualizată de la M4 (nu puteam prinde asta fără bază de date) — reparate și verificate, toate 17 teste (5 fișiere) verzi izolat |
-| QA vizual mobil + desktop, aprobat personal de tine | **ÎN CURS — și deja util.** Ai deschis `madrid-staging.towncivic.org` real și ai găsit un bug real (vezi mai jos) — exact rolul acestui criteriu |
+| QA vizual mobil + desktop, aprobat personal de tine | **ÎN CURS — și deja util de două ori.** Ai găsit bug-ul real (vezi mai jos) și, după fix + deploy, ai confirmat personal: cele 3 semnale sunt vizibile și se deschid pe `madrid-staging.towncivic.org`. Rămâne neconfirmat: verificare pe mobil (ai testat pe ce dispozitiv?) |
 | Suită E2E Playwright completă (browser real) | **NEFĂCUT.** Configurarea locală (chei WebAuthn, email, sesiune, ~15 variabile) ar fi cerut efort disproporționat față de timpul rămas — semnalat clar, nu ascuns, nu simulat |
 
 ### Bug real, găsit de QA-ul tău — reparat și acum live
@@ -209,9 +209,12 @@ al CI-ului rulate local în aceeași ordine, toate curate. PR
 `town-public@8f9bd4fdfa3a414585c7819432aec329915404e6`. CI real re-rulat pe
 `main` (run #149) — verificat direct, nu presupus: **SUCCESS**. Railway a
 redeploy-uit automat peste noul commit — deployment nou `SUCCESS`,
-finalizat 2026-08-16T21:16:40Z, a înlocuit deployment-ul anterior. Rămâne
-de confirmat prin QA vizual repetat de tine dacă feed-ul chiar apare acum
-pe `madrid-staging.towncivic.org`.
+finalizat 2026-08-16T21:16:40Z, a înlocuit deployment-ul anterior.
+
+**Confirmat de tine, real, 2026-08-16:** cele 3 semnale sunt vizibile pe
+`madrid-staging.towncivic.org` și se deschid. Acesta e singurul tip de
+verificare care închide cu adevărat acest bug — nu deploy-ul reușit, nu
+CI-ul verde, ci tu uitându-te la pagină. Bug-ul e închis.
 
 ## Blocat / necesită decizia ta
 

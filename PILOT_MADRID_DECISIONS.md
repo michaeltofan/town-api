@@ -34,6 +34,7 @@ aici.
 | 2026-08-16 | Bug real găsit de QA vizual (madrid-staging arăta „Couldn't reach TOWN") — cauză confirmată în `api-base.js`, reparat, `town-public@a4ecbfa`, nu încă deploy-uit | Mihail |
 | 2026-08-16 | Merge + deploy pentru `town-public` autorizat — PR #136 merge-uit (`9ec7bab`), Railway a deploy-uit automat pe `town-public-staging` din `main`, `SUCCESS`, fix-ul e live | Mihail |
 | 2026-08-16 | CI real pe `main` a picat imediat după merge (regresie de test, nu de produs) — reparat, PR #137 merge-uit (`8f9bd4f`), CI real re-verificat SUCCESS, Railway redeploy-uit automat | Agent (sub mandatul „drive to green" al PR-urilor proprii, fără autorizare separată — vezi EVIDENCE.md) |
+| 2026-08-16 | Bug-ul `api-base.js` declarat închis — Mihail a confirmat vizual, real, pe `madrid-staging.towncivic.org`: cele 3 semnale sunt vizibile și se deschid | Mihail |
 
 ## Mesajul de invitație WhatsApp — aprobat 2026-08-16
 
@@ -78,9 +79,9 @@ are loc din acest mediu; textul e doar aprobat, nu expediat.
   dacă merită o trecere separată de reparat, în afara pilotului Madrid.
 - Autorizarea de merge+deploy pentru `town-api`, care va aplica efectiv
   migrarea 0059 pe Staging (și apoi Production).
-- QA vizual mobil + desktop pe `madrid-staging.towncivic.org` (M8) — doar
-  tu poți face asta. Fix-ul `api-base.js` e acum live (vezi tabelul de mai
-  sus) — rămâne să confirmi că feed-ul chiar arată cele 3 semnale.
+- QA vizual pe mobil pe `madrid-staging.towncivic.org` (M8) — confirmat pe
+  desktop (cele 3 semnale vizibile, se deschid); rămâne neconfirmat pe
+  mobil.
 - Suita E2E Playwright completă cu browser real (M8) — necesită o
   configurare locală de mediu (~15 variabile) care nu a fost făcută în
   această trecere; decizi dacă merită o sesiune dedicată.
