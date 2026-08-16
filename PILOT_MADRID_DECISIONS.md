@@ -28,6 +28,9 @@ aici.
 | 2026-08-16 | M6 declarat închis — mesaj aprobat + linkuri `#/feed/<slug>` funcționale pe Staging; placeholder-ul din mesaj rămâne neînlocuit până la M9 | Mihail |
 | 2026-08-16 | M7 autorizat | Mihail |
 | 2026-08-16 | M7 declarat închis — verificat deja construit complet (API public + randare frontend fără gate de autentificare), zero cod nou scris | Mihail |
+| 2026-08-16 | M8 autorizat | Mihail |
+| 2026-08-16 | Test de capacitate declanșat manual pe Staging din această sesiune (workflow_dispatch, safe by design) | Mihail |
+| 2026-08-16 | M8 declarat „parțial" — CORS/CSRF/WebAuthn/capacitate/migrare verificate real pe cod care rulează; QA vizual și E2E Playwright rămân blocaje deschise, nu bifate artificial | Mihail |
 
 ## Mesajul de invitație WhatsApp — aprobat 2026-08-16
 
@@ -63,9 +66,17 @@ are loc din acest mediu; textul e doar aprobat, nu expediat.
 - Membrii cu home-city în altă comunitate decât Madrid mai văd și acea
   comunitate pe hostname-ul Madrid — rămâne neschimbat de M4, nu a fost
   cerut explicit; de revizitat dacă devine relevant pentru cohorta reală.
-- Confirmare live opțională a CORS (comanda curl din
-  PILOT_MADRID_EVIDENCE.md), dacă vrei certitudinea 100% empirică.
+- Confirmare live opțională a CORS printr-o cerere HTTP reală peste
+  internet (comanda curl din PILOT_MADRID_EVIDENCE.md) — de la M8,
+  comportamentul e deja verificat printr-o instanță Fastify reală rulată
+  local, nu doar trasat pe cod; rămâne opțională doar certitudinea 100%
+  peste rețea.
 - Golul de snapshot-uri drizzle (0014–0058), găsit în timpul M4 — decizi
   dacă merită o trecere separată de reparat, în afara pilotului Madrid.
 - Autorizarea de merge+deploy pentru `town-api`, care va aplica efectiv
   migrarea 0059 pe Staging (și apoi Production).
+- QA vizual mobil + desktop pe `madrid-staging.towncivic.org` (M8) — doar
+  tu poți face asta.
+- Suita E2E Playwright completă cu browser real (M8) — necesită o
+  configurare locală de mediu (~15 variabile) care nu a fost făcută în
+  această trecere; decizi dacă merită o sesiune dedicată.

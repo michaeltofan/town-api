@@ -288,3 +288,50 @@ impact asupra concluziilor.
 - Combinat cu linkul direct din M6 (`#/feed/<slug>`), un vizitator
   neautentificat poate ajunge direct la orice semnal Madrid și vedea
   rezultatul complet odată ce procesul e arhivat.
+
+## M8 — E2E, securitate, capacitate, QA vizual (2026-08-16)
+
+- **Postgres local pornit pentru prima oară în această sesiune**
+  (PostgreSQL 16, deja instalat în mediu, neutilizat până acum din lipsă
+  de `DATABASE_URL`). A permis, pentru prima oară, verificare reală pe
+  bază de date, nu doar trasare de cod.
+- Migrarea 0059 aplicată cu succes pe bază de date reală locală —
+  confirmat prin interogare directă `information_schema.tables`.
+- 5 fișiere de test cu lista de tabele hardcodată nu includeau
+  `pilot_cohort_members` (gol rămas de la M4, imposibil de prins fără
+  bază de date): `test/database.test.ts`,
+  `test/account-identity.migration.test.ts`,
+  `test/auth-ceremony.migration.test.ts`,
+  `test/communities-signals.migration.test.ts`,
+  `test/signal-confirmation.migration.test.ts`. Reparate, verificate
+  izolat, toate verzi (7+2+2+3+3 = 17 teste).
+- Rulare completă a suitei de integrare (`vitest.integration.config.ts`,
+  82 fișiere, ~400s): 522/544 teste verzi la prima trecere. 7 fișiere
+  eșuate (22 teste) cu semnătură „relation does not exist" imediat după
+  migrare + „Called end on pool more than once" — verificate individual,
+  toate trec curat (`password-setup.api.test.ts` 7/7,
+  `passkey-registration.api.test.ts` 14/14, restul confirmate similar).
+  Concluzie: artefact de contenție pe conexiuni Postgres dintr-un proces
+  Node unic, de lungă durată, cu resetări repetate de schemă — nu
+  regresie de cod. `grep -c pilot_cohort` pe log-ul complet → 1 rezultat,
+  chiar testul meu de M4, verde.
+- `test/platform.api.test.ts` (conține testele de cohortă M4 și export
+  M5) — 16/16 verzi, verificat pe bază de date reală pentru prima oară.
+- Teste noi/extinse pentru originul Madrid, toate rulate real, nu doar
+  trasate: `test/ops.cors.test.ts` (+3, total 17/17),
+  `test/ceremony.csrf.test.ts` (fișier nou, 8/8 — nu exista test dedicat
+  pentru `assertWebCookieCsrf` înainte de M8),
+  `test/ops.staging-railway-origins.test.ts` (+2, total 16/16).
+- Test de capacitate: declanșat `workflow_dispatch` pe `loadtest.yml`
+  (manual-only, doar `api-staging.towncivic.org`, niciodată automat),
+  run id `31971001155`, commit `0ad0db4`. Rezultat real, extras din
+  log-ul job-ului: `checks_succeeded: 100.00% (10817/10817)`,
+  `http_req_failed: 0.00%`, `http_req_duration p(95)=179.18ms` global,
+  praguri per-endpoint toate respectate (civic_process p95=181.57ms<500ms,
+  community_signals p95=178.79ms<800ms, signal_detail p95=178.38ms<500ms),
+  100 VU susținuți 3m30s.
+- **Nefăcut, semnalat explicit:** QA vizual mobil+desktop (cere Mihail
+  personal) și suita E2E Playwright cu browser real (configurare locală
+  disproporționat de costisitoare față de timpul rămas — ~15 variabile
+  de mediu pentru WebAuthn/email/sesiune, două servere coordonate).
+- Commit-uri: `town-api@3f7978d` (teste), documentele curente.

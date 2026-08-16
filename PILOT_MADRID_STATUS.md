@@ -14,6 +14,7 @@ e în `main`, nu e real.
 - **M5 — export agregat, parțial.** Vezi secțiunea dedicată mai jos.
 - **M6 — invitații și linkuri directe.** Vezi secțiunea dedicată mai jos.
 - **M7 — pagina publică de rezultat.** Deja construită, verificată, zero cod nou. Vezi secțiunea dedicată mai jos.
+- **M8 — E2E, securitate, capacitate, QA vizual.** Parțial. Vezi secțiunea dedicată mai jos.
 
 ## Finalizat — M2 (Staging)
 
@@ -151,11 +152,31 @@ real pe care autorul îl completează explicit la publicare
 nu ceva introdus de mine. Relevant pentru tine, dat fiind că pagina e
 publică.
 
+## Parțial — M8 (E2E, securitate, capacitate, QA vizual)
+
+Autorizat 2026-08-16.
+
+| Criteriu M8 | Stare |
+|---|---|
+| Test dedicat CORS pe originul Madrid | **PASS, real, rulat.** `test/ops.cors.test.ts` — 3 teste noi, instanță Fastify reală, exact cele 3 origini confirmate live pe Staging. 17/17 verzi |
+| Test dedicat CSRF pe originul Madrid | **PASS, real, rulat.** `test/ceremony.csrf.test.ts` (fișier nou) — 8/8 verzi. Nu exista niciun test dedicat pentru `assertWebCookieCsrf` înainte |
+| Test dedicat WebAuthn pe originul Madrid | **PASS, real, rulat.** `test/ops.staging-railway-origins.test.ts` extins — 16/16 verzi |
+| Test de capacitate comparabil cu `loadtest/README.md` | **PASS, rulare proaspătă.** Declanșat din această sesiune (`workflow_dispatch`, commit `0ad0db4`): **10.817 cereri, 0% eșecuri**, toate pragurile de latență respectate (p95 sub 182ms, praguri 500-800ms), 100 utilizatori concurenți susținuți 3m30s. Consistent cu rularea anterioară din `STATUS.md` general (10.591 cereri) |
+| Suită E2E/integrare verde | **PASS, verificat pe bază de date reală, prima oară în această sesiune.** Am pornit Postgres local (nu exista până acum în această sesiune) și am rulat suita completă de integrare — 82 fișiere. 7 fișiere au eșuat inițial cu erori de conexiune/tabelă lipsă imediat după migrare; verificate izolat, toate 7 trec curat — confirmat artefact de concurență din rularea unui singur proces lung (~7 min) cu resetări repetate de schemă, nicio legătură cu Madrid (`grep pilot_cohort` → un singur rezultat, testul meu, verde). Testele mele noi de M4/M5 (`platform.api.test.ts`) trec real: 16/16 |
+| Migrarea 0059 verificată pe bază de date reală | **PASS, nou.** Aplicată cu succes pe Postgres local — tabela `pilot_cohort_members` există genuine. A scos la iveală 5 fișiere de test cu lista de tabele hardcodată, neactualizată de la M4 (nu puteam prinde asta fără bază de date) — reparate și verificate, toate 17 teste (5 fișiere) verzi izolat |
+| QA vizual mobil + desktop, aprobat personal de tine | **NEFĂCUT — nu e treaba mea.** Exact cum spune criteriul: aprobat personal de tine, nu de agent. Nu am făcut și nu pot face captură/aprobare vizuală |
+| Suită E2E Playwright completă (browser real) | **NEFĂCUT.** Configurarea locală (chei WebAuthn, email, sesiune, ~15 variabile) ar fi cerut efort disproporționat față de timpul rămas — semnalat clar, nu ascuns, nu simulat |
+
 ## Blocat / necesită decizia ta
 
 - Textul și mecanismul exact de consimțământ pentru analiza agregată
   (M5) — fără el, exportul există tehnic, dar nu poate fi folosit public
   conform propriului tău criteriu.
+- QA vizual mobil + desktop pe `madrid-staging.towncivic.org` — doar tu
+  poți face asta.
+- Suita E2E Playwright completă (browser real) — decizi dacă merită o
+  sesiune dedicată doar pentru configurarea mediului local, sau rămâne
+  acoperită de CI la următorul merge.
 - Locul unde va fi ancorat accesul de 90 de zile (`accessUntil` vs. un flux
   nou de Stripe) — **decis: `accessUntil`, fără Stripe** (vezi tabelul de mai sus).
 - `STATUS.md` (general, nu pilot) nu reflectă încă succesul din 13 aug. al
@@ -168,7 +189,8 @@ publică.
 
 ## Neatinsă
 
-M8–M11 — nicio autorizare primită încă.
+M9–M11 — nicio autorizare primită încă. M8 rămâne „parțial", nu „finalizat"
+— blocat pe QA vizual (doar tu) și, opțional, suita E2E completă.
 
 ## Production
 
