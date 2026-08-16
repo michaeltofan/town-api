@@ -273,4 +273,92 @@ describe('runtime CORS policy', () => {
       await app.close();
     }
   });
+
+  // Pilot Madrid M8: the exact WEBAUTHN_ALLOWED_ORIGINS value confirmed live on
+  // town-api-staging (PILOT_MADRID_EVIDENCE.md), reproduced against a real
+  // Fastify instance instead of only traced through source.
+  it('reflects the Madrid pilot origin under the real three-origin Staging value', async () => {
+    const railwayOrigin = 'https://town-public-staging-staging.up.railway.app';
+    const madridOrigin = 'https://madrid-staging.towncivic.org';
+    const app = await createTestApp({
+      database: createFakeDatabase({ ready: true }),
+      envOverrides: {
+        NODE_ENV: 'production',
+        APP_ENV: 'staging',
+        APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+        DATABASE_URL: 'postgres://town-stg:stg-secret@db.internal:5432/town',
+        WEBAUTHN_ALLOWED_ORIGINS: `${PRODUCTION_ALLOWED_ORIGIN},${railwayOrigin},${madridOrigin}`,
+        ALLOW_PRODUCTION_WEB_ORIGIN: 'true',
+      },
+    });
+    try {
+      const madridResponse = await app.inject({
+        method: 'GET',
+        url: '/health/live',
+        headers: { origin: madridOrigin },
+      });
+      expect(madridResponse.statusCode).toBe(200);
+      expect(madridResponse.headers['access-control-allow-origin']).toBe(madridOrigin);
+      expect(madridResponse.headers['access-control-allow-credentials']).toBe('true');
+
+      // The two pre-existing origins still work -- adding Madrid changed nothing else.
+      const productionResponse = await app.inject({
+        method: 'GET',
+        url: '/health/live',
+        headers: { origin: PRODUCTION_ALLOWED_ORIGIN },
+      });
+      expect(productionResponse.headers['access-control-allow-origin']).toBe(
+        PRODUCTION_ALLOWED_ORIGIN,
+      );
+
+      const railwayResponse = await app.inject({
+        method: 'GET',
+        url: '/health/live',
+        headers: { origin: railwayOrigin },
+      });
+      expect(railwayResponse.headers['access-control-allow-origin']).toBe(railwayOrigin);
+
+      // A lookalike host must still be rejected.
+      const lookalikeResponse = await app.inject({
+        method: 'GET',
+        url: '/health/live',
+        headers: { origin: 'https://evil-madrid-staging.towncivic.org' },
+      });
+      expect(lookalikeResponse.headers['access-control-allow-origin']).toBeUndefined();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('answers an authorized preflight for the Madrid origin with credentials allowed', async () => {
+    const railwayOrigin = 'https://town-public-staging-staging.up.railway.app';
+    const madridOrigin = 'https://madrid-staging.towncivic.org';
+    const app = await createTestApp({
+      database: createFakeDatabase({ ready: true }),
+      envOverrides: {
+        NODE_ENV: 'production',
+        APP_ENV: 'staging',
+        APP_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
+        DATABASE_URL: 'postgres://town-stg:stg-secret@db.internal:5432/town',
+        WEBAUTHN_ALLOWED_ORIGINS: `${PRODUCTION_ALLOWED_ORIGIN},${railwayOrigin},${madridOrigin}`,
+        ALLOW_PRODUCTION_WEB_ORIGIN: 'true',
+      },
+    });
+    try {
+      const response = await app.inject({
+        method: 'OPTIONS',
+        url: '/health/live',
+        headers: {
+          origin: madridOrigin,
+          'access-control-request-method': 'GET',
+          'access-control-request-headers': 'content-type,authorization',
+        },
+      });
+      expect(response.statusCode).toBe(204);
+      expect(response.headers['access-control-allow-origin']).toBe(madridOrigin);
+      expect(response.headers['access-control-allow-credentials']).toBe('true');
+    } finally {
+      await app.close();
+    }
+  });
 });
