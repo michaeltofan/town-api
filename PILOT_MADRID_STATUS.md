@@ -12,6 +12,7 @@ e în `main`, nu e real.
 - **M3 — conținut verificat, proveniență.** Vezi secțiunea dedicată mai jos.
 - **M4 — cod complet, neaplicat pe nicio bază de date.** Vezi secțiunea dedicată mai jos.
 - **M5 — export agregat, parțial.** Vezi secțiunea dedicată mai jos.
+- **M6 — invitații și linkuri directe.** Vezi secțiunea dedicată mai jos.
 
 ## Finalizat — M2 (Staging)
 
@@ -110,6 +111,27 @@ felul în care oamenii sunt informați/își dau acordul. Aș fi putut scrie un
 checkbox generic, dar ar fi fost exact genul de decizie de conținut/produs
 pe care am promis să nu o iau eu în locul tău.
 
+## Finalizat — M6 (invitații, linkuri directe)
+
+Autorizat și închis 2026-08-16.
+
+| Criteriu M6 | Stare |
+|---|---|
+| Mesajul de invitație aprobat de tine explicit | **PASS** — text complet în `PILOT_MADRID_DECISIONS.md`, aprobat 2026-08-16 |
+| Link direct funcțional per semnal | **PASS** — `#/feed/<slug>` sare direct la semnalul respectiv, fără să afecteze nicio altă rută. `town-public@05e3706` |
+| Fără date/participanți simulați | **PASS** — nimic trimis, niciun participant simulat; mesajul are încă placeholder de link, nu unul funcțional de producție |
+
+**Linkuri testabile chiar acum, pe Staging** (tu poți verifica, eu nu am
+acces la un browser real din acest mediu):
+
+- `https://madrid-staging.towncivic.org/#/feed/madrid-signal-1` — Calle Argumosa
+- `https://madrid-staging.towncivic.org/#/feed/madrid-signal-2` — Parque Tierno Galván
+- `https://madrid-staging.towncivic.org/#/feed/madrid-signal-3` — Puerta de Alcalá / Retiro
+
+Placeholder-ul din mesajul WhatsApp aprobat rămâne neînlocuit până există
+`madrid.towncivic.org` (producție, M9) — link-urile de mai sus sunt pentru
+Staging, nu pentru trimis prietenilor încă.
+
 ## Blocat / necesită decizia ta
 
 - Textul și mecanismul exact de consimțământ pentru analiza agregată
@@ -127,7 +149,7 @@ pe care am promis să nu o iau eu în locul tău.
 
 ## Neatinsă
 
-M6–M11 — nicio autorizare primită încă.
+M7–M11 — nicio autorizare primită încă.
 
 ## Production
 

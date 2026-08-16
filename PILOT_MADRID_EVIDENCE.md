@@ -241,3 +241,25 @@ impact asupra concluziilor.
   conținut/produs a lui Mihail (analog cu aprobarea mesajului TOWN
   Madrid, punctul 8 din strategia originală), nu o decizie tehnică.
 - Commit: `town-api@ad4b1e4`.
+
+## M6 — Invitații, linkuri directe (2026-08-16)
+
+- `scene.id` era deja slug-ul semnalului (`mapSignalDetailToScene`,
+  `detail.slug || detail.id`) — nu a trebuit adăugat niciun identificator
+  nou, doar păstrarea lui din hash.
+- `parseRoute()` extrage slug-ul din `#/feed/<slug>` (regex
+  `^feed\/([a-z0-9-]{1,128})$`); `ensureProductOnlyFeedHash()` nu mai
+  colapsează acest format la `#/feed` simplu; `resolvePendingFeedDeepLink()`
+  setează `feedIndex` o dată ce scenele sunt încărcate — apelat atât din
+  `render()` (scene deja încărcate) cât și din `loadProductOnlyLiveFeed()`
+  (încărcare inițială). Slug care nu se potrivește = no-op tăcut, nu eroare.
+- Funcționează generic, pentru orice oraș — nu e o rută separată pentru
+  Madrid, e infrastructura de rutare existentă, extinsă cu un singur
+  parametru opțional.
+- Test structural nou: `scripts/test-feed-deep-link.js` (8 assertions,
+  verifică prezența exactă a fiecărei piese din cod, nu comportament live
+  — Playwright E2E ar da acoperire completă, dar nu poate rula din acest
+  mediu). Toate testele existente relevante rulate din nou, verzi.
+- Linkuri testabile pe Staging:
+  `https://madrid-staging.towncivic.org/#/feed/madrid-signal-{1,2,3}`.
+- Commit: `town-public@05e3706`.

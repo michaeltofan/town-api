@@ -24,6 +24,8 @@ aici.
 | 2026-08-16 | Consimțământ pentru analiza agregată — decis să NU fie construit acum; e decizie de conținut a lui Mihail, nu tehnică | Mihail |
 | 2026-08-16 | M5 declarat parțial închis — export agregat funcțional și testat, consimțământul rămâne blocaj deschis | Mihail |
 | 2026-08-16 | Mesaj de invitație WhatsApp (M6) aprobat, text integral mai jos | Mihail |
+| 2026-08-16 | Partea tehnică a M6 (linkuri directe per semnal) autorizată | Mihail |
+| 2026-08-16 | M6 declarat închis — mesaj aprobat + linkuri `#/feed/<slug>` funcționale pe Staging; placeholder-ul din mesaj rămâne neînlocuit până la M9 | Mihail |
 
 ## Mesajul de invitație WhatsApp — aprobat 2026-08-16
 
