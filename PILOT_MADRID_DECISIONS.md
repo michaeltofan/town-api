@@ -23,6 +23,29 @@ aici.
 | 2026-08-16 | M5 autorizat | Mihail |
 | 2026-08-16 | Consimțământ pentru analiza agregată — decis să NU fie construit acum; e decizie de conținut a lui Mihail, nu tehnică | Mihail |
 | 2026-08-16 | M5 declarat parțial închis — export agregat funcțional și testat, consimțământul rămâne blocaj deschis | Mihail |
+| 2026-08-16 | Mesaj de invitație WhatsApp (M6) aprobat, text integral mai jos | Mihail |
+
+## Mesajul de invitație WhatsApp — aprobat 2026-08-16
+
+Text final (spaniolă, ce primesc destinatarii):
+
+> Hola [Nombre] 👋
+>
+> Estoy probando TOWN, una app para señalar problemas reales del barrio y
+> darles seguimiento — cosas como la acera rota en la calle Argumosa o las
+> farolas apagadas junto al parque Tierno Galván.
+>
+> Te invito a probarla en Madrid, acceso gratis los primeros 90 días. Somos
+> muy pocos todavía — es justo por eso que tu opinión sincera me sirve más
+> que nada.
+>
+> [enlace — pendiente de lanzamiento]
+>
+> ¿Te apuntas?
+
+Placeholder-ul `[enlace — pendiente de lanzamiento]` rămâne neînlocuit până
+`madrid.towncivic.org` (producție) există — vezi M9. Trimiterea efectivă nu
+are loc din acest mediu; textul e doar aprobat, nu expediat.
 
 ## Decizii deschise (nu s-au luat încă)
 
