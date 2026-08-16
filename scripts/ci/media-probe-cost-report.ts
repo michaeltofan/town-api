@@ -69,7 +69,11 @@ for (const logValue of logs) {
       foundInAttributes = true;
     }
   }
-  if (!foundInAttributes && typeof log?.message === 'string' && log.message.includes('mediaUpload')) {
+  if (
+    !foundInAttributes &&
+    typeof log?.message === 'string' &&
+    log.message.includes('mediaUpload')
+  ) {
     const parsedMessage = parseNestedRecord(log.message);
     const parsedRecord = object(parsedMessage?.mediaUpload);
     if (parsedRecord) records.push(parsedRecord);
