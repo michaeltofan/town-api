@@ -13,6 +13,7 @@ import {
   activateTestMembership,
   createEligibleTestResolver,
   createMembershipTestApp,
+  FOUNDATION_COMMUNITY_IDS,
 } from './helpers/membership.js';
 import { loginMobileSession } from './helpers/passkey-management.js';
 
@@ -39,11 +40,12 @@ describe('signal discussion-session media upload', () => {
     await ctx.pool.end();
   });
 
-  async function participantSession(email: string) {
+  async function participantSession(email: string, communityId?: string) {
     const registration = await activatePasskeyAccountAndLinkCommunity({
       app: ctx.app,
       delivery: ctx.delivery,
       email,
+      ...(communityId !== undefined ? { communityId } : {}),
     });
     await activateTestMembership(ctx.app, {
       accountId: registration.accountId,
@@ -262,5 +264,47 @@ describe('signal discussion-session media upload', () => {
     });
     expect(response.statusCode).toBe(413);
     expect(response.json()).toMatchObject({ error: { code: ERROR_CODE.PAYLOAD_TOO_LARGE } });
+  });
+
+  it('rejects a participant bound to a different community on the media read route', async () => {
+    const { login } = await participantSession(
+      'DiscussionMediaWrongCommunity+setup@example.com',
+      FOUNDATION_COMMUNITY_IDS.munichDe,
+    );
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/discussion-session/contributions/00000000-0000-4000-8000-00000000dead/media`,
+      headers: { authorization: `Session ${login.sessionToken}` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: { code: 'CIVIC_PARTICIPATION_NOT_AUTHORIZED' },
+    });
+  });
+
+  it('rejects an expired membership on the media read route', async () => {
+    const registration = await activatePasskeyAccountAndLinkCommunity({
+      app: ctx.app,
+      delivery: ctx.delivery,
+      email: 'DiscussionMediaExpired+setup@example.com',
+    });
+    await activateTestMembership(ctx.app, {
+      accountId: registration.accountId,
+      effectiveAt: '2020-01-01T00:00:00.000Z',
+      accessUntil: '2020-06-01T00:00:00.000Z',
+    });
+    const login = await loginMobileSession({
+      app: ctx.app,
+      material: registration.material,
+    });
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/discussion-session/contributions/00000000-0000-4000-8000-00000000dead/media`,
+      headers: { authorization: `Session ${login.sessionToken}` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: { code: 'CIVIC_PARTICIPATION_NOT_AUTHORIZED' },
+    });
   });
 });
