@@ -82,6 +82,14 @@ referințe locale nefetch-uite — vezi nota de corecție de la final).
   `test-security-headers-config.js`, `test-build-identity.js` — toate verzi.
   Suita E2E Playwright completă nu a fost rulată (cere servicii pornite).
 - Commit: `town-public@8476e01`.
+- `WEBAUTHN_ALLOWED_ORIGINS` pe `town-api-staging` extins manual de owner
+  (Railway nu expune valorile prin acest tip de acces, deci sesiunea n-a
+  putut face update-ul singură fără risc de suprascriere). Valoare
+  confirmată: `https://towncivic.org,https://town-public-staging-staging.up.railway.app,https://madrid-staging.towncivic.org`.
+- Deploy `80d2952c-49e6-4be1-b049-f92e55871be9` (commit `0ad0db4`, `town-api-staging`):
+  `SUCCESS`. Log de pornire verificat direct: „Server listening at
+  http://127.0.0.1:8080”, `GET /health/ready` → `200`, zero eroare de
+  configurare WebAuthn/CORS/CSRF.
 
 ## 5. Rezultat public
 

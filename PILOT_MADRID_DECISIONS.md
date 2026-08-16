@@ -9,7 +9,8 @@ aici.
 | 2026-08-16 | Documentele PILOT_MADRID_* locuiesc în `town-api`, la rădăcină, lângă `STATUS.md` | Mihail |
 | 2026-08-16 | M1 (plan, metrici, criterii) autorizat | Mihail |
 | 2026-08-16 | M2 autorizat | Mihail |
-| 2026-08-16 | Hostname Staging: `madrid-staging.towncivic.org`, CNAME adăugat de Mihail la DNS | Mihail |
+| 2026-08-16 | Hostname Staging: `madrid-staging.towncivic.org` (CNAME apărut automat, Railway administrează DNS-ul) | Mihail |
+| 2026-08-16 | `WEBAUTHN_ALLOWED_ORIGINS` pe `town-api-staging` extins manual de Mihail din Railway dashboard, cu originul Madrid adăugat la coadă | Mihail |
 
 ## Decizii deschise (nu s-au luat încă)
 
