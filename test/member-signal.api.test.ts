@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { actors, signalMediaUploads, signals } from '../src/db/schema.js';
+import { MAX_MEMBER_SIGNAL_IMAGE_BYTES } from '../src/membership/member-signal-policy.js';
+import { ERROR_CODE } from '../src/schemas/error.js';
 import { createInMemoryObjectStorageAdapter } from '../src/storage/object-storage-adapter.js';
 import {
   activatePasskeyAccountAndLinkCommunity,
@@ -175,5 +177,37 @@ describe('member signal publish', () => {
       },
     });
     expect(noAccept.statusCode).toBe(400);
+  });
+
+  it('rejects a spoofed content type on the media upload route', async () => {
+    const { login } = await participantSession('MemberSignalSpoofed+setup@example.com');
+    const headers = { authorization: `Session ${login.sessionToken}` };
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/communities/milano-it/signals/media',
+      headers: { ...headers, 'content-type': 'image/jpeg' },
+      payload: Buffer.from('not-a-jpeg'),
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+  });
+
+  it('rejects an image over the member-signal size cap', async () => {
+    const { login } = await participantSession('MemberSignalOversized+setup@example.com');
+    const headers = { authorization: `Session ${login.sessionToken}` };
+
+    const oversized = Buffer.concat([
+      JPEG_BYTES,
+      Buffer.alloc(MAX_MEMBER_SIGNAL_IMAGE_BYTES + 1 - JPEG_BYTES.byteLength),
+    ]);
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/communities/milano-it/signals/media',
+      headers: { ...headers, 'content-type': 'image/jpeg' },
+      payload: oversized,
+    });
+    expect(response.statusCode).toBe(413);
+    expect(response.json()).toMatchObject({ error: { code: ERROR_CODE.PAYLOAD_TOO_LARGE } });
   });
 });

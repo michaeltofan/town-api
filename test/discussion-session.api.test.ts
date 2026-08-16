@@ -152,6 +152,48 @@ describe('signal discussion-session (participant)', () => {
     });
   });
 
+  it('rejects a participant bound to a different community on the media read route', async () => {
+    const { login } = await participantSession(
+      'DiscussionMediaWrongCommunity+setup@example.com',
+      FOUNDATION_COMMUNITY_IDS.munichDe,
+    );
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/discussion-session/contributions/00000000-0000-4000-8000-00000000dead/media`,
+      headers: { authorization: `Session ${login.sessionToken}` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: { code: 'CIVIC_PARTICIPATION_NOT_AUTHORIZED' },
+    });
+  });
+
+  it('rejects an expired membership on the media read route', async () => {
+    const registration = await activatePasskeyAccountAndLinkCommunity({
+      app: ctx.app,
+      delivery: ctx.delivery,
+      email: 'DiscussionMediaExpired+setup@example.com',
+    });
+    await activateTestMembership(ctx.app, {
+      accountId: registration.accountId,
+      effectiveAt: '2020-01-01T00:00:00.000Z',
+      accessUntil: '2020-06-01T00:00:00.000Z',
+    });
+    const login = await loginMobileSession({
+      app: ctx.app,
+      material: registration.material,
+    });
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/v1/signals/${FOUNDATION_SIGNAL_IDS.milanoSignal1}/discussion-session/contributions/00000000-0000-4000-8000-00000000dead/media`,
+      headers: { authorization: `Session ${login.sessionToken}` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: { code: 'CIVIC_PARTICIPATION_NOT_AUTHORIZED' },
+    });
+  });
+
   it('returns an empty session on GET and persists a contribution on POST', async () => {
     const { login } = await participantSession('DiscussionOk+setup@example.com');
     const signalId = FOUNDATION_SIGNAL_IDS.milanoSignal1;
