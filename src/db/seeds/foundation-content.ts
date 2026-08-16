@@ -2090,7 +2090,7 @@ export const FOUNDATION_SIGNALS = [
     position: 2,
     locale: 'es-ES',
     category: 'ALUMBRADO PÚBLICO',
-    area: 'Vallecas',
+    area: 'Legazpi',
     headline: 'Varias farolas llevan semanas apagadas junto al parque Tierno Galván',
     summary: 'El tramo entre la estación y las viviendas queda a oscuras después del anochecer.',
     description:
@@ -2098,7 +2098,7 @@ export const FOUNDATION_SIGNALS = [
     whyItMatters:
       'Un paseo bien iluminado es una condición básica de seguridad para quienes cruzan el parque de camino a casa o al transporte público.',
     whoIsAffected:
-      'Los vecinos de Vallecas, los usuarios del parque y quienes regresan del trabajo por la noche.',
+      'Los vecinos de Legazpi, los usuarios del parque y quienes regresan del trabajo por la noche.',
     latestUpdate:
       'El aviso sigue siendo local y abierto. Todavía no se ha confirmado ninguna intervención.',
     statusLabel: 'Estado cívico: observado — a la espera de atención local',
