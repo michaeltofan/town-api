@@ -61,6 +61,28 @@ referințe locale nefetch-uite — vezi nota de corecție de la final).
 - `MembershipEntitlementRow.accessUntil` — mecanism generic, deja existent,
   verificat prin `isMembershipTemporallyValid()` — `src/membership/civic-access.ts:16-19`.
 
+## M2 — Staging (2026-08-16)
+
+- Domeniu custom Railway creat pe `town-public-staging` (env `staging`,
+  service `87e263a6-d8dd-487e-8d58-fbe5f952a3a8`): `madrid-staging.towncivic.org`
+  → CNAME `xey4zpuf.up.railway.app`. Cere confirmare DNS de la owner.
+- `town-api-staging`: `list-variables` întoarce doar numele, nu valorile
+  (`valuesRedacted: true`) — sesiunea nu poate citi `WEBAUTHN_ALLOWED_ORIGINS`
+  curent. Nemodificat, ca să nu risc suprascrierea originii existente de
+  Staging.
+- Mecanism reutilizat, fără duplicare: `PRODUCT_ONLY_CITY_ORDER`
+  (`town-public/script.js:4256`, mod „product-only” deja activ pt. tot
+  site-ul) restrâns la `['Madrid']` pe hostname-urile pilot, prin noul
+  `town-public/madrid-pilot-host.js`. `productOnlyScenes()` degradează
+  corect pentru vizitatori anonimi; membrii cu home-city existent în altă
+  comunitate mai văd și acea comunitate pe hostname-ul Madrid — comportament
+  neschimbat de acest patch, de tratat explicit în M4 (acces/cohortă).
+- Teste: `scripts/test-madrid-pilot-host.js` (nou, 12 assertions) +
+  `test-api-base.js`, `test-community-commitment.js`,
+  `test-security-headers-config.js`, `test-build-identity.js` — toate verzi.
+  Suita E2E Playwright completă nu a fost rulată (cere servicii pornite).
+- Commit: `town-public@8476e01`.
+
 ## 5. Rezultat public
 
 - Stadiu `archived` cu propunere câștigătoare, jurnal de dovezi public,

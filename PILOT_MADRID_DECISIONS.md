@@ -8,6 +8,8 @@ aici.
 | 2026-08-16 | M0 (inventar read-only) autorizat și acceptat | Mihail |
 | 2026-08-16 | Documentele PILOT_MADRID_* locuiesc în `town-api`, la rădăcină, lângă `STATUS.md` | Mihail |
 | 2026-08-16 | M1 (plan, metrici, criterii) autorizat | Mihail |
+| 2026-08-16 | M2 autorizat | Mihail |
+| 2026-08-16 | Hostname Staging: `madrid-staging.towncivic.org`, CNAME adăugat de Mihail la DNS | Mihail |
 
 ## Decizii deschise (nu s-au luat încă)
 
