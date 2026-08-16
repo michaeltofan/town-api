@@ -20,9 +20,14 @@ aici.
 | 2026-08-16 | Model acces 90 zile: `accessUntil`, fără Stripe — confirmat, deja existent în cod | Mihail |
 | 2026-08-16 | Cohorta Madrid: tabelă nouă `pilot_cohort_members`, separată de membership-ul general | Mihail |
 | 2026-08-16 | M4 declarat închis — cod complet, testat; migrarea 0059 NU a fost rulată pe nicio bază de date, se aplică automat la următorul deploy autorizat separat | Mihail |
+| 2026-08-16 | M5 autorizat | Mihail |
+| 2026-08-16 | Consimțământ pentru analiza agregată — decis să NU fie construit acum; e decizie de conținut a lui Mihail, nu tehnică | Mihail |
+| 2026-08-16 | M5 declarat parțial închis — export agregat funcțional și testat, consimțământul rămâne blocaj deschis | Mihail |
 
 ## Decizii deschise (nu s-au luat încă)
 
+- Textul și mecanismul de consimțământ pentru analiza agregată (M5) —
+  fără el, exportul nu poate fi folosit public conform criteriului tău.
 - Poze/video reale ale celor 3 probleme civice din Madrid, de la contactele
   lui Mihail — proveniența actuală (Google Maps) confirmă doar locația, nu
   problema curentă. Necesar înainte de M8/M10.

@@ -213,3 +213,31 @@ impact asupra concluziilor.
   următorul deploy pe `main` (parte din `preDeployCommand`), condiționat
   de autorizarea separată de merge+deploy.
 - Commit: `town-api@dffb426`.
+
+## M5 — Analytics, funnel, export agregat (2026-08-16)
+
+- `civic_process_events` (`src/db/schema.ts:2436`) — **verificat deja
+  existent**, dinainte de orice schimbare a mea: un rând per tranziție de
+  etapă (`stage_transitioned_to_proposals/deliberation/ballot_preparation/
+  voting/mandate/action/verification/archived`), pentru orice proces civic,
+  orice oraș. Asta e „funnel"-ul cerut de M5 — deja construit.
+- Export nou, doar agregat: `src/platform/repositories/pilot-funnel.ts` +
+  `src/platform/services/pilot-funnel-export.ts` +
+  `GET /v1/platform/pilot/funnel-export?communitySlug=&cohort=`
+  (`src/routes/platform.ts`, capability `read_communities`, cel mai jos
+  nivel de acces — potrivit pentru date fără PII). Toate query-urile
+  filtrează pe `civicProcesses.communityId`, fără migrare, fără schemă nouă.
+- Test nou în `test/platform.api.test.ts`: verifică forma răspunsului și
+  explicit că `JSON.stringify(pack)` nu conține ID-ul de cont al
+  operatorului sau al contului acordat — dovadă directă că exportul e
+  agregat, nu per-persoană.
+- `docs/openapi.v1.json` regenerat (`npm run openapi:generate`, +211 linii,
+  doar ruta nouă). `npx vitest run`: 569 teste trecute, aceleași 3 fișiere
+  dependente de `DATABASE_URL` eșuează (preexistent, fără legătură).
+  `tsc`/`eslint`/`prettier` curate.
+- **Căutat explicit și confirmat absent:** `grep -rln "consent\|Consent"
+  src/` → zero rezultate. Nu există niciun mecanism de consimțământ în
+  cod. Nu l-am construit — textul și fluxul exact sunt o decizie de
+  conținut/produs a lui Mihail (analog cu aprobarea mesajului TOWN
+  Madrid, punctul 8 din strategia originală), nu o decizie tehnică.
+- Commit: `town-api@ad4b1e4`.

@@ -11,6 +11,7 @@ e în `main`, nu e real.
 - **M1 — planul, metricile, criteriile.** Cele 4 documente, aprobate.
 - **M3 — conținut verificat, proveniență.** Vezi secțiunea dedicată mai jos.
 - **M4 — cod complet, neaplicat pe nicio bază de date.** Vezi secțiunea dedicată mai jos.
+- **M5 — export agregat, parțial.** Vezi secțiunea dedicată mai jos.
 
 ## Finalizat — M2 (Staging)
 
@@ -92,8 +93,28 @@ changes". Golul istoric (0014–0058) rămâne — următoarea persoană care
 generează o migrare nouă va lovi aceeași problemă dacă nu e reparată
 separat. Nu e în scope-ul pilotului Madrid, dar merită atenția ta.
 
+## Finalizat parțial — M5 (analytics, funnel, export agregat)
+
+Autorizat 2026-08-16.
+
+| Criteriu M5 | Stare |
+|---|---|
+| Evenimente civice deja înregistrate (propuneri, deliberare, vot, mandat, acțiune, verificare) | **PASS — deja exista.** `civic_process_events` urmărea deja fiecare tranziție de etapă, dinainte de această sesiune |
+| Export agregat funcțional | **PASS, cod nou.** `GET /v1/platform/pilot/funnel-export` — doar numere (mărimea cohortei, confirmări, propuneri, voturi, mandate, verificări), zero identificatori de cont. Testat explicit că ID-urile de cont nu apar niciunde în răspuns. `town-api@ad4b1e4` |
+| Fără tracking publicitar extern | **PASS.** Totul rămâne în Postgres-ul existent, niciun serviciu extern adăugat |
+| Consimțământ separat pentru analiza agregată, capturat explicit | **NEFĂCUT, intenționat.** Nu există niciun concept de „consimțământ" nicăieri în cod. Scrierea lui (text, unde apare, cum se acceptă) e o decizie a ta, nu tehnică — nu am inventat-o |
+
+**De ce am lăsat consimțământul neconstruit:** ai spus tu însuți, la punctul 8
+din strategia originală, că tu aprobi mesajul TOWN Madrid și tot ce ține de
+felul în care oamenii sunt informați/își dau acordul. Aș fi putut scrie un
+checkbox generic, dar ar fi fost exact genul de decizie de conținut/produs
+pe care am promis să nu o iau eu în locul tău.
+
 ## Blocat / necesită decizia ta
 
+- Textul și mecanismul exact de consimțământ pentru analiza agregată
+  (M5) — fără el, exportul există tehnic, dar nu poate fi folosit public
+  conform propriului tău criteriu.
 - Locul unde va fi ancorat accesul de 90 de zile (`accessUntil` vs. un flux
   nou de Stripe) — **decis: `accessUntil`, fără Stripe** (vezi tabelul de mai sus).
 - `STATUS.md` (general, nu pilot) nu reflectă încă succesul din 13 aug. al
@@ -106,7 +127,7 @@ separat. Nu e în scope-ul pilotului Madrid, dar merită atenția ta.
 
 ## Neatinsă
 
-M5–M11 — nicio autorizare primită încă.
+M6–M11 — nicio autorizare primită încă.
 
 ## Production
 
