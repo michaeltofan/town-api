@@ -414,6 +414,13 @@
       "when": 1788288000000,
       "tag": "0058_civic_proposal_moderation_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1786909385978,
+      "tag": "0059_pilot_cohort_members",
+      "breakpoints": true
     }
   ]
 }

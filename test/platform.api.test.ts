@@ -6,6 +6,7 @@ import {
   accounts,
   identitySecurityEvents,
   membershipEntitlements,
+  pilotCohortMembers,
   platformAuditEvents,
   platformOperators,
   signals,
@@ -624,6 +625,92 @@ describe('platform operator area', () => {
         ),
       );
     expect(cancelAudits).toHaveLength(1);
+  });
+
+  it('tags a Pilot Madrid grant in pilot_cohort_members, once per account+cohort', async () => {
+    const operator = await registerMember('PilotMadridOpsAdmin+setup@example.com');
+    await grantOperator(operator.accountId, 'role_admin');
+    const target = await registerAccountWithoutMembership(
+      'PilotMadridGrantTarget+setup@example.com',
+    );
+    const grantKey = randomUUID();
+
+    const grant = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/platform/memberships/grant',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accountId: target.accountId,
+        accessUntil: ACCESS_UNTIL,
+        reason: 'Pilot Madrid 90-day free access',
+        idempotencyKey: grantKey,
+        cohort: 'madrid_pilot',
+      },
+    });
+    expect(grant.statusCode).toBe(200);
+    expect(grant.json<PlatformMembershipActionResponse>().data.changed).toBe(true);
+
+    const cohortRows = await ctx.app.database.db
+      .select()
+      .from(pilotCohortMembers)
+      .where(
+        and(
+          eq(pilotCohortMembers.accountId, target.accountId),
+          eq(pilotCohortMembers.cohort, 'madrid_pilot'),
+        ),
+      );
+    expect(cohortRows).toHaveLength(1);
+    expect(cohortRows[0]?.grantedByAccountId).toBe(operator.accountId);
+    expect(cohortRows[0]?.revokedAt).toBeNull();
+
+    // Replaying the same idempotency key must not create a second cohort row.
+    const grantReplay = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/platform/memberships/grant',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accountId: target.accountId,
+        accessUntil: ACCESS_UNTIL,
+        reason: 'Pilot Madrid 90-day free access',
+        idempotencyKey: grantKey,
+        cohort: 'madrid_pilot',
+      },
+    });
+    expect(grantReplay.statusCode).toBe(200);
+    expect(grantReplay.json<PlatformMembershipActionResponse>().data.changed).toBe(false);
+
+    const cohortRowsAfterReplay = await ctx.app.database.db
+      .select()
+      .from(pilotCohortMembers)
+      .where(
+        and(
+          eq(pilotCohortMembers.accountId, target.accountId),
+          eq(pilotCohortMembers.cohort, 'madrid_pilot'),
+        ),
+      );
+    expect(cohortRowsAfterReplay).toHaveLength(1);
+
+    // A grant without a cohort must never write a pilot_cohort_members row.
+    const uncohortedTarget = await registerAccountWithoutMembership(
+      'PilotMadridNoCohort+setup@example.com',
+    );
+    const uncohortedGrant = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/platform/memberships/grant',
+      headers: { authorization: `Session ${operator.sessionToken}` },
+      payload: {
+        accountId: uncohortedTarget.accountId,
+        accessUntil: ACCESS_UNTIL,
+        reason: 'Ordinary comped access, not a pilot',
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(uncohortedGrant.statusCode).toBe(200);
+    const uncohortedRows = await ctx.app.database.db
+      .select()
+      .from(pilotCohortMembers)
+      .where(eq(pilotCohortMembers.accountId, uncohortedTarget.accountId));
+    expect(uncohortedRows).toHaveLength(0);
   });
 
   it('refuses ordinary users and insufficient roles for membership mutations', async () => {

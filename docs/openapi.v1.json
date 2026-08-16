@@ -16772,6 +16772,12 @@
                     "format": "uuid",
                     "type": "string"
                   },
+                  "cohort": {
+                    "enum": [
+                      "madrid_pilot"
+                    ],
+                    "type": "string"
+                  },
                   "idempotencyKey": {
                     "format": "uuid",
                     "type": "string"

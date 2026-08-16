@@ -802,6 +802,7 @@ export const platformRoutes: FastifyPluginCallbackTypebox<PlatformRoutesOptions>
         requestId: request.id,
         now: now(),
         generateId,
+        cohort: request.body.cohort,
       });
 
       return {

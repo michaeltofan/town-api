@@ -2,6 +2,7 @@ import type { Database } from '../../db/client.js';
 import type {
   MembershipEntitlementRow,
   MembershipSource,
+  PilotCohort,
   PlatformAuditAction,
 } from '../../db/schema.js';
 import {
@@ -16,6 +17,10 @@ import { findSourceEventBySourceAndEventId } from '../../membership/repositories
 import { activateMembership } from '../../membership/transitions/activate.js';
 import { scheduleMembershipCancellation } from '../../membership/transitions/schedule-cancellation.js';
 import { appendPlatformAuditEvent } from '../repositories/audit.js';
+import {
+  findActivePilotCohortMembership,
+  insertPilotCohortMember,
+} from '../repositories/pilot-cohort.js';
 
 type Db = Database['db'];
 
@@ -181,6 +186,8 @@ export async function grantPlatformMembership(
     requestId: string;
     now: string;
     generateId: () => string;
+    /** Pilot cohort tag (e.g. Madrid), orthogonal to the entitlement grant itself. */
+    cohort?: PilotCohort | undefined;
   },
 ): Promise<PlatformMembershipMutationResult> {
   const account = await findAccountById(db, input.accountId);
@@ -263,6 +270,24 @@ export async function grantPlatformMembership(
       after,
       result: outcome.result,
     });
+  }
+
+  if (input.cohort) {
+    const existingMembership = await findActivePilotCohortMembership(
+      db,
+      input.accountId,
+      input.cohort,
+    );
+    if (!existingMembership) {
+      await insertPilotCohortMember(db, {
+        id: input.generateId(),
+        accountId: input.accountId,
+        cohort: input.cohort,
+        grantedAt: input.now,
+        grantedByAccountId: input.operatorAccountId,
+        membershipSourceEventId: sourceEventId,
+      });
+    }
   }
 
   return {

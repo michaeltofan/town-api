@@ -613,12 +613,16 @@ export const PlatformMembershipsResponseSchema = Type.Object(
 
 export const PlatformMembershipReasonSchema = Type.String({ minLength: 3, maxLength: 256 });
 
+/** Pilot cohort tag, orthogonal to the membership grant itself (Pilot Madrid M4). */
+export const PlatformPilotCohortSchema = Type.Literal('madrid_pilot');
+
 export const PlatformMembershipGrantBodySchema = Type.Object(
   {
     accountId: Type.String({ format: 'uuid' }),
     accessUntil: Type.String({ format: 'date-time' }),
     reason: PlatformMembershipReasonSchema,
     idempotencyKey: Type.String({ format: 'uuid' }),
+    cohort: Type.Optional(PlatformPilotCohortSchema),
   },
   { additionalProperties: false, $id: 'PlatformMembershipGrantBody' },
 );
