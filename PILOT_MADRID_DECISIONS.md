@@ -26,6 +26,8 @@ aici.
 | 2026-08-16 | Mesaj de invitație WhatsApp (M6) aprobat, text integral mai jos | Mihail |
 | 2026-08-16 | Partea tehnică a M6 (linkuri directe per semnal) autorizată | Mihail |
 | 2026-08-16 | M6 declarat închis — mesaj aprobat + linkuri `#/feed/<slug>` funcționale pe Staging; placeholder-ul din mesaj rămâne neînlocuit până la M9 | Mihail |
+| 2026-08-16 | M7 autorizat | Mihail |
+| 2026-08-16 | M7 declarat închis — verificat deja construit complet (API public + randare frontend fără gate de autentificare), zero cod nou scris | Mihail |
 
 ## Mesajul de invitație WhatsApp — aprobat 2026-08-16
 

@@ -13,6 +13,7 @@ e în `main`, nu e real.
 - **M4 — cod complet, neaplicat pe nicio bază de date.** Vezi secțiunea dedicată mai jos.
 - **M5 — export agregat, parțial.** Vezi secțiunea dedicată mai jos.
 - **M6 — invitații și linkuri directe.** Vezi secțiunea dedicată mai jos.
+- **M7 — pagina publică de rezultat.** Deja construită, verificată, zero cod nou. Vezi secțiunea dedicată mai jos.
 
 ## Finalizat — M2 (Staging)
 
@@ -132,6 +133,24 @@ Placeholder-ul din mesajul WhatsApp aprobat rămâne neînlocuit până există
 `madrid.towncivic.org` (producție, M9) — link-urile de mai sus sunt pentru
 Staging, nu pentru trimis prietenilor încă.
 
+## Finalizat — M7 (pagina publică de rezultat)
+
+Autorizat și închis 2026-08-16. **Nicio linie de cod scrisă** — totul exista
+deja, verificat direct în cod, nu presupus.
+
+| Criteriu M7 | Stare |
+|---|---|
+| Rezultat arhivat afișat fără autentificare | **PASS — deja exista.** `GET /v1/signals/:signalId/civic-process/verification` nu are `security:` în schemă |
+| Dovezi vizibile | **PASS — deja exista.** Jurnal complet de dovezi, tally delivered/not-delivered, propunere câștigătoare |
+| Niciun rezultat inventat pentru proces nedecis | **PASS — deja exista.** `outcome: verification?.outcome ?? null`; dispută neajunsă la prag „escaladează vizibil", nu se auto-rezolvă (comentariu explicit în cod) |
+| Randare pe frontend, fără gate de autentificare | **PASS — deja exista.** `openSignalDetail()` nu verifică nicio sesiune; panoul de verificare se randează automat la etapele action/verification/archived |
+
+**De reținut, nu de reparat:** numele afișat lângă dovezi/propuneri e numele
+real pe care autorul îl completează explicit la publicare
+(`request.body.realName`, câmp obligatoriu) — design dinainte de pilot,
+nu ceva introdus de mine. Relevant pentru tine, dat fiind că pagina e
+publică.
+
 ## Blocat / necesită decizia ta
 
 - Textul și mecanismul exact de consimțământ pentru analiza agregată
@@ -149,7 +168,7 @@ Staging, nu pentru trimis prietenilor încă.
 
 ## Neatinsă
 
-M7–M11 — nicio autorizare primită încă.
+M8–M11 — nicio autorizare primită încă.
 
 ## Production
 

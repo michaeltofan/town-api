@@ -263,3 +263,28 @@ impact asupra concluziilor.
 - Linkuri testabile pe Staging:
   `https://madrid-staging.towncivic.org/#/feed/madrid-signal-{1,2,3}`.
 - Commit: `town-public@05e3706`.
+
+## M7 — Pagina publică de rezultat (2026-08-16)
+
+**Nicio linie de cod nouă — verificare, nu construcție.**
+
+- `GET /v1/signals/:signalId/civic-process/verification`
+  (`src/routes/civic-verification.ts:222-327`) — confirmat, grep pe
+  `security:` în tot fișierul găsește doar rutele POST (ready/evidence/confirm,
+  liniile 337/371/426); ruta GET nu are `security`, deci public.
+- Onestitate verificată în cod: `outcome: verification?.outcome ?? null`
+  (linia 311); comentariu explicit (liniile 268-272) despre disputele
+  neajunse la prag — „escaladează vizibil", nu se auto-rezolvă.
+- Frontend: `fetchSignalCivicVerification` (`town-public/script.js:7669`)
+  folosește `getJsonWithCredentials` (trimite cookie dacă există, nu-l
+  cere); apelat din randarea generală a detaliului de semnal
+  (`script.js:5883`), condiționat doar de etapa procesului
+  (action/verification/archived), nu de autentificare.
+  `openSignalDetail()` (`script.js:14477`) — zero verificare de sesiune.
+- `authorDisplayName` pe dovezi = `realName` completat explicit de autor la
+  publicare (`src/routes/member-signals.ts:438-439`,
+  `request.body.realName`, câmp obligatoriu) — nu derivat silențios din
+  cont. Design pre-existent, semnalat, nu modificat.
+- Combinat cu linkul direct din M6 (`#/feed/<slug>`), un vizitator
+  neautentificat poate ajunge direct la orice semnal Madrid și vedea
+  rezultatul complet odată ce procesul e arhivat.
