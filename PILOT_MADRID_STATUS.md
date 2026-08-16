@@ -14,7 +14,7 @@ e în `main`, nu e real.
 - **M5 — export agregat, parțial.** Vezi secțiunea dedicată mai jos.
 - **M6 — invitații și linkuri directe.** Vezi secțiunea dedicată mai jos.
 - **M7 — pagina publică de rezultat.** Deja construită, verificată, zero cod nou. Vezi secțiunea dedicată mai jos.
-- **M8 — E2E, securitate, capacitate, QA vizual.** Parțial. Vezi secțiunea dedicată mai jos.
+- **M8 — E2E, securitate, capacitate, QA vizual.** Aproape închis (QA vizual real confirmat, desktop + mobil). Vezi secțiunea dedicată mai jos.
 
 ## Finalizat — M2 (Staging)
 
@@ -152,7 +152,7 @@ real pe care autorul îl completează explicit la publicare
 nu ceva introdus de mine. Relevant pentru tine, dat fiind că pagina e
 publică.
 
-## Parțial — M8 (E2E, securitate, capacitate, QA vizual)
+## Aproape închis — M8 (E2E, securitate, capacitate, QA vizual)
 
 Autorizat 2026-08-16.
 
@@ -164,8 +164,8 @@ Autorizat 2026-08-16.
 | Test de capacitate comparabil cu `loadtest/README.md` | **PASS, rulare proaspătă.** Declanșat din această sesiune (`workflow_dispatch`, commit `0ad0db4`): **10.817 cereri, 0% eșecuri**, toate pragurile de latență respectate (p95 sub 182ms, praguri 500-800ms), 100 utilizatori concurenți susținuți 3m30s. Consistent cu rularea anterioară din `STATUS.md` general (10.591 cereri) |
 | Suită E2E/integrare verde | **PASS, verificat pe bază de date reală, prima oară în această sesiune.** Am pornit Postgres local (nu exista până acum în această sesiune) și am rulat suita completă de integrare — 82 fișiere. 7 fișiere au eșuat inițial cu erori de conexiune/tabelă lipsă imediat după migrare; verificate izolat, toate 7 trec curat — confirmat artefact de concurență din rularea unui singur proces lung (~7 min) cu resetări repetate de schemă, nicio legătură cu Madrid (`grep pilot_cohort` → un singur rezultat, testul meu, verde). Testele mele noi de M4/M5 (`platform.api.test.ts`) trec real: 16/16 |
 | Migrarea 0059 verificată pe bază de date reală | **PASS, nou.** Aplicată cu succes pe Postgres local — tabela `pilot_cohort_members` există genuine. A scos la iveală 5 fișiere de test cu lista de tabele hardcodată, neactualizată de la M4 (nu puteam prinde asta fără bază de date) — reparate și verificate, toate 17 teste (5 fișiere) verzi izolat |
-| QA vizual mobil + desktop, aprobat personal de tine | **ÎN CURS — și deja util de două ori.** Ai găsit bug-ul real (vezi mai jos) și, după fix + deploy, ai confirmat personal: cele 3 semnale sunt vizibile și se deschid pe `madrid-staging.towncivic.org`. Rămâne neconfirmat: verificare pe mobil (ai testat pe ce dispozitiv?) |
-| Suită E2E Playwright completă (browser real) | **NEFĂCUT.** Configurarea locală (chei WebAuthn, email, sesiune, ~15 variabile) ar fi cerut efort disproporționat față de timpul rămas — semnalat clar, nu ascuns, nu simulat |
+| QA vizual mobil + desktop, aprobat personal de tine | **PASS, real, confirmat de tine 2026-08-16.** Ai găsit bug-ul real (vezi mai jos), iar după fix + deploy ai testat explicit ambele — desktop și mobil — și ambele arată ok: cele 3 semnale vizibile, se deschid |
+| Suită E2E Playwright completă (browser real) | **NEFĂCUT.** Configurarea locală (chei WebAuthn, email, sesiune, ~15 variabile) ar fi cerut efort disproporționat față de timpul rămas — semnalat clar, nu ascuns, nu simulat. Singurul criteriu M8 rămas deschis |
 
 ### Bug real, găsit de QA-ul tău — reparat și acum live
 
@@ -221,8 +221,6 @@ CI-ul verde, ci tu uitându-te la pagină. Bug-ul e închis.
 - Textul și mecanismul exact de consimțământ pentru analiza agregată
   (M5) — fără el, exportul există tehnic, dar nu poate fi folosit public
   conform propriului tău criteriu.
-- QA vizual mobil + desktop pe `madrid-staging.towncivic.org` — doar tu
-  poți face asta.
 - Suita E2E Playwright completă (browser real) — decizi dacă merită o
   sesiune dedicată doar pentru configurarea mediului local, sau rămâne
   acoperită de CI la următorul merge.
@@ -238,8 +236,9 @@ CI-ul verde, ci tu uitându-te la pagină. Bug-ul e închis.
 
 ## Neatinsă
 
-M9–M11 — nicio autorizare primită încă. M8 rămâne „parțial", nu „finalizat"
-— blocat pe QA vizual (doar tu) și, opțional, suita E2E completă.
+M9–M11 — nicio autorizare primită încă. M8 rămâne „aproape închis", nu
+„finalizat" — QA vizual real e confirmat (desktop + mobil); singurul rest
+e suita E2E Playwright completă, opțională, nu blocantă în sine.
 
 ## Production
 
