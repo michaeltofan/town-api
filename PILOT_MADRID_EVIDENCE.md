@@ -65,7 +65,9 @@ referințe locale nefetch-uite — vezi nota de corecție de la final).
 
 - Domeniu custom Railway creat pe `town-public-staging` (env `staging`,
   service `87e263a6-d8dd-487e-8d58-fbe5f952a3a8`): `madrid-staging.towncivic.org`
-  → CNAME `xey4zpuf.up.railway.app`. Cere confirmare DNS de la owner.
+  → CNAME `xey4zpuf.up.railway.app`. Railway administrează DNS-ul pentru
+  `towncivic.org` nativ (nameservers `*.name.com` gestionate de Railway) —
+  CNAME-ul a apărut automat în panoul de domenii, fără acțiune manuală.
 - `town-api-staging`: `list-variables` întoarce doar numele, nu valorile
   (`valuesRedacted: true`) — sesiunea nu poate citi `WEBAUTHN_ALLOWED_ORIGINS`
   curent. Nemodificat, ca să nu risc suprascrierea originii existente de
@@ -86,6 +88,28 @@ referințe locale nefetch-uite — vezi nota de corecție de la final).
   (Railway nu expune valorile prin acest tip de acces, deci sesiunea n-a
   putut face update-ul singură fără risc de suprascriere). Valoare
   confirmată: `https://towncivic.org,https://town-public-staging-staging.up.railway.app,https://madrid-staging.towncivic.org`.
+- Deploy `80d2952c-49e6-4be1-b049-f92e55871be9` (commit `0ad0db4`,
+  `town-api-staging`): `SUCCESS`. Log de pornire: „Server listening at
+  http://127.0.0.1:8080”, `GET /health/ready` → `200`, zero eroare de
+  configurare.
+- Selector țară/oraș: `go()` (`script.js:13609`) redirecționează orice
+  rută în afara `feed` înapoi la feed în modul product-only, cu excepția
+  câtorva „journeys” explicite — inclusiv „city discovery”, singurul punct
+  de intrare real spre `view-country`/`view-city` (confirmat: flag-ul
+  `cityDiscoveryJourneyActive` e setat `true` într-un singur loc,
+  `beginCityDiscoveryJourney()`, apelat doar din click-ul pe povestea de
+  discovery din feed). `currentScenes()` (`script.js:8707`) nu mai inserează
+  acea poveste când `madridPilotCityId` e setat — commit `town-public@f8de6ca`.
+  Fără acel click, ruta rămâne inaccesibilă prin garda generică din `go()`.
+- CORS live: **nu s-a putut testa.** Verificat prin
+  `curl "$HTTPS_PROXY/__agentproxy/status"`: proxy-ul de ieșire al acestui
+  mediu respinge explicit (`connect_rejected`, „policy denial”) conexiuni
+  către `api-staging.towncivic.org` și `madrid-staging.towncivic.org`.
+  Concluzia PASS se bazează pe trasarea directă a `src/plugins/cors.ts`:
+  `origin` callback face `allowed.has(requestOrigin)` pe exact mulțimea
+  construită din `WEBAUTHN_ALLOWED_ORIGINS` la pornire — determinist, fără
+  altă logică. Comanda pentru verificare live manuală, de rulat de owner:
+  `curl -i -X GET "https://api-staging.towncivic.org/health/ready" -H "Origin: https://madrid-staging.towncivic.org"`.
 - Deploy `80d2952c-49e6-4be1-b049-f92e55871be9` (commit `0ad0db4`, `town-api-staging`):
   `SUCCESS`. Log de pornire verificat direct: „Server listening at
   http://127.0.0.1:8080”, `GET /health/ready` → `200`, zero eroare de

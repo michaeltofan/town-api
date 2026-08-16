@@ -11,6 +11,7 @@ aici.
 | 2026-08-16 | M2 autorizat | Mihail |
 | 2026-08-16 | Hostname Staging: `madrid-staging.towncivic.org` (CNAME apărut automat, Railway administrează DNS-ul) | Mihail |
 | 2026-08-16 | `WEBAUTHN_ALLOWED_ORIGINS` pe `town-api-staging` extins manual de Mihail din Railway dashboard, cu originul Madrid adăugat la coadă | Mihail |
+| 2026-08-16 | M2 declarat închis — toate criteriile PASS, unul (CORS live) verificat pe cod și deploy, nu prin cerere HTTP reală (imposibil din acest mediu, vezi PILOT_MADRID_EVIDENCE.md) | Mihail |
 
 ## Decizii deschise (nu s-au luat încă)
 
@@ -20,3 +21,8 @@ aici.
   `accessUntil`, fără Stripe) — de confirmat explicit.
 - Confirmarea personală a atestării de restore din consola `ops_admin`,
   înainte ca gate-ul de stabilizare să fie considerat complet închis.
+- Membrii cu home-city în altă comunitate decât Madrid mai văd și acea
+  comunitate pe hostname-ul Madrid (comportament neschimbat de M2,
+  identificat ca subiect pentru M4 — acces/cohortă).
+- Confirmare live opțională a CORS (comanda curl din
+  PILOT_MADRID_EVIDENCE.md), dacă vrei certitudinea 100% empirică.

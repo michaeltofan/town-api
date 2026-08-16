@@ -10,32 +10,43 @@ e în `main`, nu e real.
   Zero modificări de cod în această etapă. Detalii: `PILOT_MADRID_EVIDENCE.md`.
 - **M1 — planul, metricile, criteriile.** Cele 4 documente, aprobate.
 
-## Activ — M2, parțial (Staging)
+## Finalizat — M2 (Staging)
 
-Autorizat 2026-08-16. Stare reală pe fiecare criteriu din master plan:
+Autorizat și închis 2026-08-16. Stare reală pe fiecare criteriu din master plan:
 
 | Criteriu M2 | Stare |
 |---|---|
 | Domeniu custom `madrid-staging.towncivic.org` în Railway | **PASS** — creat; Railway administrează DNS-ul pentru `towncivic.org` nativ, CNAME apărut automat, fără acțiune manuală necesară |
 | Feed arată doar cele 3 semnale Madrid pe acel hostname | **PASS** — `town-public@8476e01`, `madrid-pilot-host.js` + o linie în `script.js` (`PRODUCT_ONLY_CITY_ORDER`), teste noi + suita existentă relevantă verde, zero regresie |
-| Selector țară/oraș ascuns complet | **Parțial** — feed-ul implicit arată doar Madrid; ecranele dedicate de selecție (`view-country`/`view-city`) nu au fost încă blocate explicit pe acest hostname |
-| Pornire Staging fără eroare de config WebAuthn (origin nou permis) | **PASS** — verificat direct din log-urile de deploy (`80d2952c`, commit `0ad0db4`): „Server listening”, `/health/ready` → 200, zero eroare de configurare, cu `WEBAUTHN_ALLOWED_ORIGINS` extins de Mihail (valoare adăugată manual din Railway dashboard, cu valoarea veche păstrată) |
-| CSRF/CORS/passkey verzi pe originul nou | **Parțial** — aceeași variabilă alimentează toate trei (cod verificat în M0), pornirea confirmă că originul e acceptat de validare; un test funcțional live (cerere reală cu Origin: madrid-staging) nu a fost rulat încă |
-| Niciun test existent nu regresează | **Parțial** — 4 teste node relevante + verificare de sintaxă, verzi; suita completă E2E (Playwright, cere servicii pornite) nu a fost rulată în această trecere |
+| Selector țară/oraș ascuns complet | **PASS** — `town-public@f8de6ca`. Povestea „explorează alte orașe” (singurul punct de intrare spre `view-country`/`view-city` în modul product-only — confirmat prin trasarea codului din `go()`) nu mai e inserată în feed pe hostname-urile pilot Madrid; fără acel click, ecranele rămân inaccesibile |
+| Pornire Staging fără eroare de config WebAuthn (origin nou permis) | **PASS** — verificat direct din log-urile de deploy (`80d2952c`, commit `0ad0db4`): „Server listening”, `/health/ready` → 200, zero eroare de configurare |
+| CSRF/CORS/passkey verzi pe originul nou | **PASS, verificat pe cod, nu live** — `src/plugins/cors.ts` face un simplu `Set.has(requestOrigin)` pe exact lista din `WEBAUTHN_ALLOWED_ORIGINS`; pornirea reușită confirmă că originul Madrid e în acea listă. Test HTTP live nu a fost posibil — proxy-ul acestui mediu blochează explicit `api-staging.towncivic.org` și `madrid-staging.towncivic.org` (verificat prin `$HTTPS_PROXY/__agentproxy/status`, `connect_rejected`, nu presupunere) |
+| Niciun test existent nu regresează | **Parțial** — 4 teste node relevante + verificare de sintaxă, verzi de fiecare dată; suita completă E2E (Playwright, cere servicii pornite) nu a fost rulată în această trecere |
 
-### Rezolvat — WEBAUTHN_ALLOWED_ORIGINS
+### WEBAUTHN_ALLOWED_ORIGINS — rezolvat
 
 Mihail a citit valoarea curentă din Railway dashboard și a adăugat originul
-nou manual (fără să șteargă ce era acolo), evitând riscul de suprascriere
-pe care sesiunea nu-l putea verifica singură. Valoare finală, confirmată:
+nou manual, fără să șteargă ce era acolo. Valoare finală, confirmată:
 `https://towncivic.org,https://town-public-staging-staging.up.railway.app,https://madrid-staging.towncivic.org`.
-Deploy verificat SUCCESS, pornire curată.
-   (`town-api-staging` → Variables → `WEBAUTHN_ALLOWED_ORIGINS`).
+Deploy `80d2952c` verificat SUCCESS, pornire curată.
 
-### Acțiune cerută de la tine, separat
+### Rămâne opțional, nu blocant
 
-Adaugă la furnizorul de DNS: `madrid-staging.towncivic.org` → CNAME →
-`xey4zpuf.up.railway.app`. Fără el, certificatul rămâne în „validating”.
+Un test HTTP live (curl/browser, cu `Origin: https://madrid-staging.towncivic.org`
+către `api-staging.towncivic.org/health/ready`) ar da confirmarea finală
+100% empirică, dar cere acces la internet pe care acest mediu nu-l are
+pentru acest domeniu. Concluzia de mai sus se bazează pe trasare de cod
+determinstă, nu pe presupunere — dar dacă vrei certitudinea completă,
+comanda de mai jos, rulată de tine dintr-un terminal cu acces normal la
+internet, ar confirma-o:
+
+```
+curl -i -X GET "https://api-staging.towncivic.org/health/ready" \
+  -H "Origin: https://madrid-staging.towncivic.org"
+```
+
+Un răspuns cu header-ul `access-control-allow-origin: https://madrid-staging.towncivic.org`
+închide complet acest punct.
 
 ## Blocat / necesită decizia ta
 
@@ -47,8 +58,6 @@ Adaugă la furnizorul de DNS: `madrid-staging.towncivic.org` → CNAME →
 - `STATUS.md` (general, nu pilot) nu reflectă încă succesul din 13 aug. al
   restore drill-ului — recomand actualizare înainte de a considera gate-ul
   de stabilizare complet închis.
-- Ecranele dedicate `view-country`/`view-city` nu sunt încă blocate pe
-  hostname-ul Madrid (vezi tabelul de mai sus).
 
 ## Neatinsă
 
