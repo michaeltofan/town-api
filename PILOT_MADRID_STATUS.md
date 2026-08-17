@@ -411,6 +411,21 @@ Diagnoza completă, cu dovezi directe, e în
 Ce lipsește, ambele fiind acțiuni de Producție care așteaptă autorizare
 explicită separată:
 
-- [ ] merge `town-public@b317317` în `main` + deploy de producție prin
-      `e2e.yml` cu `deploy_production: true`
-- [ ] re-rularea `town-api-seed-production` pe baza de date de producție
+- [x] merge `town-public@b317317` în `main` (→ `4f07671`) + deploy de
+      producție prin `e2e.yml` cu `deploy_production: true`, run
+      [#153](https://github.com/michaeltofan/town-public/actions/runs/32023048195)
+      `success`, deployment Railway `371845e6` `SUCCESS` la `11:04:32Z`
+- [x] re-rularea `town-api-seed-production` pe baza de date de producție,
+      deployment `71d150ea` `SUCCESS` la `11:06:17Z`, build pe `e69e6b0`
+      (include `3c0bdbd`), log real:
+      `Foundation seed applied: communities=22 signals=66`
+
+Ambele acțiuni au fost autorizate explicit și separat de Mihail înainte de
+execuție. Detaliile complete, inclusiv capcana evitată (un push în `main` pe
+`town-api` ar fi declanșat un deploy de producție al API-ului plus migrații,
+neautorizate) sunt în `PILOT_MADRID_EVIDENCE.md`.
+
+Rămâne un singur lucru: **confirmarea vizuală a lui Mihail** pe
+`madrid.towncivic.org/#/feed`, cu reload forțat — cache-ul vechi din browser
+e chiar cauza 1, deci un reload obișnuit poate încă servi bundle-ul vechi
+până expiră.

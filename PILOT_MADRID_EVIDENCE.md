@@ -698,3 +698,59 @@ Ambele acțiuni rămase sunt acțiuni de Producție și așteaptă autorizare
 explicită separată: (a) merge `town-public@b317317` în `main` + deploy de
 producție prin `e2e.yml` / `deploy_production: true`; (b) re-rularea
 `town-api-seed-production` pe baza de date de producție.
+
+### M9 — execuția celor două acțiuni autorizate (2026-08-17)
+
+Ambele autorizate explicit și separat de Mihail, după prezentarea diagnozei.
+
+**(a) Deploy producție `town-public`, cu fix-ul de cache key.**
+
+- PR [town-public#138](https://github.com/michaeltofan/town-public/pull/138),
+  `smoke-and-e2e` verde, merge-uit → `town-public@4f07671`.
+- Deploy declanșat prin `e2e.yml` / `workflow_dispatch` cu
+  `deploy_production: true`, run
+  [#153](https://github.com/michaeltofan/town-public/actions/runs/32023048195):
+  `smoke-and-e2e` `success`, `staging-account-enrollment` `success`,
+  „Deploy to production (Railway)" `success` (11:04:32Z).
+- Deployment Railway nou `371845e6-5269-42c8-a87b-557c0df962c5` `SUCCESS`;
+  l-a înlocuit pe `bbc923c1` (trecut în `REMOVED`).
+
+**(b) Re-rularea `town-api-seed-production` pe baza de date de producție.**
+
+Verificare de siguranță făcută **înainte** de a atinge ceva: serviciul
+`town-api` de producție (`4a9f41d3`) **nu are `watchPatterns`** și e legat
+direct de `main`, cu `preDeployCommand: npm run db:migrate:production`.
+Dovadă directă că un merge în `main` chiar îl declanșează: deployment
+`a967c06d`, `2026-08-17T08:32:29Z`, `commitHash: 46b3a231`, `branch: main`.
+Nota din commit-ul `28f46bd` care spune că „every Railway service in this
+project is gated by a watchPatterns filter" este deci **stală** pentru acest
+serviciu. Prin urmare **nu** s-a împins nimic în `main` pe `town-api` — asta
+ar fi produs un deploy de producție al API-ului plus o rulare de migrații,
+neautorizate.
+
+`mcp__Railway__redeploy` a fost de asemenea exclus deliberat: refolosește
+build-ul existent, deci ar fi rulat seed-ul cu commit-ul `0ad0db4` — adică
+exact conținutul vechi.
+
+Declanșare folosită: `mcp__Railway__set-variables` pe serviciul de seed
+(`92cbbed8`), `skipDeploys: false`. Prima încercare, rescrierea `APP_ENV` cu
+aceeași valoare, **nu** a produs niciun deployment (Railway nu vede nicio
+schimbare). A doua, o variabilă nouă reală
+(`SEED_RUN_REASON=2026-08-17-madrid-legazpi-content-fix`, păstrată în
+serviciu ca urmă auditabilă — ștergerea ei ar declanșa încă o rulare
+inutilă de seed), a produs deployment-ul `71d150ea`.
+
+- Build pe `commitHash: e69e6b0` = `main` HEAD. Verificat cu
+  `git merge-base --is-ancestor 3c0bdbd e69e6b0` → **include** corectura
+  Legazpi/Arganzuela.
+- `npm run build` (`tsc -p tsconfig.build.json`) verde.
+- Log real de execuție, deployment `71d150ea`, `SUCCESS` la `11:06:17Z`:
+  `env_check ok appEnv=production` → `mutate ok seed_foundation_content` →
+  `complete ok communities=22 signals=66` →
+  `Foundation seed applied: communities=22 signals=66`.
+  (Singurele linii cu severitate `error` sunt notice-uri npm pe stderr.)
+
+Ce **nu** e verificat din acest mediu: aspectul real randat al paginii.
+Rețeaua sandbox-ului nu poate atinge `madrid.towncivic.org`. Confirmarea
+vizuală finală rămâne la Mihail, cu reload forțat (cache-ul vechi din
+browser e chiar cauza 1).
