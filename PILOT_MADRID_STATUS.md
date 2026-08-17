@@ -298,11 +298,54 @@ and APP_COMMIT_SHA must match exactly when both are set` — un build nativ
   eroare de sintaxă JS în `health-alert.yml` (backtick din URL în conflict
   cu template literal-ul din jur) — alerta reală n-a ajuns nicăieri automat.
   Nu are legătură cu Madrid; de reparat separat.
-- **Reparație corectă, autorizată separat de Mihail:** deploy pe
-  producție pentru `town-api` prin pipeline-ul CI (`workflow_dispatch`,
-  `deploy_production: true`), care setează corect `APP_COMMIT_SHA` și
-  aduce codul în sincron cu baza de date deja migrată.
+- **A doua descoperire, în timpul reparației:** prima încercare de deploy
+  prin pipeline-ul CI (`workflow_dispatch`, run
+  [#649](https://github.com/michaeltofan/town-api/actions/runs/32013607335))
+  a fost anulată — agentul a merge-uit alt PR pe `main` cât timp acel
+  deploy rula, iar `concurrency: cancel-in-progress: true` din `ci.yml`
+  (același grup pentru orice run pe `refs/heads/main`) l-a omorât.
+  Nicio pagubă reală — anularea a prins job-ul „quality" înainte de orice
+  atingere de Production, verificat direct din `list_workflow_jobs`
+  (toate cele 3 job-uri: `cancelled`). Redeclanșat curat, run
+  [#652](https://github.com/michaeltofan/town-api/actions/runs/32014238622).
+- **A treia descoperire:** run #652 a trecut de job-ul „quality" complet,
+  dar a picat la „Deploy town-api (production)" cu o eroare diferită:
+  `Invalid environment configuration: production WEBAUTHN_ALLOWED_ORIGINS
+must be exactly https://towncivic.org`. Cauză confirmată în cod,
+  `assertProductionWebAuthnPolicy()` —
+  `src/ceremony/passkey-registration/config.ts:188-199`: producția
+  acceptă **exact un singur origin**, hardcodat la
+  `PRODUCTION_ALLOWED_ORIGIN = 'https://towncivic.org'`
+  (`policy.ts:17`). Adăugarea lui `madrid.towncivic.org` la
+  `WEBAUTHN_ALLOWED_ORIGINS` pe producție (făcută mai devreme azi) e
+  incompatibilă cu acest lock, prin design — nu un bug. Verificat doar
+  sintaxa (fără spații) la momentul acelei schimbări, nu și această
+  regulă semantică, deși documentată încă din raportul M0
+  (`PILOT_MADRID_EVIDENCE.md`, secțiunea 2).
+- **Reparație finală, autorizată de Mihail:** `WEBAUTHN_ALLOWED_ORIGINS`
+  readusă la exact `https://towncivic.org` (`mcp__Railway__set-variables`,
+  `skipDeploys: true`, ca să nu declanșeze alt deploy necontrolat),
+  verificat direct din `list-deployments` că n-a pornit niciun deploy
+  nou. Deploy redeclanșat curat prin pipeline-ul CI, run
+  [#653](https://github.com/michaeltofan/town-api/actions/runs/32015956517)
+  — **SUCCESS complet**, inclusiv „Smoke test deployed production”.
+  Deployment Railway nou (`10649101-7159-40b3-9136-586172d751c5`)
+  `SUCCESS`, a înlocuit versiunea veche.
+- **Verificare finală, din 4 surse independente, externe acestui mediu:**
+  `.github/workflows/health-alert.yml` declanșat manual, run
+  [#176](https://github.com/michaeltofan/town-api/actions/runs/32017028045) —
+  `production /health/live -> 200`, `production /health/ready -> 200`,
+  `staging /health/live -> 200`, `staging /health/ready -> 200`. Pasul de
+  închidere automată a incidentului (reparat mai devreme) a funcționat
+  corect, fără eroare.
 
-Ultimul commit relevant pe `main` înainte de acest pas: `46b3a23`
-(town-api, conține tot codul Madrid M4/M5), `8f9bd4f` (town-public,
-conține tot codul Madrid M2/M6, merge-uit și deploy-uit pe Staging).
+**Concluzie:** codul Madrid M4/M5 rulează acum pe producție, sincronizat
+cu baza de date deja migrată. Suportul WebAuthn/passkey pentru
+`madrid.towncivic.org` rămâne un pas separat, care cere o schimbare reală
+de cod (relaxarea lock-ului de un-singur-origin), nu doar o variabilă —
+netratat încă, de discutat separat.
+
+Ultimul commit relevant pe `main`: `a6448b7` (town-api, conține tot codul
+Madrid M4/M5, deploy-uit real pe producție), `8f9bd4f` (town-public,
+conține tot codul Madrid M2/M6, merge-uit și deploy-uit pe Staging, nu
+încă pe Production).
