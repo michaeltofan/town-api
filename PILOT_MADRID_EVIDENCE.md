@@ -754,3 +754,36 @@ Ce **nu** e verificat din acest mediu: aspectul real randat al paginii.
 Rețeaua sandbox-ului nu poate atinge `madrid.towncivic.org`. Confirmarea
 vizuală finală rămâne la Mihail, cu reload forțat (cache-ul vechi din
 browser e chiar cauza 1).
+
+### M9 — confirmare independentă, din loguri HTTP reale, după ambele acțiuni
+
+Verificare făcută din logurile HTTP ale serviciului `town-public` producție,
+fără să depindă de raportarea vizuală — același canal care a expus cauza 1.
+
+Înainte (10:45–10:46Z, bundle vechi din cache): niciun `GET /script.js`,
+niciun `GET /api-base.js`; imagini de semnal din Milano.
+
+După deploy-ul de la 11:04:32Z, aceeași sursă (`88.97.164.241`, Safari):
+
+- `11:06:19Z` — `GET /` `200`, `GET /api-base.js` `200`,
+  `GET /madrid-pilot-host.js` `200`, **`GET /script.js` `200`**,
+  apoi `GET /assets/cities/madrid.svg` `200`.
+- `11:06:56Z` — reîncărcare completă, toate modulele JS luate proaspăt
+  (`200`, fără `304`), din nou singurul asset de oraș cerut dinamic fiind
+  `assets/cities/madrid.svg`.
+
+Interpretare, verificată în fișier, nu presupusă:
+
+- `assets/cities/madrid.svg` apare de **0 ori** în `index.html` — e cerut
+  dinamic de `script.js`, deci reflectă chiar orașele pe care le randează
+  feed-ul. După fix, singurul oraș cerut e Madrid. Pentru comparație, la
+  `11:06:08Z`, cât timp era încă activ bundle-ul vechi din cache, browserul
+  cerea `toulouse.svg`, `budapest.svg`, `szeged.svg` — catalogul complet.
+- `signal_citta_studi_pavement.jpg` (2 apariții) și `assets/flags/`
+  (7 apariții, exact cele 7 steaguri cerute) sunt în **markup-ul static** din
+  `index.html`, deci prezența lor în log nu spune nimic despre feed.
+
+Concluzie: cauza 1 e rezolvată, confirmat din trafic real. Conținutul
+corectat (Legazpi/Arganzuela) e în baza de date de producție conform logului
+de seed. Aspectul randat rămâne, ca întotdeauna, confirmarea vizuală a lui
+Mihail — sandbox-ul nu poate deschide pagina.
