@@ -339,13 +339,48 @@ must be exactly https://towncivic.org`. Cauză confirmată în cod,
   închidere automată a incidentului (reparat mai devreme) a funcționat
   corect, fără eroare.
 
-**Concluzie:** codul Madrid M4/M5 rulează acum pe producție, sincronizat
-cu baza de date deja migrată. Suportul WebAuthn/passkey pentru
-`madrid.towncivic.org` rămâne un pas separat, care cere o schimbare reală
-de cod (relaxarea lock-ului de un-singur-origin), nu doar o variabilă —
-netratat încă, de discutat separat.
+**Concluzie parțială:** codul Madrid M4/M5 rulează pe producție, sincronizat
+cu baza de date deja migrată.
 
-Ultimul commit relevant pe `main`: `a6448b7` (town-api, conține tot codul
-Madrid M4/M5, deploy-uit real pe producție), `8f9bd4f` (town-public,
-conține tot codul Madrid M2/M6, merge-uit și deploy-uit pe Staging, nu
-încă pe Production).
+## Lock de un-singur-origin relaxat, `madrid.towncivic.org` acum permis (2026-08-17)
+
+Mihail a semnalat direct, cu dovadă reală: `madrid-staging.towncivic.org`
+arăta cele 3 semnale, dar `madrid.towncivic.org` nu — pentru că nici
+fix-ul de backend, nici codul de site pentru Madrid nu ajunseseră încă pe
+producție.
+
+- **Fix de backend, cod revizuit** (nu doar o variabilă):
+  `assertProductionWebAuthnPolicy()` cerea exact un singur origin în
+  producție; CORS/CSRF citesc aceeași variabilă — nu exista nicio
+  configurație care să lase deschisă atât autentificarea sigură pe
+  `towncivic.org`, cât și citirea publică de pe `madrid.towncivic.org`.
+  Rezolvat printr-o listă explicită, hardcodată,
+  `PRODUCTION_ALLOWED_ORIGINS`, nu o relaxare generică. Detalii tehnice
+  complete: `PILOT_MADRID_EVIDENCE.md`.
+- Verificat: 590 teste (suita implicită) + 544 teste (suita de integrare)
+  - 4 teste noi dedicate, toate verzi pe Postgres real, înainte de push.
+- PR [town-api#167](https://github.com/michaeltofan/town-api/pull/167)
+  merge-uit, deploy pe producție prin pipeline-ul CI, run
+  [#656](https://github.com/michaeltofan/town-api/actions/runs/32019416621) —
+  SUCCESS complet. Verificare externă, `health-alert.yml` run
+  [#178](https://github.com/michaeltofan/town-api/actions/runs/32021168717) —
+  SUCCESS.
+- `town-public` (codul de site care blochează experiența pe Madrid) era
+  deja pe `main`, testat, live pe Staging — dar niciodată deploy-uit pe
+  producție. Deploy declanșat prin pipeline-ul CI propriu, run
+  [#150](https://github.com/michaeltofan/town-public/actions/runs/32021226804) —
+  SUCCESS complet (`smoke-and-e2e`, `staging-account-enrollment`, „Deploy
+  to production (Railway)" — toate verzi). Deployment Railway nou
+  (`bbc923c1-00be-4ee8-80a8-d6d2d437fd02`) `SUCCESS`, a înlocuit
+  versiunea din 12 aug.
+
+**Amândouă bucățile sunt acum pe producție, verificat din Railway și CI —
+nu doar cod merge-uit, deploy-uri reale, confirmate.** Ce n-am verificat
+și nu pot verifica din acest mediu: aspectul real al paginii
+`madrid.towncivic.org/#/feed`. Rămâne la Mihail confirmarea vizuală
+finală.
+
+Ultimul commit relevant pe `main`: `e69e6b0` (town-api, conține tot codul
+Madrid M4/M5 + fix-ul de origini multiple, deploy-uit real pe producție),
+`8f9bd4f` (town-public, conține tot codul Madrid M2/M6, deploy-uit real
+pe producție).

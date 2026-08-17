@@ -579,7 +579,49 @@ HTTP 200`, `staging /health/live -> HTTP 200`, `staging /health/ready
 -> HTTP 200`. Pasul de închidere automată a incidentului (reparat
   imediat anterior) a rulat corect, fără eroare — confirmă și fix-ul
   pentru bug-ul de sintaxă JS.
-- **Rămâne netratat, explicit:** suportul WebAuthn/passkey pentru
-  `madrid.towncivic.org` pe producție cere o schimbare reală de cod
-  (relaxarea controlată a lock-ului de un-singur-origin), nu o variabilă
-  — pas separat, nefăcut.
+- **Rezolvat separat, 2026-08-17:** suportul WebAuthn/passkey +
+  CORS pentru `madrid.towncivic.org` pe producție. Vezi secțiunea
+  dedicată de mai jos.
+
+## Lock de un-singur-origin relaxat controlat, PR town-api#167 (2026-08-17)
+
+- Cauza reală din spatele celei de-a doua încercări eșuate de mai sus:
+  `assertProductionWebAuthnPolicy()` cerea `WEBAUTHN_ALLOWED_ORIGINS` =
+  **exact** un singur origin în producție, iar CORS/CSRF citesc aceeași
+  variabilă (`src/plugins/cors.ts`, `src/ops/cors-origins.ts` —
+  `resolveCorsAllowedOrigins()` nu are propriul lock, ci moștenește
+  restricția prin variabila comună). Rezultat: nu exista nicio valoare a
+  variabilei care să lase deschis atât login-ul securizat pe
+  `towncivic.org`, cât și citirea publică a semnalelor de pe
+  `madrid.towncivic.org`.
+- Trasare completă a tuturor consumatorilor listei de origini înainte de
+  orice modificare (`grep -rln WEBAUTHN_ALLOWED_ORIGINS\|resolveCorsAllowedOrigins\|allowedOrigins src/`):
+  CORS, CSRF (`assertWebCookieCsrf`), sesiune (`requireSessionRuntimeConfig`
+  — **nu** are lock de un-singur-origin, doar `requirePasskeyAuthenticationConfig`/`requireWebAuthnRegistrationConfig`/management îl au), toate cele 3
+  puncte de validare la boot din `config/env.ts` (linii 810, 885, 1102) —
+  toate trei apelează aceeași funcție comună.
+- Fix: `PRODUCTION_ALLOWED_ORIGINS` — o listă explicită, hardcodată, în
+  `policy.ts`: `['https://towncivic.org', 'https://madrid.towncivic.org']`.
+  `assertProductionWebAuthnPolicy()` cere acum: originul primar prezent
+  obligatoriu + orice alt origin trebuie să fie din listă — nu wildcard,
+  nu pattern, o singură listă enumerată. Un origin nou de producție tot
+  cere o schimbare de cod revizuită.
+- Verificare, înainte de push: suita completă implicită (66 fișiere, 590
+  teste) verde pe Postgres local real; 4 teste noi în
+  `test/passkey-registration.config.test.ts` (acceptă lista cu 2 origini,
+  respinge lipsa originului primar, respinge orice origin din afara listei
+  chiar alături de cel primar); suita completă de integrare (82 fișiere,
+  544 teste) verde separat, pe aceeași bază de date reală.
+- PR [town-api#167](https://github.com/michaeltofan/town-api/pull/167)
+  merge-uit → `town-api@e69e6b0`.
+- `WEBAUTHN_ALLOWED_ORIGINS` pe producție extinsă din nou:
+  `https://towncivic.org,https://madrid.towncivic.org`
+  (`mcp__Railway__set-variables`, `skipDeploys: true`, verificat imediat
+  că n-a pornit niciun deploy). Deploy prin pipeline-ul CI, run
+  [#656](https://github.com/michaeltofan/town-api/actions/runs/32019416621) —
+  `SUCCESS` complet, inclusiv „Smoke test deployed production”. Deployment
+  Railway nou (`9dd9514e-1869-4f13-8fb2-75e8b5a0d36e`) `SUCCESS`, a
+  înlocuit versiunea anterioară. Verificare externă,
+  `health-alert.yml` run
+  [#178](https://github.com/michaeltofan/town-api/actions/runs/32021168717) —
+  `SUCCESS`.
