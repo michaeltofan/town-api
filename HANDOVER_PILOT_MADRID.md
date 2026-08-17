@@ -86,6 +86,30 @@ vede 3 semnale, toate din Madrid   [VERIFICAT — confirmare vizuală Mihail,
                         parolă/passkey → commitment → activ
 ```
 
+### 2.1 Jurnal de utilizator real — observațiile lui Mihail, 17 august
+
+**Aceasta e cea mai bună dovadă din tot documentul**, fiindcă e singura care
+vine dintr-un browser real, nu din cod. Mihail a parcurs fluxul de patru ori
+și a raportat de fiecare dată ce vedea pe ecran. **Observațiile lui au fost
+dovada care a condus întreaga diagnoză** — agentul greșise de două ori
+înainte, presupunând că merge.
+
+| #   | Ce a raportat, în cuvintele lui                                                                                                                                                                                                                                                         | Ce s-a dovedit că era                                                                  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 1   | „nu vad semnale, văd doar TOWN — No live signals right now. Couldn't reach TOWN — try again later."                                                                                                                                                                                     | CORS bloca originul `madrid.towncivic.org`; API-ul refuza cererea                      |
+| 2   | „pe `madrid.towncivic.org/#/feed` vad 67 de semnale" — cu lista completă lipită, din Milano, München, Köln, Arad, Cluj, Budapesta, Madrid, Barcelona etc.                                                                                                                               | `script.js` vechi din cache; lock-ul Madrid nu se executa                              |
+| 3   | „pe `madrid-staging.towncivic.org/#/feed` apar cele trei semnale dar pe `madrid.towncivic.org/#/feed` nu apar"                                                                                                                                                                          | **comparația care a izolat problema la cache**, nu la cod — staging n-avea cache vechi |
+| 4   | „3 semnale Madrid" + textul randat: „Madrid / ALUMBRADO PÚBLICO / Varias farolas llevan semanas apagadas junto al parque Tierno Galván / **Legazpi** / El tramo entre la estación y las viviendas queda a oscuras después del anochecer. / Redacción TOWN Madrid · 9 de agosto de 2026" | starea corectă, după bumpul cheii de cache și re-rularea seed-ului                     |
+
+Observația 2 conținea și dovada celei de-a doua probleme, independente:
+semnalul purta încă eticheta veche „Vallecas". De acolo a pornit descoperirea
+că baza de date de producție fusese populată înainte de corectura de conținut.
+
+**Ce arată asta despre metodă:** de fiecare dată când agentul a spus „merge"
+pe baza unui status de CI sau de deploy, verificarea vizuală a lui Mihail a
+contrazis-o. Singurele afirmații „funcționează" care au rezistat sunt cele
+confirmate din ecranul lui.
+
 ### Ce **nu** poate face, și e important
 
 **Nu poate participa fără cont.** Confirmarea unui semnal, propunerea,
@@ -244,9 +268,12 @@ Absența unui GET /script.js după un deploy = browserul foloseste cache vechi.
 
 ## 7. Sarcini pentru agentul independent
 
-1. **Parcurge tot fluxul ca un utilizator real**, într-un browser curat, în
-   fereastră privată, pe `https://madrid.towncivic.org`. Notează ce vezi la
-   fiecare pas. Nimeni nu a documentat asta niciodată.
+1. **Extinde jurnalul de utilizator real din §2.1**, care există deja —
+   Mihail a parcurs fluxul de patru ori pe 17 august și a raportat ce vedea.
+   Ce **nu** e acoperit acolo și lipsește: parcursul de creare de cont
+   (Profil → membership → email → cod → parolă/passkey), pe care nimeni nu
+   l-a parcurs pe domeniul de producție. Fă-l într-o fereastră privată și
+   notează fiecare pas.
 2. **Verifică §3** — confirmă că cele 3 semnale afișează silueta generică și nu
    o fotografie. Decide dacă e acceptabil pentru un pilot cu oameni reali.
 3. **Testează acordarea accesului de pilot** pe staging, cap-coadă, cu un cont
