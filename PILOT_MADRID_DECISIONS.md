@@ -36,6 +36,9 @@ aici.
 | 2026-08-16 | CI real pe `main` a picat imediat după merge (regresie de test, nu de produs) — reparat, PR #137 merge-uit (`8f9bd4f`), CI real re-verificat SUCCESS, Railway redeploy-uit automat | Agent (sub mandatul „drive to green" al PR-urilor proprii, fără autorizare separată — vezi EVIDENCE.md) |
 | 2026-08-16 | Bug-ul `api-base.js` declarat închis — Mihail a confirmat vizual, real, pe `madrid-staging.towncivic.org`: cele 3 semnale sunt vizibile și se deschid | Mihail |
 | 2026-08-16 | QA vizual M8 (desktop + mobil) declarat trecut — Mihail a testat explicit ambele, ambele arată ok | Mihail |
+| 2026-08-17 | Atestare restore înregistrată real, din consola `ops_admin`, de Mihail — `outcome: passed`, confirmat în `GET /v1/platform/restore` | Mihail |
+| 2026-08-17 | Decizie conștientă: trece peste itemul „zero defecte critice cunoscute" al gate-ului de stabilizare — 500-uri reale găsite pe `civic-process`/`account-activity` (6-8 aug., generale TOWN, pre-Madrid), cauză probabilă dar neconfirmată, zero recurență în 9+ zile. Nu a fost prezentat ca rezolvat, i-a fost prezentat ca risc cunoscut | Mihail |
+| 2026-08-17 | Gate de stabilizare declarat închis; M9 (Lansare Production controlată) autorizat la nivel de etapă — „trec mai departe cu M9" | Mihail |
 
 ## Mesajul de invitație WhatsApp — aprobat 2026-08-16
 

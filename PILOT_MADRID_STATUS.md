@@ -234,13 +234,31 @@ CI-ul verde, ci tu uitându-te la pagină. Bug-ul e închis.
 - Golul de snapshot-uri drizzle (0014–0058) — decizi tu dacă merită o
   trecere separată de reparat, în afara pilotului Madrid.
 
-## Neatinsă
+## M9 — autorizat la nivel de etapă, 2026-08-17, execuție nedefinită încă
 
-M9–M11 — nicio autorizare primită încă. M8 rămâne „aproape închis", nu
-„finalizat" — QA vizual real e confirmat (desktop + mobil); singurul rest
-e suita E2E Playwright completă, opțională, nu blocantă în sine.
+Gate-ul de stabilizare (`PILOT_MADRID_MASTER_PLAN.md`) e închis — restore
+atestat real, „zero defecte critice" trecut printr-o decizie conștientă a
+lui Mihail, nu o verificare curată. Vezi `PILOT_MADRID_DECISIONS.md`.
+
+**Important, per propriul plan al lui Mihail:** spre deosebire de M2–M8,
+M9 nu are în `PILOT_MADRID_MASTER_PLAN.md` nicio listă de fișiere sau
+criterii PASS/FAIL — doar propoziția „Autorizare separată, obligatorie."
+Formularul de autorizare exclude explicit merge/deploy/Production „decât
+dacă sunt menționate explicit", iar planul spune separat: „Merge și deploy
+se autorizează separat, după verificarea dovezilor." Autorizarea de etapă
+primită („trec mai departe cu M9") nu acoperă deci nicio acțiune concretă
+asupra Production — urmează un pas separat de a stabili cu Mihail scopul
+tehnic exact înainte de orice atingere de Production.
+
+M10–M11 — nicio autorizare primită încă.
+
+M8 rămâne „aproape închis", nu „finalizat" — QA vizual real e confirmat
+(desktop + mobil); singurul rest e suita E2E Playwright completă,
+opțională, nu blocantă în sine.
 
 ## Production
 
-Neatinsă de pilot. Ultimul commit relevant pe `main`: `0ad0db4` (town-api),
-`9eac1b3` (town-public).
+Neatinsă de pilot încă. Ultimul commit relevant pe `main`: `0ad0db4`
+(town-api — **nu conține codul Madrid M4/M5**, care există doar pe branch-ul
+de lucru, nemerge-uit), `8f9bd4f` (town-public, conține tot codul Madrid
+M2/M6, merge-uit și deploy-uit pe Staging, nu pe Production).

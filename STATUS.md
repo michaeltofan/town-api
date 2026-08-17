@@ -4,8 +4,9 @@ Single source of truth for what's actually live vs. in-flight vs. blocked on
 a human step. Update this file instead of trusting a chat summary — if it's
 not merged to `main` here, it isn't real.
 
-Last updated: 2026-08-10, by Claude (session finishing the production
-readiness follow-through).
+Last updated: 2026-08-17, by Claude (Pilot Madrid session — restore drill
+attestation and known-errors sections refreshed; rest of the file
+unchanged since 2026-08-10 and not re-verified this pass).
 
 ## Live in production right now
 
@@ -69,24 +70,38 @@ CI-gated pipeline.
   are disabled, only the CI-gated `railway up` jobs deploy after the
   `ci.yml`/`e2e.yml` quality jobs pass.
 
-## Not done — explicitly, not silently
+## Restore drill — done, 2026-08-17
 
-- **Backup/restore drill**: PITR is enabled, but no restore has actually been
-  executed and no attestation has been recorded at `/v1/platform/restore/attest`.
-  Two reasons this session couldn't finish it:
-  1. Railway's "restore to a point in time" action is dashboard-only
-     (Backups tab → pick timestamp → "Restore to this moment") — there is no
-     API/CLI path exposed to this session, and no local Railway CLI in this
-     sandbox either.
-  2. Recording the attestation requires an authenticated `ops_admin+`
-     operator session against the platform console — the API explicitly
-     documents `/v1/platform/restore` as "never executes database restore,"
-     and the attest endpoint needs `manage_restore` permission, which this
-     session has no credential for by design.
-  - **Action needed from you:** either do the restore yourself (Railway
-    dashboard, ~10 minutes once a base backup exists) and record the
-    attestation from the platform console, or walk through it together in a
-    session where you're logged in as an ops_admin operator.
+- Automated drill (`.github/workflows/restore-drill.yml`, "Production
+  restore drill") ran successfully 2026-08-13 after 7 earlier failures
+  (`docs/operations/RESTORE_DRILL_RUNBOOK.md` has the full mechanism).
+- Attestation recorded for real by Mihail, from the platform console
+  (`https://towncivic.org/platform/` → Status → Restore → "Record restore
+  drill"), 2026-08-17T07:13:30.457Z. Confirmed directly in
+  `GET /v1/platform/restore`: `outcome: passed`,
+  `method: railway_pitr_point_in_time`. This is not inferred from CI —
+  it's the actual attestation record.
+
+## Known technical errors — production, 2026-08-06 to 2026-08-08
+
+- Console's recent-errors panel (`GET /v1/platform/errors`) shows recurring
+  500s on `GET /v1/signals/:signalId/civic-process` and
+  `GET /v1/account/activity` across multiple builds, 6-8 aug. Zero
+  recurrences since (checked 2026-08-17, 9+ days clean).
+- Probable root cause identified in code, not confirmed: the civic-process
+  backfill guard at `src/routes/civic-process.ts:200-202` throws a plain
+  `Error` (mapped to 500) if a published signal's civic-process row still
+  doesn't match its community after an automatic backfill attempt — the
+  comment there points at a re-seed via `ON CONFLICT DO UPDATE` not
+  re-firing the row's creation trigger.
+- Could not get further confirmation: Railway's log retention had already
+  expired for that window by the time this was investigated, and the
+  error-handler (`src/plugins/error-handler.ts`) deliberately never
+  persists the raw error message/stack to the technical-errors table —
+  only a fixed safe string — so even the platform API itself can't reveal
+  more than what's already summarized here.
+- Mihail reviewed this and explicitly decided to proceed (2026-08-17) —
+  not treated as silently resolved.
 
 ## Known pre-existing gap, not part of this pass
 
