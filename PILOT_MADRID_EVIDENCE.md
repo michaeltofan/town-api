@@ -527,3 +527,59 @@ both are set` (`src/config/env.js:414`). Deploy `FAILED` după 7
     `town-api` prin pipeline-ul CI (`workflow_dispatch`,
     `deploy_production: true`), care setează corect `APP_COMMIT_SHA` și
     aduce codul rulat în sincron cu baza de date deja migrată.
+
+## Deploy producție `town-api` — trei încercări, două gafe recunoscute, reușit final verificat (2026-08-17)
+
+- **Încercarea 1** (run
+  [#649](https://github.com/michaeltofan/town-api/actions/runs/32013607335)):
+  anulată. Agentul a merge-uit PR #166 (fix `health-alert.yml` + docs) pe
+  `main` cât timp deploy-ul de producție autorizat rula pe același ref.
+  `ci.yml` are `concurrency: group: ci-${{ github.workflow }}-${{
+github.ref }}, cancel-in-progress: true` — identic pentru orice run pe
+  `refs/heads/main`, indiferent de trigger (`push` vs. `workflow_dispatch`).
+  Al doilea run a anulat primul. Verificat direct: toate cele 3 job-uri
+  (`quality`, `deploy-staging`, `deploy-production`) → `cancelled`, niciun
+  pas de deploy real executat, nicio schimbare pe Production.
+- **Încercarea 2** (run
+  [#652](https://github.com/michaeltofan/town-api/actions/runs/32014238622)):
+  job-ul „quality" complet, `SUCCESS` (12 min, toate cele 25 de pași).
+  „Deploy town-api (production)" a picat: healthcheck `/health/ready`
+  eșuat de 5 ori (`service unavailable`) în fereastra de 2 minute.
+  Log de deploy real (`get-logs`, deployment `7b6de162`):
+  `Error: Invalid environment configuration: production
+WEBAUTHN_ALLOWED_ORIGINS must be exactly https://towncivic.org`,
+  aruncată din `assertProductionWebAuthnPolicy()`
+  (`src/ceremony/passkey-registration/config.ts:194-198`):
+  `if (origins.length !== 1 || origins[0] !== PRODUCTION_ALLOWED_ORIGIN)`.
+  `PRODUCTION_ALLOWED_ORIGIN = 'https://towncivic.org'`
+  (`policy.ts:17`) — un lock strict, deliberat, de un-singur-origin,
+  documentat deja în secțiunea 2 a acestui fișier din M0. Variabila
+  `WEBAUTHN_ALLOWED_ORIGINS` de pe producție avea acum doi termeni
+  (`https://towncivic.org,https://madrid.towncivic.org`) — verificată
+  anterior doar sintactic (fără spații), nu și pe această regulă
+  semantică.
+- **Reparație:** `mcp__Railway__set-variables` cu
+  `WEBAUTHN_ALLOWED_ORIGINS: "https://towncivic.org"` (un singur termen),
+  `skipDeploys: true` explicit, ca să nu declanșeze alt deploy necontrolat
+  ca la incidentul de dimineață. Verificat direct din `list-deployments`
+  imediat după: niciun deployment nou creat.
+- **Încercarea 3** (run
+  [#653](https://github.com/michaeltofan/town-api/actions/runs/32015956517)):
+  `quality` → `SUCCESS`. „Deploy to production (Railway)" → `SUCCESS`,
+  inclusiv pasul independent „Smoke test deployed production" (health,
+  identitate de build/commit, rută neautentificată → 401, CORS,
+  respingere semnătură webhook Stripe, scanare de secrete scurse).
+  Deployment Railway nou, `10649101-7159-40b3-9136-586172d751c5`,
+  `SUCCESS`, a înlocuit deployment-ul vechi.
+- **Verificare finală, independentă, din 4 surse externe acestui mediu:**
+  `.github/workflows/health-alert.yml` declanșat manual, run
+  [#176](https://github.com/michaeltofan/town-api/actions/runs/32017028045):
+  `production /health/live -> HTTP 200`, `production /health/ready ->
+HTTP 200`, `staging /health/live -> HTTP 200`, `staging /health/ready
+-> HTTP 200`. Pasul de închidere automată a incidentului (reparat
+  imediat anterior) a rulat corect, fără eroare — confirmă și fix-ul
+  pentru bug-ul de sintaxă JS.
+- **Rămâne netratat, explicit:** suportul WebAuthn/passkey pentru
+  `madrid.towncivic.org` pe producție cere o schimbare reală de cod
+  (relaxarea controlată a lock-ului de un-singur-origin), nu o variabilă
+  — pas separat, nefăcut.
