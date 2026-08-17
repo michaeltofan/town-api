@@ -16772,6 +16772,12 @@
                     "format": "uuid",
                     "type": "string"
                   },
+                  "cohort": {
+                    "enum": [
+                      "madrid_pilot"
+                    ],
+                    "type": "string"
+                  },
                   "idempotencyKey": {
                     "format": "uuid",
                     "type": "string"
@@ -17477,6 +17483,217 @@
           }
         ],
         "summary": "Revoke platform operator access",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/pilot/funnel-export": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "communitySlug",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cohort",
+            "required": true,
+            "schema": {
+              "enum": [
+                "madrid_pilot"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cohort": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "activeMembers": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "name": {
+                              "enum": [
+                                "madrid_pilot"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "activeMembers"
+                          ],
+                          "type": "object"
+                        },
+                        "community": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "displayName": {
+                              "type": "string"
+                            },
+                            "slug": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "slug",
+                            "displayName"
+                          ],
+                          "type": "object"
+                        },
+                        "funnel": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "mandates": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "proposals": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "stageEventCounts": {
+                              "additionalProperties": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "type": "object"
+                            },
+                            "verificationConfirmations": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "votes": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "stageEventCounts",
+                            "proposals",
+                            "votes",
+                            "mandates",
+                            "verificationConfirmations"
+                          ],
+                          "type": "object"
+                        },
+                        "generatedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "processes": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "ballotCycle": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "currentStage": {
+                                "type": "string"
+                              },
+                              "signalSlug": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "signalSlug",
+                              "currentStage",
+                              "ballotCycle"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "signalConfirmations": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "generatedAt",
+                        "community",
+                        "cohort",
+                        "signalConfirmations",
+                        "processes",
+                        "funnel"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "security": [
+          {
+            "sessionAuth": []
+          },
+          {
+            "mobileSessionAuth": []
+          }
+        ],
+        "summary": "Aggregate-only civic funnel export for one community + pilot cohort (Pilot Madrid M5). No account identifiers.",
         "tags": [
           "Platform"
         ]

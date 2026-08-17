@@ -13,6 +13,7 @@ const STAGING_COMMIT_SHA = '1234567890abcdef1234567890abcdef12345678';
 const STG_DATABASE_URL = 'postgres://town-stg:stg-secret@db.internal:5432/town';
 const RAILWAY_STAGING_ORIGIN = 'https://town-public-staging-staging.up.railway.app';
 const RAILWAY_NESTED_ORIGIN = 'https://svc.region.up.railway.app';
+const MADRID_STAGING_ORIGIN = 'https://madrid-staging.towncivic.org';
 
 function stagingEnv(
   origins: string,
@@ -165,6 +166,30 @@ describe('APP_ENV staging Railway origin policy', () => {
         appEnv: 'staging',
       }),
     ).toThrow(/exact origins without path/);
+  });
+
+  // Pilot Madrid M2/M8: madrid-staging.towncivic.org is not a Railway-generated
+  // hostname, so it goes through the general staging-origin path (not the
+  // isRailwayUpStagingHostname early-return) -- confirms the town.civic.org
+  // subdomain itself passes WebAuthn's own validation, not just CORS's.
+  it('accepts the Madrid pilot staging hostname through the general staging-origin path', () => {
+    expect(
+      parseAllowedOrigins(MADRID_STAGING_ORIGIN, {
+        nodeEnv: 'production',
+        appEnv: 'staging',
+      }),
+    ).toEqual([MADRID_STAGING_ORIGIN]);
+    expect(isRailwayUpStagingHostname('madrid-staging.towncivic.org')).toBe(false);
+  });
+
+  it('resolves the real three-origin Staging value (production + Railway + Madrid)', () => {
+    const combined = `${PRODUCTION_ALLOWED_ORIGIN},${RAILWAY_STAGING_ORIGIN},${MADRID_STAGING_ORIGIN}`;
+    const env = stagingEnv(combined, { ALLOW_PRODUCTION_WEB_ORIGIN: 'true' });
+    expect(resolveCorsAllowedOrigins(env)).toEqual([
+      PRODUCTION_ALLOWED_ORIGIN,
+      RAILWAY_STAGING_ORIGIN,
+      MADRID_STAGING_ORIGIN,
+    ]);
   });
 
   it('reflects the exact authorized Railway origin and never wildcard ACAO', async () => {

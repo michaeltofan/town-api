@@ -1173,6 +1173,57 @@ export const membershipSourceEvents = town.table(
 );
 
 /**
+ * Pilot cohort membership tags, orthogonal to general TOWN membership.
+ * Marks which accounts belong to a time-boxed civic pilot (e.g. Madrid) for
+ * measurement/reporting, without altering `membership_entitlements` itself.
+ * The underlying access grant (accessUntil, audit) still flows through the
+ * existing admin membership grant path in `membership_source_events`; this
+ * table only answers "is this account part of pilot X".
+ */
+export const pilotCohortMembers = town.table(
+  'pilot_cohort_members',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id').notNull(),
+    cohort: text('cohort').notNull(),
+    grantedAt: timestamp('granted_at', { withTimezone: true, mode: 'string' }).notNull(),
+    grantedByAccountId: uuid('granted_by_account_id').notNull(),
+    membershipSourceEventId: text('membership_source_event_id'),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [accounts.id],
+      name: 'pilot_cohort_members_account_id_fkey',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.grantedByAccountId],
+      foreignColumns: [accounts.id],
+      name: 'pilot_cohort_members_granted_by_account_id_fkey',
+    }).onDelete('restrict'),
+    unique('pilot_cohort_members_account_cohort_unique').on(table.accountId, table.cohort),
+    check(
+      // Scope freeze (Pilot Madrid master plan): exactly one cohort exists
+      // until the pilot plan explicitly adds another.
+      'pilot_cohort_members_cohort_valid',
+      sql`${table.cohort} in ('madrid_pilot')`,
+    ),
+    check(
+      'pilot_cohort_members_revoked_not_before_granted',
+      sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.grantedAt}`,
+    ),
+    index('pilot_cohort_members_cohort_idx')
+      .on(table.cohort)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
+
+export type PilotCohortMemberRow = typeof pilotCohortMembers.$inferSelect;
+export type PilotCohort = 'madrid_pilot';
+
+/**
  * One Stripe Customer per TOWN account. Provider IDs are never exposed publicly.
  */
 export const stripeCustomerLinks = town.table(

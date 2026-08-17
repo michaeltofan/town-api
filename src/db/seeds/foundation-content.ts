@@ -2061,7 +2061,7 @@ export const FOUNDATION_SIGNALS = [
     summary:
       'Varias baldosas rotas obligan a los peatones a esquivar la zona pegados a la calzada.',
     description:
-      'Frente al mercado de Antón Martín, un tramo de la calle Argumosa mantiene baldosas rotas y desniveles desde hace semanas, sin que se haya anunciado una reparación.',
+      'Frente al mercado de Antón Martín, un tramo de la calle Argumosa mantiene baldosas rotas y desniveles desde hace semanas, sin que se haya anunciado una reparación. Ubicación de referencia: https://www.google.com/maps?q=40.4079926,-3.6980726',
     whyItMatters:
       'Es una zona de paso constante entre el mercado, los comercios y las viviendas cercanas, y el estado de la acera aumenta el riesgo de caídas.',
     whoIsAffected:
@@ -2090,15 +2090,15 @@ export const FOUNDATION_SIGNALS = [
     position: 2,
     locale: 'es-ES',
     category: 'ALUMBRADO PÚBLICO',
-    area: 'Vallecas',
+    area: 'Legazpi',
     headline: 'Varias farolas llevan semanas apagadas junto al parque Tierno Galván',
     summary: 'El tramo entre la estación y las viviendas queda a oscuras después del anochecer.',
     description:
-      'En el perímetro del parque Enrique Tierno Galván, varios puntos de luz no funcionan, dejando un tramo del paseo sin iluminación por la noche.',
+      'En el perímetro del parque Enrique Tierno Galván, varios puntos de luz no funcionan, dejando un tramo del paseo sin iluminación por la noche. Ubicación de referencia: https://www.google.com/maps?q=40.3900397,-3.6838406',
     whyItMatters:
       'Un paseo bien iluminado es una condición básica de seguridad para quienes cruzan el parque de camino a casa o al transporte público.',
     whoIsAffected:
-      'Los vecinos de Vallecas, los usuarios del parque y quienes regresan del trabajo por la noche.',
+      'Los vecinos de Legazpi, los usuarios del parque y quienes regresan del trabajo por la noche.',
     latestUpdate:
       'El aviso sigue siendo local y abierto. Todavía no se ha confirmado ninguna intervención.',
     statusLabel: 'Estado cívico: observado — a la espera de atención local',
@@ -2129,7 +2129,7 @@ export const FOUNDATION_SIGNALS = [
     summary:
       'Bolsas y envases quedan alrededor de los contenedores llenos tras la alta afluencia del fin de semana.',
     description:
-      'Cerca de la puerta de Alcalá, los contenedores de recogida no dan abasto los fines de semana y los residuos se acumulan en el suelo colindante.',
+      'Cerca de la puerta de Alcalá, los contenedores de recogida no dan abasto los fines de semana y los residuos se acumulan en el suelo colindante. Ubicación de referencia: https://www.google.com/maps?q=40.4203717,-3.6936146',
     whyItMatters:
       'El Retiro es un espacio verde muy visitado y su limpieza afecta tanto a la experiencia de los visitantes como al entorno natural del parque.',
     whoIsAffected:
