@@ -425,7 +425,8 @@ execuție. Detaliile complete, inclusiv capcana evitată (un push în `main` pe
 `town-api` ar fi declanșat un deploy de producție al API-ului plus migrații,
 neautorizate) sunt în `PILOT_MADRID_EVIDENCE.md`.
 
-Rămâne un singur lucru: **confirmarea vizuală a lui Mihail** pe
-`madrid.towncivic.org/#/feed`, cu reload forțat — cache-ul vechi din browser
-e chiar cauza 1, deci un reload obișnuit poate încă servi bundle-ul vechi
-până expiră.
+Confirmarea vizuală a lui Mihail a venit: `madrid.towncivic.org/#/feed`
+arată 3 semnale, toate Madrid, iar semnalul 2 are conținutul corectat
+(„Legazpi", nu „Vallecas"). **`madrid.towncivic.org` este funcțional ca
+experiență de pilot Madrid pe Producție.** Detaliile complete în
+`PILOT_MADRID_EVIDENCE.md`.

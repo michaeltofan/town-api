@@ -787,3 +787,25 @@ Concluzie: cauza 1 e rezolvată, confirmat din trafic real. Conținutul
 corectat (Legazpi/Arganzuela) e în baza de date de producție conform logului
 de seed. Aspectul randat rămâne, ca întotdeauna, confirmarea vizuală a lui
 Mihail — sandbox-ul nu poate deschide pagina.
+
+### M9 — confirmare vizuală finală (Mihail, 2026-08-17)
+
+`madrid.towncivic.org/#/feed` arată **3 semnale, toate Madrid**. Semnalul 2
+are conținutul corectat:
+
+> Madrid — ALUMBRADO PÚBLICO
+> „Varias farolas llevan semanas apagadas junto al parque Tierno Galván"
+> **Legazpi**
+> „El tramo entre la estación y las viviendas queda a oscuras después del
+> anochecer."
+> Redacción TOWN Madrid · 9 de agosto de 2026
+
+Ambele cauze sunt închise, fiecare verificată la sursa ei:
+
+1. lock-ul pe oraș — rezolvat de bumpul cheilor de cache
+   (`town-public@4f07671`), confirmat din trafic real și acum vizual;
+2. conținutul „Vallecas" → „Legazpi" — rezolvat de re-rularea seed-ului de
+   producție pe `e69e6b0`, confirmat din logul de seed și acum vizual.
+
+`madrid.towncivic.org` este funcțional ca experiență de pilot Madrid pe
+Producție.
