@@ -45,6 +45,7 @@ const EXPECTED_TOWN_TABLES = [
   'membership_entitlements',
   'membership_source_events',
   'passkey_credentials',
+  'pilot_cohort_members',
   'platform_alerts',
   'platform_audit_events',
   'platform_backup_verifications',
