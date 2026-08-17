@@ -51,6 +51,7 @@ aici.
 | 2026-08-17 | Lock de un-singur-origin relaxat controlat — `PRODUCTION_ALLOWED_ORIGINS`, listă explicită hardcodată (nu wildcard), PR town-api#167, verificat pe 590+544+4 teste noi înainte de push, deploy producție SUCCESS (run #656), verificare externă health-alert SUCCESS (run #178)                                                                                               | Mihail (autorizare) + Agent (execuție, verificare)                                                      |
 | 2026-08-17 | `WEBAUTHN_ALLOWED_ORIGINS` extinsă din nou pe producție cu `madrid.towncivic.org`, acum compatibilă cu codul relaxat                                                                                                                                                                                                                                                          | Mihail (autorizare) + Agent (execuție)                                                                  |
 | 2026-08-17 | Deploy `town-public` pe producție (codul Madrid M2/M6, deja pe `main`, niciodată deploy-uit) — run #150, SUCCESS complet, deployment Railway nou confirmat                                                                                                                                                                                                                    | Mihail (autorizare) + Agent (execuție, verificare)                                                      |
+| 2026-08-17 | Placeholder-ul de link din mesajul WhatsApp înlocuit cu `https://madrid.towncivic.org`, după confirmarea vizuală că pilotul de Producție funcționează (3 semnale Madrid, conținut Legazpi corectat)                                                                                                                                                                           | Mihail (autorizare) + Agent (execuție)                                                                  |
 
 ## Mesajul de invitație WhatsApp — aprobat 2026-08-16
 
@@ -66,13 +67,21 @@ Text final (spaniolă, ce primesc destinatarii):
 > muy pocos todavía — es justo por eso que tu opinión sincera me sirve más
 > que nada.
 >
-> [enlace — pendiente de lanzamiento]
+> https://madrid.towncivic.org
 >
 > ¿Te apuntas?
 
-Placeholder-ul `[enlace — pendiente de lanzamiento]` rămâne neînlocuit până
-`madrid.towncivic.org` (producție) există — vezi M9. Trimiterea efectivă nu
-are loc din acest mediu; textul e doar aprobat, nu expediat.
+Placeholder-ul `[enlace — pendiente de lanzamiento]` a fost înlocuit
+2026-08-17, cu autorizarea lui Mihail, după ce `madrid.towncivic.org` a fost
+confirmat funcțional pe Producție (3 semnale Madrid, conținut corectat —
+vezi M9 în `PILOT_MADRID_EVIDENCE.md`).
+
+Linkul e domeniul gol, fără `#/feed`: verificat în cod (`script.js:8638`),
+în modul product-only o adresă fără hash rutează direct la `feed`, deci
+destinatarii aterizează pe semnalele Madrid fără hash în link.
+
+Trimiterea efectivă nu are loc din acest mediu; textul e aprobat și
+completat, nu expediat.
 
 ## Decizii deschise (nu s-au luat încă)
 

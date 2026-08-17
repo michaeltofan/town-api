@@ -130,9 +130,11 @@ acces la un browser real din acest mediu):
 - `https://madrid-staging.towncivic.org/#/feed/madrid-signal-2` — Parque Tierno Galván
 - `https://madrid-staging.towncivic.org/#/feed/madrid-signal-3` — Puerta de Alcalá / Retiro
 
-Placeholder-ul din mesajul WhatsApp aprobat rămâne neînlocuit până există
-`madrid.towncivic.org` (producție, M9) — link-urile de mai sus sunt pentru
-Staging, nu pentru trimis prietenilor încă.
+Placeholder-ul din mesajul WhatsApp aprobat a fost înlocuit 2026-08-17 cu
+`https://madrid.towncivic.org`, după confirmarea vizuală că pilotul de
+Producție funcționează (M9). Link-urile de mai sus rămân cele de Staging,
+pentru verificare, nu pentru trimis. Echivalentele de Producție sunt
+`https://madrid.towncivic.org/#/feed/madrid-signal-1` … `-3`.
 
 ## Finalizat — M7 (pagina publică de rezultat)
 
