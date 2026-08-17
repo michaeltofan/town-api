@@ -625,3 +625,76 @@ HTTP 200`, `staging /health/live -> HTTP 200`, `staging /health/ready
   `health-alert.yml` run
   [#178](https://github.com/michaeltofan/town-api/actions/runs/32021168717) —
   `SUCCESS`.
+
+### M9 — de ce `madrid.towncivic.org` tot nu arăta pilotul, după ambele deploy-uri
+
+Ambele deploy-uri (backend `town-api@e69e6b0`, frontend `town-public@8f9bd4f`,
+run [#150](https://github.com/michaeltofan/town-public/actions/runs/32021837504),
+deployment Railway `bbc923c1` `SUCCESS` la `2026-08-17T10:41:30Z`) au reușit
+real, la nivel de platformă — și totuși pagina arăta 67 de semnale din toate
+orașele, plus eticheta veche „Vallecas". Două cauze independente, ambele
+stabilite prin dovezi directe, nu prin presupuneri.
+
+**Cauza 1 — `script.js` vechi, servit din cache-ul browserului.**
+
+Loguri HTTP reale ale serviciului `town-public` producție
+(`mcp__Railway__get-logs`, `types: ["http"]`, 2026-08-17T10:45–10:46Z,
+Safari, `88.97.164.241`):
+
+- `GET /` → `200` — `index.html` nou, servit corect
+- `GET /madrid-pilot-host.js` → `200`, apoi `304` — scriptul nou, descărcat
+- `GET /assets/feed/signal_porta_romana_lighting.jpg`,
+  `signal_lorenteggio_works.jpg`, `signal_citta_studi_pavement.jpg` —
+  imagini din **Milano**
+- **niciun `GET /script.js` și niciun `GET /api-base.js`** în aceleași
+  încărcări de pagină
+
+`git diff d9dc3f00 8f9bd4f` (commit-ul care era live în producție → commit-ul
+nou) arată exact patru fișiere servite modificate: `index.html`,
+`madrid-pilot-host.js` (nou), `script.js` (+192 linii — chiar lock-ul Madrid)
+și `api-base.js`. Dar tag-urile din `index.html` rămăseseră
+`script.js?v=auth-input-1` și `api-base.js?v=foundation-stabilize-1` —
+chei de cache neschimbate.
+
+`index.html` se revalidează (de aceea a preluat tag-ul nou și a descărcat
+`madrid-pilot-host.js`, un URL nou-nouț), dar `script.js?v=auth-input-1` are
+URL identic cu cel pe care browserul îl cachease deja de pe acest origin, în
+vizitele de mai devreme din aceeași zi, cât timp era live bundle-ul
+pre-pilot. Safari l-a reluat din cache. Rezultat: `window.TownMadridPilotHost`
+era definit, dar `script.js`-ul vechi nu îl citea niciodată,
+`PRODUCT_ONLY_CITY_ORDER` cădea pe catalogul complet, iar hostul de pilot
+randa toate orașele.
+
+De aceea `madrid-staging.towncivic.org` funcționa corect: acel origin a fost
+deschis prima dată abia după ce codul Madrid era deja acolo, deci nu a existat
+niciodată cache vechi pe el.
+
+Fix: `town-public@b317317` — `script.js?v=madrid-pilot-1`,
+`api-base.js?v=madrid-pilot-1`, plus aserțiunile din
+`scripts/test-etapa3-member-journey.js` și `scripts/test-public-auth-signin.js`
+actualizate să ceară cheia curentă pentru ambele fișiere. Toate cele 19
+verificări statice rulate de CI trecute local înainte de push.
+
+**Cauza 2 — baza de date de producție a fost populată înainte de corectura
+de conținut.**
+
+- `Vallecas` nu apare nicăieri în `town-public` și nici în codul curent
+  `town-api` — vine exclusiv din baza de date.
+- Corectura e commit-ul `3c0bdbd` „Fix Madrid signal 2 location:
+  Legazpi/Arganzuela, not Vallecas", `2026-08-16 19:13:47 +0000`, prezent pe
+  `origin/main`.
+- Ultima rulare **reușită** a serviciului `town-api-seed-production`
+  (`mcp__Railway__list-deployments`, service `92cbbed8`, env `production`):
+  deployment `bbc19168`, `2026-08-16T17:59:29Z`, pe commit `0ad0db4` — deci
+  **cu 1h14m înainte** de corectură. Toate deployment-urile ulterioare ale
+  acelui serviciu sunt `SKIPPED` (filtru `watchPatterns`), deci seed-ul nu a
+  mai rulat niciodată cu conținutul corectat.
+- Re-rularea seed-ului chiar corectează conținutul existent, nu doar
+  inserează: `src/db/seeds/seed-foundation.ts:97` face `onConflictDoUpdate`
+  pe `signals.id`, cu `area`, `headline`, `summary`, `description` etc. în
+  clauza `set`.
+
+Ambele acțiuni rămase sunt acțiuni de Producție și așteaptă autorizare
+explicită separată: (a) merge `town-public@b317317` în `main` + deploy de
+producție prin `e2e.yml` / `deploy_production: true`; (b) re-rularea
+`town-api-seed-production` pe baza de date de producție.

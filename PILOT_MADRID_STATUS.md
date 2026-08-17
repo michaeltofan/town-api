@@ -384,3 +384,33 @@ Ultimul commit relevant pe `main`: `e69e6b0` (town-api, conține tot codul
 Madrid M4/M5 + fix-ul de origini multiple, deploy-uit real pe producție),
 `8f9bd4f` (town-public, conține tot codul Madrid M2/M6, deploy-uit real
 pe producție).
+
+## M9 — confirmarea vizuală a picat, două cauze reale găsite
+
+Confirmarea vizuală a lui Mihail a contrazis direct așteptarea:
+`madrid.towncivic.org/#/feed` arăta 67 de semnale din toate orașele, iar
+singurul semnal Madrid vizibil avea încă eticheta veche „Vallecas".
+Diagnoza completă, cu dovezi directe, e în
+`PILOT_MADRID_EVIDENCE.md` — pe scurt, două cauze independente, niciuna
+în logica de pilot în sine:
+
+1. **`script.js` vechi, din cache-ul browserului.** Lock-ul Madrid a ajuns
+   în `script.js` și `api-base.js` fără să li se schimbe cheia `?v=` din
+   `index.html`, deci browserele care mai deschiseseră acel origin înainte
+   au reluat bundle-ul pre-pilot din cache. Logurile HTTP reale Railway
+   arată `GET /madrid-pilot-host.js` `200`/`304` fără niciun
+   `GET /script.js` în aceleași încărcări de pagină. Fix în
+   `town-public@b317317` (chei `?v=madrid-pilot-1`), toate cele 19
+   verificări statice din CI trecute local.
+2. **Baza de date de producție populată înainte de corectura de conținut.**
+   Ultima rulare reușită a `town-api-seed-production` e din
+   `2026-08-16T17:59:29Z`, iar corectura „Legazpi/Arganzuela, not Vallecas"
+   (`3c0bdbd`) e din `2026-08-16T19:13:47Z` — deci seed-ul nu a rulat
+   niciodată cu conținutul corect.
+
+Ce lipsește, ambele fiind acțiuni de Producție care așteaptă autorizare
+explicită separată:
+
+- [ ] merge `town-public@b317317` în `main` + deploy de producție prin
+      `e2e.yml` cu `deploy_production: true`
+- [ ] re-rularea `town-api-seed-production` pe baza de date de producție
