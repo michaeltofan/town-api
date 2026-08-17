@@ -432,3 +432,26 @@ arată 3 semnale, toate Madrid, iar semnalul 2 are conținutul corectat
 („Legazpi", nu „Vallecas"). **`madrid.towncivic.org` este funcțional ca
 experiență de pilot Madrid pe Producție.** Detaliile complete în
 `PILOT_MADRID_EVIDENCE.md`.
+
+## Filtru de deploy pe `town-api` producție — reparat (2026-08-17)
+
+Cauza rădăcină a incidentului de producție din 17 aug. și constatarea
+principală a auditului independent. Autorizat explicit de Mihail.
+
+Înainte: orice push în `main` reconstruia producția și rula migrații pe baza
+de date reală — inclusiv un push care schimba doar un `.md`. Deci
+actualizarea acestor documente redesfășura pilotul.
+
+După: `watchPatterns: ["/.railway/manual-api-only/**"]` pe serviciul de
+producție, aceeași convenție ca `town-api-migrations` și
+`town-api-seed-production`. Producția se desfășoară doar prin CI, cu
+`workflow_dispatch` și flag explicit.
+
+Verificat: niciun deployment nou creat (ultimul rămâne `9dd9514e` din
+`10:28:07Z`, neschimbat); `health-alert.yml` run
+[#184](https://github.com/michaeltofan/town-api/actions/runs/32036174313)
+`success` după modificare. Detalii complete în `PILOT_MADRID_EVIDENCE.md`.
+
+Rămâne deschis: nota falsă din commit-ul `28f46bd` („toate serviciile sunt
+protejate de un filtru `watchPatterns`") — afirmația care a ținut riscul
+invizibil. E documentație, nu configurație, deci nu blochează lansarea.

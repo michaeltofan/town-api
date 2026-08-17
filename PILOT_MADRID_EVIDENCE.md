@@ -809,3 +809,58 @@ Ambele cauze sunt închise, fiecare verificată la sursa ei:
 
 `madrid.towncivic.org` este funcțional ca experiență de pilot Madrid pe
 Producție.
+
+### Filtru de deploy pe `town-api` producție — reparat (2026-08-17)
+
+Cauza rădăcină a incidentului din 17 aug., 08:32Z, și constatarea principală
+a auditului independent. Autorizat explicit de Mihail înainte de execuție.
+
+**Problema.** Serviciul `town-api` de producție (`4a9f41d3`) era legat de
+`main`, cu `preDeployCommand: npm run db:migrate:production`, și **fără
+niciun `watchPatterns`**. Orice push în `main` — inclusiv unul care schimbă
+doar un fișier `.md` — reconstruia producția și rula migrații pe baza de
+date reală. Consecința pe care n-o menționa niciun document: **actualizarea
+documentelor de guvernanță redesfășura pilotul**, ceea ce face regula „nu se
+schimbă nimic în timpul testului cu utilizatori" imposibil de respectat.
+
+**Verificări făcute înainte de a atinge ceva:**
+
+- CI desfășoară producția prin `railway up --service town-api`
+  (`.github/workflows/ci.yml:316`) — încărcare de snapshot local, nu build
+  legat de GitHub. Repo-ul documentează el însuși distincția
+  (`ci.yml:233-235`). `watchPatterns` filtrează doar build-urile declanșate
+  de push în GitHub, deci **filtrul nu blochează deploy-urile prin CI**.
+- `update-service` aplică schimbarea la următorul deploy; nu declanșează
+  unul singur.
+- Stare de dinainte capturată: `build` fără `watchPatterns`.
+
+**Schimbarea.** `watchPatterns: ["/.railway/manual-api-only/**"]`, aplicat
+strict pe mediul `production` (`environmentId` transmis explicit, nu lăsat
+să se propage în toate mediile). Aceeași convenție ca serviciile-soră:
+`town-api-migrations` (`/.railway/manual-migrations-only/**`) și
+`town-api-seed-production` (`/.railway/manual-seed-only/**`).
+
+Directorul `.railway/manual-api-only/` **nu a fost creat**, deliberat, exact
+ca la serviciile-soră: o cale care nu se potrivește niciodată. Crearea lui
+ar fi transformat-o într-un buton care redesfășoară producția cu migrații
+când cineva îl atinge din greșeală.
+
+**Verificare de după:**
+
+- `get-service-config` confirmă
+  `build.watchPatterns: ["/.railway/manual-api-only/**"]`.
+- **Niciun deployment nou creat.** Ultimul rămâne `9dd9514e`, `SUCCESS`,
+  `2026-08-17T10:28:07Z` — neschimbat. Containerul care rulează e identic;
+  producția nu a fost atinsă.
+- Verificare externă independentă: `health-alert.yml` run
+  [#184](https://github.com/michaeltofan/town-api/actions/runs/32036174313) —
+  `success`, `13:39:59Z`, după modificare.
+
+**Efect.** Producția se mai poate desfășura doar prin CI, cu
+`workflow_dispatch` și flag explicit. Actualizarea documentelor de
+guvernanță nu mai atinge producția.
+
+**Rămâne de corectat separat:** nota din commit-ul `28f46bd`, care susține
+că _toate_ serviciile din proiect sunt protejate de `watchPatterns` — era
+falsă pentru acest serviciu, și acea afirmație falsă e motivul pentru care
+riscul a rămas invizibil.
