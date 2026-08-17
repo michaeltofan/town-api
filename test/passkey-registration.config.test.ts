@@ -110,6 +110,46 @@ describe('WebAuthn registration environment config', () => {
     expect(env.WEBAUTHN_ALLOWED_ORIGINS).toBe('https://towncivic.org');
   });
 
+  // Pilot Madrid (M9): production now enumerates a second, deliberately
+  // approved same-registrable-domain origin. This must stay an explicit,
+  // hardcoded allowlist -- not a relaxation to "any towncivic.org subdomain".
+  it('accepts towncivic.org plus the enumerated madrid.towncivic.org production origin', () => {
+    const env = loadEnv(
+      webauthnEnv({
+        NODE_ENV: 'production',
+        WEBAUTHN_RP_ID: 'towncivic.org',
+        WEBAUTHN_ALLOWED_ORIGINS: 'https://towncivic.org,https://madrid.towncivic.org',
+      }),
+    );
+
+    expect(env.WEBAUTHN_REGISTRATION_ENABLED).toBe(true);
+    expect(env.WEBAUTHN_ALLOWED_ORIGINS).toBe('https://towncivic.org,https://madrid.towncivic.org');
+  });
+
+  it('rejects a production origin list missing the primary towncivic.org origin', () => {
+    expect(() =>
+      loadEnv(
+        webauthnEnv({
+          NODE_ENV: 'production',
+          WEBAUTHN_RP_ID: 'towncivic.org',
+          WEBAUTHN_ALLOWED_ORIGINS: 'https://madrid.towncivic.org',
+        }),
+      ),
+    ).toThrow(/must include https:\/\/towncivic\.org/);
+  });
+
+  it('rejects any production origin not on the explicit allowlist, even alongside the primary', () => {
+    expect(() =>
+      loadEnv(
+        webauthnEnv({
+          NODE_ENV: 'production',
+          WEBAUTHN_RP_ID: 'towncivic.org',
+          WEBAUTHN_ALLOWED_ORIGINS: 'https://towncivic.org,https://barcelona.towncivic.org',
+        }),
+      ),
+    ).toThrow(/contain only origins from/);
+  });
+
   it('defaults WEBAUTHN_RP_NAME to TOWN', () => {
     const env = loadEnv(webauthnEnv({ WEBAUTHN_RP_NAME: undefined }));
 

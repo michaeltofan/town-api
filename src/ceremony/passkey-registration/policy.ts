@@ -16,6 +16,18 @@ export const CIVIC_ACTOR_DISPLAY_LABEL = 'TOWN member';
 export const PRODUCTION_RP_ID = 'towncivic.org';
 export const PRODUCTION_ALLOWED_ORIGIN = 'https://towncivic.org';
 
+/**
+ * Explicit, enumerated production WebAuthn origins. `PRODUCTION_ALLOWED_ORIGIN`
+ * must always be present; every other entry is a deliberately approved
+ * same-registrable-domain subdomain (Pilot Madrid: `madrid.towncivic.org`).
+ * Adding a new production origin means adding it here, not widening
+ * `WEBAUTHN_ALLOWED_ORIGINS` to accept anything.
+ */
+export const PRODUCTION_ALLOWED_ORIGINS: readonly string[] = [
+  PRODUCTION_ALLOWED_ORIGIN,
+  'https://madrid.towncivic.org',
+];
+
 export const DEFAULT_WEBAUTHN_RP_NAME = 'TOWN';
 
 export const FORBIDDEN_PRODUCTION_ORIGIN_HOST_PATTERNS = [

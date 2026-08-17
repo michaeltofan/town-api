@@ -4,6 +4,7 @@ import {
   FORBIDDEN_PRODUCTION_ORIGIN_HOST_PATTERNS,
   isRailwayUpStagingHostname,
   PRODUCTION_ALLOWED_ORIGIN,
+  PRODUCTION_ALLOWED_ORIGINS,
   PRODUCTION_RP_ID,
   WEBAUTHN_CHALLENGE_HASH_KEY_MIN_LENGTH,
 } from './policy.js';
@@ -191,9 +192,12 @@ export function assertProductionWebAuthnPolicy(rpId: string, origins: readonly s
       `Invalid environment configuration: production WEBAUTHN_RP_ID must be exactly ${PRODUCTION_RP_ID}`,
     );
   }
-  if (origins.length !== 1 || origins[0] !== PRODUCTION_ALLOWED_ORIGIN) {
+  const allowed = new Set(PRODUCTION_ALLOWED_ORIGINS);
+  const hasPrimary = origins.includes(PRODUCTION_ALLOWED_ORIGIN);
+  const hasUnknown = origins.some((origin) => !allowed.has(origin));
+  if (!hasPrimary || hasUnknown) {
     throw new Error(
-      `Invalid environment configuration: production WEBAUTHN_ALLOWED_ORIGINS must be exactly ${PRODUCTION_ALLOWED_ORIGIN}`,
+      `Invalid environment configuration: production WEBAUTHN_ALLOWED_ORIGINS must include ${PRODUCTION_ALLOWED_ORIGIN} and contain only origins from {${PRODUCTION_ALLOWED_ORIGINS.join(', ')}}`,
     );
   }
 }
