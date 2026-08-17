@@ -150,8 +150,8 @@ referințe locale nefetch-uite — vezi nota de corecție de la final).
   - Calle Argumosa: `https://www.google.com/maps?q=40.4079926,-3.6980726`
   - Parque Enrique Tierno Galván: `https://www.google.com/maps?q=40.3900397,-3.6838406`
   - Puerta de Alcalá / Retiro: `https://www.google.com/maps?q=40.4203717,-3.6936146`
-  Adăugate ca text în câmpul `description` existent — fără migrare, fără
-  schimbare de schemă. Commit `town-api@7941440`.
+    Adăugate ca text în câmpul `description` existent — fără migrare, fără
+    schimbare de schemă. Commit `town-api@7941440`.
 - Limitare cunoscută, nu ascunsă: schema `signals` are un singur câmp de
   imagine (`imageKey`), niciunul pentru video sau sursă/proveniență
   structurată. Un câmp dedicat ar cere o migrare — neautorizată separat,
@@ -205,7 +205,7 @@ impact asupra concluziilor.
   `idempotencyKey` → tot un singur rând; grant fără `cohort` → zero rânduri
   în `pilot_cohort_members`.
 - Verificări rulate: `tsc --noEmit` curat, `eslint` curat, `prettier
-  --check` curat pe toate fișierele atinse, `npx vitest run` — 569 teste
+--check` curat pe toate fișierele atinse, `npx vitest run` — 569 teste
   trecute, doar cele 3 fișiere dependente de `DATABASE_URL` (preexistente,
   fără legătură) eșuează, din lipsă de Postgres local în acest mediu.
 - **Nimic din migrarea 0059 nu a fost rulat împotriva vreunei baze de
@@ -219,7 +219,7 @@ impact asupra concluziilor.
 - `civic_process_events` (`src/db/schema.ts:2436`) — **verificat deja
   existent**, dinainte de orice schimbare a mea: un rând per tranziție de
   etapă (`stage_transitioned_to_proposals/deliberation/ballot_preparation/
-  voting/mandate/action/verification/archived`), pentru orice proces civic,
+voting/mandate/action/verification/archived`), pentru orice proces civic,
   orice oraș. Asta e „funnel"-ul cerut de M5 — deja construit.
 - Export nou, doar agregat: `src/platform/repositories/pilot-funnel.ts` +
   `src/platform/services/pilot-funnel-export.ts` +
@@ -236,7 +236,7 @@ impact asupra concluziilor.
   dependente de `DATABASE_URL` eșuează (preexistent, fără legătură).
   `tsc`/`eslint`/`prettier` curate.
 - **Căutat explicit și confirmat absent:** `grep -rln "consent\|Consent"
-  src/` → zero rezultate. Nu există niciun mecanism de consimțământ în
+src/` → zero rezultate. Nu există niciun mecanism de consimțământ în
   cod. Nu l-am construit — textul și fluxul exact sunt o decizie de
   conținut/produs a lui Mihail (analog cu aprobarea mesajului TOWN
   Madrid, punctul 8 din strategia originală), nu o decizie tehnică.
@@ -354,7 +354,7 @@ impact asupra concluziilor.
 - `madrid-pilot-host.js` (M2) și `api-base.js` sunt module separate —
   primul blochează conținutul pe Madrid, al doilea alege API-ul; nu erau
   niciodată conectate, iar golul a căzut exact acolo. M2 a testat corect
-  CORS/CSRF/WebAuthn *pe API*, dar nu a verificat *rutarea din frontend*
+  CORS/CSRF/WebAuthn _pe API_, dar nu a verificat _rutarea din frontend_
   către API-ul corect pentru acest hostname nou.
 - Fix: `isStagingPageHost()` recunoaște acum explicit
   `madrid-staging.towncivic.org`; `isProductionPageHost()` recunoaște
