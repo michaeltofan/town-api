@@ -442,3 +442,88 @@ src/` → zero rezultate. Nu există niciun mecanism de consimțământ în
   urmărit până la finalizare — `status: completed`, `conclusion: success`.
   Railway a redeploy-uit automat peste noul commit — deployment nou
   `SUCCESS`, finalizat 2026-08-16T21:16:40Z, a înlocuit build-ul anterior.
+
+## Merge `town-api` M4/M5 + trei regresii reale de CI, găsite doar la merge real (2026-08-17)
+
+- Branch-ul `claude/madrid-pilot-analysis-rm82b9` conținea 24 de commit-uri
+  neverificate niciodată contra `main` real (cod M4/M5 + documente). PR
+  [town-api#162](https://github.com/michaeltofan/town-api/pull/162)
+  merge-uit — CI a picat imediat, trei probleme reale, fiecare
+  reprodusă local înainte de reparare, nu doar re-încercată:
+  1. **Format** — cele 4 documente Pilot Madrid nu treceau
+     `prettier --check .` (repo-wide, include markdown). PR
+     [#163](https://github.com/michaeltofan/town-api/pull/163).
+  2. **Listă de tabele învechită** — `scripts/db-migrate-test.ts` avea
+     propria listă `EXPECTED_TOWN_TABLES` hardcodată, separată de cele 5
+     fișiere de test reparate la M8, neștiind de `pilot_cohort_members`.
+     PR [#164](https://github.com/michaeltofan/town-api/pull/164).
+  3. **Bug real de migrare** (cel mai serios): migrația `0059` avea
+     `when` (timestamp în `drizzle/meta/_journal.json`) mai vechi decât
+     `0058` (16 aug. real vs. 1 sept. sintetic din viitor). Migratorul
+     `drizzle-orm` (`node_modules/drizzle-orm/pg-core/dialect.js:56-70`)
+     citește o singură dată, la început, cea mai recentă `created_at` din
+     ledger și aplică o migrare doar dacă `folderMillis` al ei e mai mare
+     — pe bază de date goală (CI) nu există `lastDbMigration`, deci totul
+     trece; pe Staging reală (care avea deja 0000-0058), 0059 era sărită
+     silențios. Reprodus local exact: aplicat jurnalul pre-Madrid (59
+     intrări) pe o bază reală, apoi jurnalul curent (60) peste — rândurile
+     au rămas la 59. Reparat (timestamp mutat o zi după 0058), aceeași
+     reproducere → 60. PR
+     [#165](https://github.com/michaeltofan/town-api/pull/165).
+  4. CI real pe `main`, run
+     [#648](https://github.com/michaeltofan/town-api/actions/runs/32009014018)
+     — verificat până la capăt: toate joburile `SUCCESS`, inclusiv
+     „Deploy to staging (Railway)"; deployment Railway nou (`4244f741`)
+     `SUCCESS`; `GET /health/ready` → 200 la prima verificare, fără nicio
+     linie `readiness_migrations_failed`.
+
+## Domeniu producție + incident real, 2026-08-17
+
+- `madrid.towncivic.org` creat pe `town-public` producție prin
+  `generate-domain`. DNS rezolvat automat, verificat direct:
+  `python3 -c "import socket; print(socket.gethostbyname_ex(...))"` →
+  `ehk1fgba.up.railway.app` → `69.46.46.77`. HTTPS live neverificabil din
+  acest mediu (proxy: `403`, `connect_rejected`, `host: madrid.towncivic.org:443`,
+  confirmat din `$HTTPS_PROXY/__agentproxy/status`).
+- `WEBAUTHN_ALLOWED_ORIGINS` pe `town-api` producție: Mihail a pregătit
+  modificarea în Railway dashboard cu un spațiu accidental înainte de
+  virgulă (`https://towncivic.org ,https://madrid...`) — verificat direct
+  în `parseAllowedOrigins` (`src/ceremony/passkey-registration/config.ts:156-186`)
+  că parserul aruncă eroare explicită pe orice whitespace din jurul
+  intrărilor; semnalat înainte de deploy, corectat, apoi aplicat.
+- **Incident:** salvarea variabilei prin „Deploy Changes" a declanșat un
+  build nativ Railway direct din `main` pe `town-api` **producție**
+  (deployment `a967c06d`), nu doar o repornire cu variabila nouă.
+  - Log de deploy confirmă: preDeployCommand (`npm run db:migrate:production`)
+    a rulat și a reușit — „Migrations applied successfully" — **migrarea
+    0059 s-a aplicat pe baza de date de producție reală** înainte ca
+    aplicația să crape.
+  - Aplicația a picat imediat: `Error: Invalid environment configuration:
+RAILWAY_GIT_COMMIT_SHA and APP_COMMIT_SHA must match exactly when
+both are set` (`src/config/env.js:414`). Deploy `FAILED` după 7
+    încercări de healthcheck eșuate (`/health/ready`, fereastră 2m).
+  - Railway n-a comutat traficul — verificat direct din `list-deployments`:
+    `ffabf885` (11 aug., `SUCCESS`) a rămas nemodificat, nu `REMOVED`.
+    Confirmat și din trafic HTTP live real (`get-logs` cu `types: ["http"]`
+    pe deployment-ul vechi): cereri reale, 200 OK, pe `api.towncivic.org`
+    și `towncivic.org`, de pe două dispozitive diferite (iPhone Safari,
+    Mac Safari), inclusiv `GET /v1/communities/madrid-es/signals` → 200.
+  - **Consecință reală, confirmată extern, nu din acest sandbox:**
+    `.github/workflows/health-alert.yml` run
+    [#175](https://github.com/michaeltofan/town-api/actions/runs/32013180314) —
+    probă reală, din GitHub Actions (acces la internet real): „FAIL:
+    production /health/ready -> HTTP 503". Cauză: aplicația veche
+    (`EXPECTED_MIGRATIONS` = 59, bundle vechi) vede acum 60 de rânduri în
+    `drizzle.__drizzle_migrations` → `detail: extra` → 503. Trafic de
+    business neafectat (verificat separat), dar readiness real, fail.
+  - **Bug separat, preexistent, găsit pe drum:** pasul „Open or update
+    incident issue" din același workflow a picat cu
+    `SyntaxError: Unexpected identifier 'https'` — un backtick din URL,
+    interpolat direct într-un template literal JS din blocul
+    `actions/github-script`, intră în conflict cu delimitatorii
+    template-ului din jur. Alerta reală n-a ajuns nicăieri automat. Fără
+    legătură cu Madrid; nereparat, semnalat separat.
+  - Reparație autorizată separat de Mihail: deploy pe producție pentru
+    `town-api` prin pipeline-ul CI (`workflow_dispatch`,
+    `deploy_production: true`), care setează corect `APP_COMMIT_SHA` și
+    aduce codul rulat în sincron cu baza de date deja migrată.

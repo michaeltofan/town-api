@@ -256,9 +256,53 @@ M8 rămâne „aproape închis", nu „finalizat" — QA vizual real e confirmat
 (desktop + mobil); singurul rest e suita E2E Playwright completă,
 opțională, nu blocantă în sine.
 
-## Production
+## Production — pasul „domeniu" (2026-08-17)
 
-Neatinsă de pilot încă. Ultimul commit relevant pe `main`: `0ad0db4`
-(town-api — **nu conține codul Madrid M4/M5**, care există doar pe branch-ul
-de lucru, nemerge-uit), `8f9bd4f` (town-public, conține tot codul Madrid
-M2/M6, merge-uit și deploy-uit pe Staging, nu pe Production).
+- `madrid.towncivic.org` creat pe `town-public` producție (Railway). DNS
+  rezolvat automat, confirmat direct (`socket.gethostbyname_ex` →
+  `ehk1fgba.up.railway.app` → `69.46.46.77`), fără nicio acțiune manuală —
+  la fel ca la M2. Verificare HTTPS live blocată de proxy-ul acestui mediu,
+  limitare de mediu, nu problemă reală.
+- `WEBAUTHN_ALLOWED_ORIGINS` pe `town-api` producție extins de Mihail cu
+  `https://madrid.towncivic.org`, verificat înainte că formatul nu are
+  spații (parserul e strict, ar fi aruncat eroare la boot).
+
+## Incident real, 2026-08-17 — salvarea variabilei a declanșat un deploy neintenționat
+
+- Salvarea variabilei prin „Deploy Changes" în dashboard-ul Railway a
+  declanșat un build nativ, direct din `main`, pe `town-api` **producție**
+  — nu doar o repornire cu variabila nouă. Asta a inclus tot codul Madrid,
+  migrarea 0059 inclusă.
+- **Migrarea 0059 s-a aplicat cu succes pe baza de date de producție reală**
+  (`Migrations applied successfully`, confirmat din log-ul de deploy),
+  fără autorizare separată explicită pentru acest pas anume — efect
+  secundar neintenționat, nu o acțiune directă a agentului.
+- Aplicația nouă a picat imediat după la pornire: `RAILWAY_GIT_COMMIT_SHA
+and APP_COMMIT_SHA must match exactly when both are set` — un build nativ
+  (declanșat din dashboard) setează automat `RAILWAY_GIT_COMMIT_SHA`, dar
+  `APP_COMMIT_SHA` rămâne la valoarea setată ultima dată de job-ul CI
+  dedicat, nerulat pe producție din 11 aug. Deploy `FAILED`, Railway n-a
+  comutat traficul — versiunea veche (`ffabf885`, 11 aug., precede tot
+  codul Madrid) a rămas activă. Verificat direct din log-urile HTTP live
+  Railway (nu presupus): cereri reale, 200 OK, pe `api.towncivic.org` și
+  `towncivic.org`, de pe dispozitive reale, în timp real.
+- **Consecință reală, confirmată extern:** aplicația veche așteaptă exact
+  59 de migrări; baza de date are acum 60. `GET /health/ready` pe
+  `api.towncivic.org` → **503**, confirmat prin rularea reală a
+  `.github/workflows/health-alert.yml` (acces la internet real, extern
+  acestui mediu) — `production /health/ready -> HTTP 503`. Trafic de
+  business neafectat (confirmat separat), dar aplicația se declară pe sine
+  „not ready".
+- **Bug separat, preexistent, găsit pe drum:** pasul care ar fi trebuit să
+  deschidă automat un issue GitHub la acest eșec a picat el însuși, cu o
+  eroare de sintaxă JS în `health-alert.yml` (backtick din URL în conflict
+  cu template literal-ul din jur) — alerta reală n-a ajuns nicăieri automat.
+  Nu are legătură cu Madrid; de reparat separat.
+- **Reparație corectă, autorizată separat de Mihail:** deploy pe
+  producție pentru `town-api` prin pipeline-ul CI (`workflow_dispatch`,
+  `deploy_production: true`), care setează corect `APP_COMMIT_SHA` și
+  aduce codul în sincron cu baza de date deja migrată.
+
+Ultimul commit relevant pe `main` înainte de acest pas: `46b3a23`
+(town-api, conține tot codul Madrid M4/M5), `8f9bd4f` (town-public,
+conține tot codul Madrid M2/M6, merge-uit și deploy-uit pe Staging).
