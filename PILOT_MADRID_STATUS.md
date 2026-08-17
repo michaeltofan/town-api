@@ -20,14 +20,14 @@ e în `main`, nu e real.
 
 Autorizat și închis 2026-08-16. Stare reală pe fiecare criteriu din master plan:
 
-| Criteriu M2 | Stare |
-|---|---|
-| Domeniu custom `madrid-staging.towncivic.org` în Railway | **PASS** — creat; Railway administrează DNS-ul pentru `towncivic.org` nativ, CNAME apărut automat, fără acțiune manuală necesară |
-| Feed arată doar cele 3 semnale Madrid pe acel hostname | **PASS** — `town-public@8476e01`, `madrid-pilot-host.js` + o linie în `script.js` (`PRODUCT_ONLY_CITY_ORDER`), teste noi + suita existentă relevantă verde, zero regresie |
-| Selector țară/oraș ascuns complet | **PASS** — `town-public@f8de6ca`. Povestea „explorează alte orașe” (singurul punct de intrare spre `view-country`/`view-city` în modul product-only — confirmat prin trasarea codului din `go()`) nu mai e inserată în feed pe hostname-urile pilot Madrid; fără acel click, ecranele rămân inaccesibile |
-| Pornire Staging fără eroare de config WebAuthn (origin nou permis) | **PASS** — verificat direct din log-urile de deploy (`80d2952c`, commit `0ad0db4`): „Server listening”, `/health/ready` → 200, zero eroare de configurare |
-| CSRF/CORS/passkey verzi pe originul nou | **PASS, verificat pe cod, nu live** — `src/plugins/cors.ts` face un simplu `Set.has(requestOrigin)` pe exact lista din `WEBAUTHN_ALLOWED_ORIGINS`; pornirea reușită confirmă că originul Madrid e în acea listă. Test HTTP live nu a fost posibil — proxy-ul acestui mediu blochează explicit `api-staging.towncivic.org` și `madrid-staging.towncivic.org` (verificat prin `$HTTPS_PROXY/__agentproxy/status`, `connect_rejected`, nu presupunere) |
-| Niciun test existent nu regresează | **Parțial** — 4 teste node relevante + verificare de sintaxă, verzi de fiecare dată; suita completă E2E (Playwright, cere servicii pornite) nu a fost rulată în această trecere |
+| Criteriu M2                                                        | Stare                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Domeniu custom `madrid-staging.towncivic.org` în Railway           | **PASS** — creat; Railway administrează DNS-ul pentru `towncivic.org` nativ, CNAME apărut automat, fără acțiune manuală necesară                                                                                                                                                                                                                                                                                                                    |
+| Feed arată doar cele 3 semnale Madrid pe acel hostname             | **PASS** — `town-public@8476e01`, `madrid-pilot-host.js` + o linie în `script.js` (`PRODUCT_ONLY_CITY_ORDER`), teste noi + suita existentă relevantă verde, zero regresie                                                                                                                                                                                                                                                                           |
+| Selector țară/oraș ascuns complet                                  | **PASS** — `town-public@f8de6ca`. Povestea „explorează alte orașe” (singurul punct de intrare spre `view-country`/`view-city` în modul product-only — confirmat prin trasarea codului din `go()`) nu mai e inserată în feed pe hostname-urile pilot Madrid; fără acel click, ecranele rămân inaccesibile                                                                                                                                            |
+| Pornire Staging fără eroare de config WebAuthn (origin nou permis) | **PASS** — verificat direct din log-urile de deploy (`80d2952c`, commit `0ad0db4`): „Server listening”, `/health/ready` → 200, zero eroare de configurare                                                                                                                                                                                                                                                                                           |
+| CSRF/CORS/passkey verzi pe originul nou                            | **PASS, verificat pe cod, nu live** — `src/plugins/cors.ts` face un simplu `Set.has(requestOrigin)` pe exact lista din `WEBAUTHN_ALLOWED_ORIGINS`; pornirea reușită confirmă că originul Madrid e în acea listă. Test HTTP live nu a fost posibil — proxy-ul acestui mediu blochează explicit `api-staging.towncivic.org` și `madrid-staging.towncivic.org` (verificat prin `$HTTPS_PROXY/__agentproxy/status`, `connect_rejected`, nu presupunere) |
+| Niciun test existent nu regresează                                 | **Parțial** — 4 teste node relevante + verificare de sintaxă, verzi de fiecare dată; suita completă E2E (Playwright, cere servicii pornite) nu a fost rulată în această trecere                                                                                                                                                                                                                                                                     |
 
 ### WEBAUTHN_ALLOWED_ORIGINS — rezolvat
 
@@ -58,9 +58,9 @@ Un răspuns cu header-ul `access-control-allow-origin: https://madrid-staging.to
 
 Autorizat și închis 2026-08-16.
 
-| Criteriu M3 | Stare |
-|---|---|
-| Eticheta Vallecas corectată sau păstrată, cu decizie explicită | **PASS** — corectată la Legazpi/Arganzuela, verificat pe 3 surse independente (Ayuntamiento de Madrid, Wikipedia, HallaMadrid) înainte de schimbare. `town-api@3c0bdbd` |
+| Criteriu M3                                                          | Stare                                                                                                                                                                           |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Eticheta Vallecas corectată sau păstrată, cu decizie explicită       | **PASS** — corectată la Legazpi/Arganzuela, verificat pe 3 surse independente (Ayuntamiento de Madrid, Wikipedia, HallaMadrid) înainte de schimbare. `town-api@3c0bdbd`         |
 | Fiecare semnal are sursă/dovadă atașată, aprobată explicit de Mihail | **PASS, provizoriu** — link Google Maps de locație pentru fiecare din cele 3 semnale, decizie explicită a lui Mihail (nu fotografie reală a problemei încă). `town-api@7941440` |
 
 **Notă păstrată, nu ascunsă:** Google Maps confirmă locația, nu problema
@@ -75,10 +75,10 @@ Autorizat și închis 2026-08-16, cu o precizare importantă: **tot ce urmează
 e cod scris, testat, verificat — nicio migrare, niciun grant real nu a
 atins vreo bază de date (nici Staging, nici Production).**
 
-| Criteriu M4 | Stare |
-|---|---|
-| Acces 90 zile prin `accessUntil`, fără Stripe | **PASS — deja exista.** `POST /v1/platform/memberships/grant` era deja complet funcțional, cu `source: 'admin'`, înainte de această etapă |
-| Acordarea e auditată (cine, cui, când) | **PASS — deja exista.** Fiecare grant scrie în `platform_audit_events` (`membership_granted`) — mecanism generic, nu specific Madrid |
+| Criteriu M4                                             | Stare                                                                                                                                                                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Acces 90 zile prin `accessUntil`, fără Stripe           | **PASS — deja exista.** `POST /v1/platform/memberships/grant` era deja complet funcțional, cu `source: 'admin'`, înainte de această etapă                                                                                 |
+| Acordarea e auditată (cine, cui, când)                  | **PASS — deja exista.** Fiecare grant scrie în `platform_audit_events` (`membership_granted`) — mecanism generic, nu specific Madrid                                                                                      |
 | Cohorta Madrid marcată separat de membership-ul general | **PASS, cod nou.** Tabelă nouă `pilot_cohort_members`, complet separată de `membership_entitlements` — restricționată prin `CHECK` la exact `'madrid_pilot'` (nimic altceva nu poate intra acolo azi). `town-api@dffb426` |
 
 **De făcut separat, autorizare distinctă:** migrarea `0059_pilot_cohort_members.sql`
@@ -100,12 +100,12 @@ separat. Nu e în scope-ul pilotului Madrid, dar merită atenția ta.
 
 Autorizat 2026-08-16.
 
-| Criteriu M5 | Stare |
-|---|---|
-| Evenimente civice deja înregistrate (propuneri, deliberare, vot, mandat, acțiune, verificare) | **PASS — deja exista.** `civic_process_events` urmărea deja fiecare tranziție de etapă, dinainte de această sesiune |
-| Export agregat funcțional | **PASS, cod nou.** `GET /v1/platform/pilot/funnel-export` — doar numere (mărimea cohortei, confirmări, propuneri, voturi, mandate, verificări), zero identificatori de cont. Testat explicit că ID-urile de cont nu apar niciunde în răspuns. `town-api@ad4b1e4` |
-| Fără tracking publicitar extern | **PASS.** Totul rămâne în Postgres-ul existent, niciun serviciu extern adăugat |
-| Consimțământ separat pentru analiza agregată, capturat explicit | **NEFĂCUT, intenționat.** Nu există niciun concept de „consimțământ" nicăieri în cod. Scrierea lui (text, unde apare, cum se acceptă) e o decizie a ta, nu tehnică — nu am inventat-o |
+| Criteriu M5                                                                                   | Stare                                                                                                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Evenimente civice deja înregistrate (propuneri, deliberare, vot, mandat, acțiune, verificare) | **PASS — deja exista.** `civic_process_events` urmărea deja fiecare tranziție de etapă, dinainte de această sesiune                                                                                                                                              |
+| Export agregat funcțional                                                                     | **PASS, cod nou.** `GET /v1/platform/pilot/funnel-export` — doar numere (mărimea cohortei, confirmări, propuneri, voturi, mandate, verificări), zero identificatori de cont. Testat explicit că ID-urile de cont nu apar niciunde în răspuns. `town-api@ad4b1e4` |
+| Fără tracking publicitar extern                                                               | **PASS.** Totul rămâne în Postgres-ul existent, niciun serviciu extern adăugat                                                                                                                                                                                   |
+| Consimțământ separat pentru analiza agregată, capturat explicit                               | **NEFĂCUT, intenționat.** Nu există niciun concept de „consimțământ" nicăieri în cod. Scrierea lui (text, unde apare, cum se acceptă) e o decizie a ta, nu tehnică — nu am inventat-o                                                                            |
 
 **De ce am lăsat consimțământul neconstruit:** ai spus tu însuți, la punctul 8
 din strategia originală, că tu aprobi mesajul TOWN Madrid și tot ce ține de
@@ -117,11 +117,11 @@ pe care am promis să nu o iau eu în locul tău.
 
 Autorizat și închis 2026-08-16.
 
-| Criteriu M6 | Stare |
-|---|---|
-| Mesajul de invitație aprobat de tine explicit | **PASS** — text complet în `PILOT_MADRID_DECISIONS.md`, aprobat 2026-08-16 |
-| Link direct funcțional per semnal | **PASS** — `#/feed/<slug>` sare direct la semnalul respectiv, fără să afecteze nicio altă rută. `town-public@05e3706` |
-| Fără date/participanți simulați | **PASS** — nimic trimis, niciun participant simulat; mesajul are încă placeholder de link, nu unul funcțional de producție |
+| Criteriu M6                                   | Stare                                                                                                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Mesajul de invitație aprobat de tine explicit | **PASS** — text complet în `PILOT_MADRID_DECISIONS.md`, aprobat 2026-08-16                                                 |
+| Link direct funcțional per semnal             | **PASS** — `#/feed/<slug>` sare direct la semnalul respectiv, fără să afecteze nicio altă rută. `town-public@05e3706`      |
+| Fără date/participanți simulați               | **PASS** — nimic trimis, niciun participant simulat; mesajul are încă placeholder de link, nu unul funcțional de producție |
 
 **Linkuri testabile chiar acum, pe Staging** (tu poți verifica, eu nu am
 acces la un browser real din acest mediu):
@@ -139,12 +139,12 @@ Staging, nu pentru trimis prietenilor încă.
 Autorizat și închis 2026-08-16. **Nicio linie de cod scrisă** — totul exista
 deja, verificat direct în cod, nu presupus.
 
-| Criteriu M7 | Stare |
-|---|---|
-| Rezultat arhivat afișat fără autentificare | **PASS — deja exista.** `GET /v1/signals/:signalId/civic-process/verification` nu are `security:` în schemă |
-| Dovezi vizibile | **PASS — deja exista.** Jurnal complet de dovezi, tally delivered/not-delivered, propunere câștigătoare |
-| Niciun rezultat inventat pentru proces nedecis | **PASS — deja exista.** `outcome: verification?.outcome ?? null`; dispută neajunsă la prag „escaladează vizibil", nu se auto-rezolvă (comentariu explicit în cod) |
-| Randare pe frontend, fără gate de autentificare | **PASS — deja exista.** `openSignalDetail()` nu verifică nicio sesiune; panoul de verificare se randează automat la etapele action/verification/archived |
+| Criteriu M7                                     | Stare                                                                                                                                                             |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rezultat arhivat afișat fără autentificare      | **PASS — deja exista.** `GET /v1/signals/:signalId/civic-process/verification` nu are `security:` în schemă                                                       |
+| Dovezi vizibile                                 | **PASS — deja exista.** Jurnal complet de dovezi, tally delivered/not-delivered, propunere câștigătoare                                                           |
+| Niciun rezultat inventat pentru proces nedecis  | **PASS — deja exista.** `outcome: verification?.outcome ?? null`; dispută neajunsă la prag „escaladează vizibil", nu se auto-rezolvă (comentariu explicit în cod) |
+| Randare pe frontend, fără gate de autentificare | **PASS — deja exista.** `openSignalDetail()` nu verifică nicio sesiune; panoul de verificare se randează automat la etapele action/verification/archived          |
 
 **De reținut, nu de reparat:** numele afișat lângă dovezi/propuneri e numele
 real pe care autorul îl completează explicit la publicare
@@ -156,16 +156,16 @@ publică.
 
 Autorizat 2026-08-16.
 
-| Criteriu M8 | Stare |
-|---|---|
-| Test dedicat CORS pe originul Madrid | **PASS, real, rulat.** `test/ops.cors.test.ts` — 3 teste noi, instanță Fastify reală, exact cele 3 origini confirmate live pe Staging. 17/17 verzi |
-| Test dedicat CSRF pe originul Madrid | **PASS, real, rulat.** `test/ceremony.csrf.test.ts` (fișier nou) — 8/8 verzi. Nu exista niciun test dedicat pentru `assertWebCookieCsrf` înainte |
-| Test dedicat WebAuthn pe originul Madrid | **PASS, real, rulat.** `test/ops.staging-railway-origins.test.ts` extins — 16/16 verzi |
-| Test de capacitate comparabil cu `loadtest/README.md` | **PASS, rulare proaspătă.** Declanșat din această sesiune (`workflow_dispatch`, commit `0ad0db4`): **10.817 cereri, 0% eșecuri**, toate pragurile de latență respectate (p95 sub 182ms, praguri 500-800ms), 100 utilizatori concurenți susținuți 3m30s. Consistent cu rularea anterioară din `STATUS.md` general (10.591 cereri) |
-| Suită E2E/integrare verde | **PASS, verificat pe bază de date reală, prima oară în această sesiune.** Am pornit Postgres local (nu exista până acum în această sesiune) și am rulat suita completă de integrare — 82 fișiere. 7 fișiere au eșuat inițial cu erori de conexiune/tabelă lipsă imediat după migrare; verificate izolat, toate 7 trec curat — confirmat artefact de concurență din rularea unui singur proces lung (~7 min) cu resetări repetate de schemă, nicio legătură cu Madrid (`grep pilot_cohort` → un singur rezultat, testul meu, verde). Testele mele noi de M4/M5 (`platform.api.test.ts`) trec real: 16/16 |
-| Migrarea 0059 verificată pe bază de date reală | **PASS, nou.** Aplicată cu succes pe Postgres local — tabela `pilot_cohort_members` există genuine. A scos la iveală 5 fișiere de test cu lista de tabele hardcodată, neactualizată de la M4 (nu puteam prinde asta fără bază de date) — reparate și verificate, toate 17 teste (5 fișiere) verzi izolat |
-| QA vizual mobil + desktop, aprobat personal de tine | **PASS, real, confirmat de tine 2026-08-16.** Ai găsit bug-ul real (vezi mai jos), iar după fix + deploy ai testat explicit ambele — desktop și mobil — și ambele arată ok: cele 3 semnale vizibile, se deschid |
-| Suită E2E Playwright completă (browser real) | **NEFĂCUT.** Configurarea locală (chei WebAuthn, email, sesiune, ~15 variabile) ar fi cerut efort disproporționat față de timpul rămas — semnalat clar, nu ascuns, nu simulat. Singurul criteriu M8 rămas deschis |
+| Criteriu M8                                           | Stare                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test dedicat CORS pe originul Madrid                  | **PASS, real, rulat.** `test/ops.cors.test.ts` — 3 teste noi, instanță Fastify reală, exact cele 3 origini confirmate live pe Staging. 17/17 verzi                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Test dedicat CSRF pe originul Madrid                  | **PASS, real, rulat.** `test/ceremony.csrf.test.ts` (fișier nou) — 8/8 verzi. Nu exista niciun test dedicat pentru `assertWebCookieCsrf` înainte                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Test dedicat WebAuthn pe originul Madrid              | **PASS, real, rulat.** `test/ops.staging-railway-origins.test.ts` extins — 16/16 verzi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Test de capacitate comparabil cu `loadtest/README.md` | **PASS, rulare proaspătă.** Declanșat din această sesiune (`workflow_dispatch`, commit `0ad0db4`): **10.817 cereri, 0% eșecuri**, toate pragurile de latență respectate (p95 sub 182ms, praguri 500-800ms), 100 utilizatori concurenți susținuți 3m30s. Consistent cu rularea anterioară din `STATUS.md` general (10.591 cereri)                                                                                                                                                                                                                                                                        |
+| Suită E2E/integrare verde                             | **PASS, verificat pe bază de date reală, prima oară în această sesiune.** Am pornit Postgres local (nu exista până acum în această sesiune) și am rulat suita completă de integrare — 82 fișiere. 7 fișiere au eșuat inițial cu erori de conexiune/tabelă lipsă imediat după migrare; verificate izolat, toate 7 trec curat — confirmat artefact de concurență din rularea unui singur proces lung (~7 min) cu resetări repetate de schemă, nicio legătură cu Madrid (`grep pilot_cohort` → un singur rezultat, testul meu, verde). Testele mele noi de M4/M5 (`platform.api.test.ts`) trec real: 16/16 |
+| Migrarea 0059 verificată pe bază de date reală        | **PASS, nou.** Aplicată cu succes pe Postgres local — tabela `pilot_cohort_members` există genuine. A scos la iveală 5 fișiere de test cu lista de tabele hardcodată, neactualizată de la M4 (nu puteam prinde asta fără bază de date) — reparate și verificate, toate 17 teste (5 fișiere) verzi izolat                                                                                                                                                                                                                                                                                                |
+| QA vizual mobil + desktop, aprobat personal de tine   | **PASS, real, confirmat de tine 2026-08-16.** Ai găsit bug-ul real (vezi mai jos), iar după fix + deploy ai testat explicit ambele — desktop și mobil — și ambele arată ok: cele 3 semnale vizibile, se deschid                                                                                                                                                                                                                                                                                                                                                                                         |
+| Suită E2E Playwright completă (browser real)          | **NEFĂCUT.** Configurarea locală (chei WebAuthn, email, sesiune, ~15 variabile) ar fi cerut efort disproporționat față de timpul rămas — semnalat clar, nu ascuns, nu simulat. Singurul criteriu M8 rămas deschis                                                                                                                                                                                                                                                                                                                                                                                       |
 
 ### Bug real, găsit de QA-ul tău — reparat și acum live
 
