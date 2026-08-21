@@ -18,6 +18,7 @@ import {
   getCommunityCommitmentView,
   recordCommunityCommitmentInTransaction,
 } from '../membership/community-commitment-service.js';
+import { ensureMadridPilotAccessAfterCommitment } from '../membership/madrid-pilot-access.js';
 import {
   isCommunityCommitmentWriteThrottled,
   isMembershipInventoryThrottled,
@@ -28,6 +29,7 @@ import {
 export type CommunityCommitmentRoutesOptions = {
   env: Env;
   now?: () => string;
+  generateId?: () => string;
 };
 
 function sessionNotAuthorizedError(): AppError {
@@ -88,6 +90,7 @@ export const communityCommitmentRoutes: FastifyPluginCallbackTypebox<
 > = (app, options, done) => {
   const { env } = options;
   const now = () => (options.now ?? (() => new Date().toISOString()))();
+  const generateId = options.generateId;
 
   async function requireSession(request: {
     headers: {
@@ -231,9 +234,22 @@ export const communityCommitmentRoutes: FastifyPluginCallbackTypebox<
       }
 
       const view = await app.database.db.transaction(async (tx) => {
-        return recordCommunityCommitmentInTransaction(tx, {
+        await recordCommunityCommitmentInTransaction(tx, {
           accountId: session.accountId,
           community,
+          now: nowIso,
+        });
+        // Madrid pilot free confirm (no Stripe): admin entitlement 90d + madrid_pilot
+        // cohort, audited via grantPlatformMembership. Non-Madrid is a no-op.
+        await ensureMadridPilotAccessAfterCommitment(tx, {
+          accountId: session.accountId,
+          communitySlug: community.slug,
+          now: nowIso,
+          requestId: request.id,
+          ...(generateId !== undefined ? { generateId } : {}),
+        });
+        return getCommunityCommitmentView(tx, {
+          accountId: session.accountId,
           now: nowIso,
         });
       });

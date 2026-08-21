@@ -73,6 +73,7 @@ export default defineConfig({
       'test/platform.api.test.ts',
       'test/local-eligibility.api.test.ts',
       'test/community-commitment.api.test.ts',
+      'test/webauthn-capacity-login.integration.test.ts',
       'test/signal-submission.api.test.ts',
       'test/signal-moderation.api.test.ts',
       'test/billing.migration.test.ts',

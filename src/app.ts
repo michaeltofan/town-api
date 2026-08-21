@@ -512,6 +512,9 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(communityCommitmentRoutes, {
     env: options.env,
     ...(options.membership?.now !== undefined ? { now: options.membership.now } : {}),
+    ...(options.membership?.generateId !== undefined
+      ? { generateId: options.membership.generateId }
+      : {}),
   });
   await app.register(localEligibilityRoutes, {
     env: options.env,
