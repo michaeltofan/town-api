@@ -1,8 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
-import { actors } from '../src/db/schema.js';
+import { and, eq } from 'drizzle-orm';
+import { actors, membershipEntitlements, pilotCohortMembers } from '../src/db/schema.js';
 import { FOUNDATION_COMMUNITY_IDS } from '../src/db/seeds/foundation-content.js';
+import { toIsoTimestamp } from '../src/lib/timestamps.js';
 import { COMMUNITY_COMMITMENT_VERSION } from '../src/membership/community-commitment.js';
+import {
+  computeMadridPilotAccessUntil,
+  MADRID_PILOT_COHORT,
+  MADRID_PILOT_GRANT_REASON,
+} from '../src/membership/madrid-pilot-access.js';
 import {
   activatePasskeyAccountAndLinkCommunity,
   activateTestMembership,
@@ -13,11 +19,17 @@ import {
 } from './helpers/membership.js';
 import { loginMobileSession } from './helpers/passkey-management.js';
 
+const FIXED_NOW = '2026-08-21T10:00:00.000Z';
+
 describe('GET/PUT /v1/account/community-commitment', () => {
   let ctx: MembershipTestApp;
+  let clock: { now: string };
 
   beforeAll(async () => {
-    ctx = await createMembershipTestApp();
+    clock = { now: FIXED_NOW };
+    ctx = await createMembershipTestApp({
+      now: () => clock.now,
+    });
   });
 
   afterAll(async () => {
@@ -232,5 +244,153 @@ describe('GET/PUT /v1/account/community-commitment', () => {
     });
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({ error: { code: 'COMMUNITY_COMMITMENT_LOCKED' } });
+  });
+
+  it('self-enrolls Madrid pilot on madrid-es: entitlement + cohort + canParticipate', async () => {
+    const registration = await activatePasskeyAccountAndLinkCommunity({
+      app: ctx.app,
+      delivery: ctx.delivery,
+      email: 'MadridPilotSelfEnroll+setup@example.com',
+      linkCommunity: false,
+    });
+    const login = await loginMobileSession({ app: ctx.app, material: registration.material });
+    const expectedAccessUntil = computeMadridPilotAccessUntil(FIXED_NOW);
+
+    const commit = await ctx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/community-commitment',
+      headers: { authorization: `Session ${login.sessionToken}` },
+      payload: { community: 'madrid-es', accepted: true },
+    });
+    expect(commit.statusCode).toBe(200);
+    expect(commit.json()).toMatchObject({
+      data: {
+        status: 'recorded',
+        accepted: true,
+        editable: false,
+        community: { slug: 'madrid-es', countryCode: 'ES', cityName: 'Madrid' },
+      },
+    });
+
+    const entitlementRows = await ctx.app.database.db
+      .select()
+      .from(membershipEntitlements)
+      .where(eq(membershipEntitlements.accountId, registration.accountId))
+      .limit(1);
+    expect(entitlementRows).toHaveLength(1);
+    const entitlement = entitlementRows[0];
+    expect(entitlement).toBeDefined();
+    if (!entitlement?.accessUntil) {
+      throw new Error('expected Madrid pilot entitlement with accessUntil');
+    }
+    expect(entitlement.status).toBe('active');
+    expect(entitlement.source).toBe('admin');
+    expect(toIsoTimestamp(entitlement.accessUntil)).toBe(expectedAccessUntil);
+
+    const cohortRows = await ctx.app.database.db
+      .select()
+      .from(pilotCohortMembers)
+      .where(
+        and(
+          eq(pilotCohortMembers.accountId, registration.accountId),
+          eq(pilotCohortMembers.cohort, MADRID_PILOT_COHORT),
+        ),
+      );
+    expect(cohortRows).toHaveLength(1);
+    expect(cohortRows[0]?.grantedByAccountId).toBe(registration.accountId);
+    expect(cohortRows[0]?.revokedAt).toBeNull();
+    expect(cohortRows[0]?.membershipSourceEventId).toContain(
+      'platform:grant:madrid-pilot-self-enroll:',
+    );
+
+    const membership = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/account/membership',
+      headers: { authorization: `Session ${login.sessionToken}` },
+    });
+    expect(membership.statusCode).toBe(200);
+    const body = membership.json<{
+      data: {
+        membership: { status: string; accessUntil: string };
+        access: { canParticipate: boolean; level: string };
+      };
+    }>();
+    expect(body.data.membership.status).toBe('active');
+    expect(body.data.membership.accessUntil).toBe(expectedAccessUntil);
+    expect(body.data.access.canParticipate).toBe(true);
+    expect(body.data.access.level).toBe('participant');
+
+    // Idempotent re-commit must not create a second entitlement or cohort row.
+    const recommit = await ctx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/community-commitment',
+      headers: { authorization: `Session ${login.sessionToken}` },
+      payload: { community: 'madrid-es', accepted: true },
+    });
+    expect(recommit.statusCode).toBe(200);
+    const entitlementAfter = await ctx.app.database.db
+      .select()
+      .from(membershipEntitlements)
+      .where(eq(membershipEntitlements.accountId, registration.accountId));
+    expect(entitlementAfter).toHaveLength(1);
+    const cohortAfter = await ctx.app.database.db
+      .select()
+      .from(pilotCohortMembers)
+      .where(eq(pilotCohortMembers.accountId, registration.accountId));
+    expect(cohortAfter).toHaveLength(1);
+
+    // Reason string is the documented free-confirm grant reason (audit path).
+    expect(MADRID_PILOT_GRANT_REASON).toMatch(/Madrid pilot/i);
+  });
+
+  it('does not grant entitlement or cohort for non-Madrid community commitment', async () => {
+    const registration = await activatePasskeyAccountAndLinkCommunity({
+      app: ctx.app,
+      delivery: ctx.delivery,
+      email: 'NonMadridNoPilotGrant+setup@example.com',
+      linkCommunity: false,
+    });
+    const login = await loginMobileSession({ app: ctx.app, material: registration.material });
+
+    const commit = await ctx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/community-commitment',
+      headers: { authorization: `Session ${login.sessionToken}` },
+      payload: { community: 'munich-de', accepted: true },
+    });
+    expect(commit.statusCode).toBe(200);
+    expect(commit.json()).toMatchObject({
+      data: {
+        status: 'recorded',
+        accepted: true,
+        editable: true,
+        community: { slug: 'munich-de' },
+      },
+    });
+
+    const entitlementRows = await ctx.app.database.db
+      .select()
+      .from(membershipEntitlements)
+      .where(eq(membershipEntitlements.accountId, registration.accountId));
+    expect(entitlementRows).toHaveLength(0);
+
+    const cohortRows = await ctx.app.database.db
+      .select()
+      .from(pilotCohortMembers)
+      .where(eq(pilotCohortMembers.accountId, registration.accountId));
+    expect(cohortRows).toHaveLength(0);
+
+    const membership = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/account/membership',
+      headers: { authorization: `Session ${login.sessionToken}` },
+    });
+    expect(membership.statusCode).toBe(200);
+    expect(membership.json()).toMatchObject({
+      data: {
+        membership: { status: 'inactive', accessUntil: null },
+        access: { canParticipate: false },
+      },
+    });
   });
 });
